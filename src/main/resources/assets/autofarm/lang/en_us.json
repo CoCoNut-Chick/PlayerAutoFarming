@@ -225,6 +225,7 @@
   "autofarm.extras.section.stealth": "Safety & Stealth",
   "autofarm.extras.section.tool": "Tool Upkeep",
   "autofarm.extras.section.misc": "Recovery & Stats",
+  "autofarm.extras.section.pickup": "Drops",
   "autofarm.extras.note": "Everything here is off by default: leave it alone and the mod behaves exactly as before. These only affect pacing and convenience, never bypassing game rules.",
   "autofarm.extras.reset": "All Off",
 
@@ -250,6 +251,10 @@
   "autofarm.cooldown.tip": "How long before a failed target is retried. Only used when the option above is on.",
   "autofarm.option.verbose_hud": "Detailed HUD",
   "autofarm.verbose_hud.tip": "Show one more line on the status HUD: elapsed working time and replanted count.",
+  "autofarm.option.pickup_drops": "Pick up dropped crops",
+  "autofarm.pickup_drops.tip": "Sweep up crop drops left lying in the field: anything that has sat on the ground past the delay without being collected is walked to first.",
+  "autofarm.option.pickup_delay": "Pickup delay",
+  "autofarm.pickup_delay.tip": "How long a drop must stay uncollected before it counts as missed and gets a dedicated trip. Only used when the option above is on.",
 
   "autofarm.value.blocks": "%s blocks",
   "autofarm.value.minutes": "%s min",
@@ -263,6 +268,7 @@
   "autofarm.state.idle": "Idle",
   "autofarm.state.scanning": "Scanning",
   "autofarm.state.moving": "Moving",
+  "autofarm.state.pickup": "Picking up drops",
   "autofarm.state.harvesting": "Harvesting",
   "autofarm.state.replanting": "Replanting",
   "autofarm.state.supply": "Heading to supply point",

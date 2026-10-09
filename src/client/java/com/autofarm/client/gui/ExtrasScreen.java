@@ -20,11 +20,12 @@ import net.minecraft.text.Text;
  * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
  * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
  *
- * <h2>三段</h2>
+ * <h2>四段</h2>
  * <ol>
  *   <li><b>安全与隐蔽</b> —— 玩家接近停机、拟人化节奏、定时随机休息；</li>
  *   <li><b>工具维护</b> —— 工具耐久自动换新；</li>
- *   <li><b>容错与统计</b> —— 失败目标暂时拉黑、HUD 详细统计。</li>
+ *   <li><b>容错与统计</b> —— 失败目标暂时拉黑、HUD 详细统计；</li>
+ *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物。</li>
  * </ol>
  * 每个「功能开关」下面跟着的参数行（半径、周期、阈值……）都用循环按钮调，
  * 点一下换一档，不用滑块 —— 和主面板的「默认种子槽位」一个习惯。
@@ -58,8 +59,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_MISC_Y = SEC_TOOL_Y + SEC_TOOL_H + SECTION_GAP;
     private static final int SEC_MISC_H = ROW_FIRST + MISC_ROWS * ROW_GAP + 4;
 
+    private static final int PICKUP_ROWS = 2;
+    private static final int SEC_PICKUP_Y = SEC_MISC_Y + SEC_MISC_H + SECTION_GAP;
+    private static final int SEC_PICKUP_H = ROW_FIRST + PICKUP_ROWS * ROW_GAP + 4;
+
     /** 最底下那句「默认全关」的总说明 */
-    private static final int NOTE_Y = SEC_MISC_Y + SEC_MISC_H + 8;
+    private static final int NOTE_Y = SEC_PICKUP_Y + SEC_PICKUP_H + 8;
     private static final int NOTE_H = 24;
 
     // ---------------- 循环档位（都含出厂默认值，见 AutoFarmConfig） ----------------
@@ -68,6 +73,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] REST_DURATION_CHOICES = {10, 20, 30, 60};
     private static final int[] DURABILITY_CHOICES = {5, 10, 15, 20, 30};
     private static final int[] COOLDOWN_CHOICES = {5, 10, 15, 30, 60};
+    private static final int[] PICKUP_DELAY_CHOICES = {1, 2, 3, 5};
 
     private final AutoFarmConfig draft;
     /** 进来时的快照，「取消」时用它还原附加功能这几项 */
@@ -84,6 +90,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget failureCooldownButton;
     private ButtonWidget cooldownButton;
     private ButtonWidget verboseHudButton;
+    private ButtonWidget pickupDropsButton;
+    private ButtonWidget pickupDelayButton;
 
     public ExtrasScreen(Screen parent, AutoFarmConfig sharedDraft) {
         super(parent, Text.translatable("autofarm.extras.title"));
@@ -175,6 +183,20 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.verbose_hud.tip");
         layout(verboseHudButton, contentX, 0, fullW);
 
+        // ---- 掉落物 ----
+
+        this.pickupDropsButton = toggle("autofarm.option.pickup_drops",
+                draft.pickupDroppedItems, value -> draft.pickupDroppedItems = value,
+                "autofarm.pickup_drops.tip");
+        layout(pickupDropsButton, contentX, 0, fullW);
+
+        this.pickupDelayButton = ButtonWidget.builder(pickupDelayLabel(), b -> {
+            draft.pickupDelaySeconds = nextChoice(PICKUP_DELAY_CHOICES, draft.pickupDelaySeconds);
+            b.setMessage(pickupDelayLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        pickupDelayButton.setTooltip(Tooltip.of(Text.translatable("autofarm.pickup_delay.tip")));
+        addScrolling(pickupDelayButton);
+
         // ---- 页脚 ----
         int btnW = (contentWidth - 8) / 3;
         addFooter(
@@ -208,6 +230,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.replace_tool" -> draft.autoReplaceTool;
             case "autofarm.option.failure_cooldown" -> draft.failureCooldown;
             case "autofarm.option.verbose_hud" -> draft.verboseHud;
+            case "autofarm.option.pickup_drops" -> draft.pickupDroppedItems;
             default -> false;
         };
     }
@@ -237,6 +260,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(failureCooldownButton, misc + ROW_FIRST);
         setRowY(cooldownButton, misc + ROW_FIRST + ROW_GAP);
         setRowY(verboseHudButton, misc + ROW_FIRST + 2 * ROW_GAP);
+
+        int pickup = originY + SEC_PICKUP_Y;
+        setRowY(pickupDropsButton, pickup + ROW_FIRST);
+        setRowY(pickupDelayButton, pickup + ROW_FIRST + ROW_GAP);
     }
 
     // ================= 自绘 =================
@@ -251,6 +278,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
         drawSection(context, originY, SEC_MISC_Y, SEC_MISC_H);
         drawHeader(context, originY, SEC_MISC_Y, "autofarm.extras.section.misc");
+
+        drawSection(context, originY, SEC_PICKUP_Y, SEC_PICKUP_H);
+        drawHeader(context, originY, SEC_PICKUP_Y, "autofarm.extras.section.pickup");
 
         // 最底下那句总说明：强调「默认全关」，让第一次进来的人放心
         int shown = 0;
@@ -280,6 +310,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.failureCooldown = false;
         draft.failureCooldownSeconds = 15;
         draft.verboseHud = false;
+        draft.pickupDroppedItems = false;
+        draft.pickupDelaySeconds = 1;
         // 标签文字要跟着变，直接重建整页最省事
         if (this.client != null) {
             this.client.setScreen(new ExtrasScreen(this.parent, draft));
@@ -300,6 +332,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.failureCooldown = old.failureCooldown;
         draft.failureCooldownSeconds = old.failureCooldownSeconds;
         draft.verboseHud = old.verboseHud;
+        draft.pickupDroppedItems = old.pickupDroppedItems;
+        draft.pickupDelaySeconds = old.pickupDelaySeconds;
         backToParent();
     }
 
@@ -342,5 +376,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private Text cooldownLabel() {
         return optionLabel("autofarm.option.cooldown_seconds",
                 Text.translatable("autofarm.value.seconds", draft.failureCooldownSeconds));
+    }
+
+    private Text pickupDelayLabel() {
+        return optionLabel("autofarm.option.pickup_delay",
+                Text.translatable("autofarm.value.seconds", draft.pickupDelaySeconds));
     }
 }

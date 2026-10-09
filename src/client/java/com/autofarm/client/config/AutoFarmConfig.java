@@ -412,6 +412,27 @@ public class AutoFarmConfig {
      */
     public boolean verboseHud = false;
 
+    /**
+     * 优先拾取掉落物：把散落在田里的作物掉落物专门捡回来（默认关闭）。
+     *
+     * <p>作物被挖掉之后，掉落物不一定乖乖待在原地：水流会把它推走、爆炸会把它崩飞、
+     * 旁边的怪或者别的玩家也可能把它撞开。人接着往下一棵走，等回头时东西已经不在脚下了
+     * —— 一格作物就这么白白丢在地里。
+     *
+     * <p>打开这个开关，模组会盯着「掉在地上、超过 {@link #pickupDelaySeconds} 秒还没进包」
+     * 的作物掉落物，把它们排在路线最前面，走过去把它们收回来。判据是掉落物实体的
+     * <b>存在时长</b>（原版自己会算），所以刚掉出来、正在被吸走的那一瞬间不会误触发。
+     */
+    public boolean pickupDroppedItems = false;
+
+    /**
+     * 掉落物「掉在外面了」的判定延迟（秒）。
+     *
+     * <p>掉落物刚落地的那几 tick，原版还在把它往玩家身上吸，这时候不该当成「漏捡」。
+     * 等它在地上待够这么久还没进背包，才认为它是真的没被捡到，值得专门跑一趟。
+     */
+    public int pickupDelaySeconds = 1;
+
     /** 当前启用了几个附加功能（主面板摘要行用） */
     public int extrasEnabledCount() {
         int n = 0;
@@ -421,6 +442,7 @@ public class AutoFarmConfig {
         if (autoReplaceTool) n++;
         if (failureCooldown) n++;
         if (verboseHud) n++;
+        if (pickupDroppedItems) n++;
         return n;
     }
 
@@ -469,6 +491,8 @@ public class AutoFarmConfig {
         c.failureCooldown = this.failureCooldown;
         c.failureCooldownSeconds = this.failureCooldownSeconds;
         c.verboseHud = this.verboseHud;
+        c.pickupDroppedItems = this.pickupDroppedItems;
+        c.pickupDelaySeconds = this.pickupDelaySeconds;
         // 数组 / 列表都要深拷贝：不然「取消」时把草稿改回去，会把原配置一起改掉
         c.storageKeep = this.storageKeep == null ? null : this.storageKeep.clone();
         c.cropFilter = this.cropFilter == null ? new ArrayList<>() : new ArrayList<>(this.cropFilter);
@@ -544,6 +568,9 @@ public class AutoFarmConfig {
 
         if (failureCooldownSeconds < 3) failureCooldownSeconds = 3;
         if (failureCooldownSeconds > 120) failureCooldownSeconds = 120;
+
+        if (pickupDelaySeconds < 1) pickupDelaySeconds = 1;
+        if (pickupDelaySeconds > 30) pickupDelaySeconds = 30;
     }
 
     // ---- 描边外观的派生值 ----

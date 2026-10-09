@@ -225,6 +225,7 @@
   "autofarm.extras.section.stealth": "安全与隐蔽",
   "autofarm.extras.section.tool": "工具维护",
   "autofarm.extras.section.misc": "容错与统计",
+  "autofarm.extras.section.pickup": "掉落物",
   "autofarm.extras.note": "这些功能默认全部关闭：不打开，模组的行为与之前完全一致。它们只影响节奏与顺手程度，不会绕开任何游戏规则。",
   "autofarm.extras.reset": "全部关闭",
 
@@ -250,6 +251,10 @@
   "autofarm.cooldown.tip": "失败的目标多久后重新尝试。只在上一项开启时生效。",
   "autofarm.option.verbose_hud": "HUD 详细统计",
   "autofarm.verbose_hud.tip": "状态栏多显示一行本轮运行时长与补种数。",
+  "autofarm.option.pickup_drops": "优先拾取掉落物",
+  "autofarm.pickup_drops.tip": "把散落在田里的作物掉落物专门捡回来：收割后掉在地上、过了判定延迟还没进背包的，会排在路线最前面走过去捡。",
+  "autofarm.option.pickup_delay": "拾取判定延迟",
+  "autofarm.pickup_delay.tip": "掉落物在地上待够这么久还没被捡走，才当成「漏捡」专门跑一趟。只在上一项开启时生效。",
 
   "autofarm.value.blocks": "%s 格",
   "autofarm.value.minutes": "%s 分钟",
@@ -263,6 +268,7 @@
   "autofarm.state.idle": "空闲",
   "autofarm.state.scanning": "扫描中",
   "autofarm.state.moving": "移动中",
+  "autofarm.state.pickup": "拾取掉落物",
   "autofarm.state.harvesting": "收割中",
   "autofarm.state.replanting": "补种中",
   "autofarm.state.supply": "前往补给点",

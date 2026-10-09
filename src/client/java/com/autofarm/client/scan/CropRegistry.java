@@ -10,6 +10,9 @@ import net.minecraft.block.FarmlandBlock;
 import net.minecraft.block.StemBlock;
 import net.minecraft.block.SweetBerryBushBlock;
 import net.minecraft.client.world.ClientWorld;
+import net.minecraft.item.AliasedBlockItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.state.property.IntProperty;
 import net.minecraft.state.property.Property;
@@ -198,6 +201,54 @@ public final class CropRegistry {
             return Text.literal(id == null ? "?" : id);
         }
         return block.getName();
+    }
+
+    /**
+     * 这个掉落物算不算「农作物的产物」——附加功能「优先拾取掉落物」用它挑目标。
+     *
+     * <p>判据就两条，都不需要维护对照表：
+     * <ol>
+     *   <li><b>放下去能长出作物</b>：种子，以及胡萝卜 / 土豆这种
+     *       「收下来的东西本身就是种子」的物品 —— 它们都实现了
+     *       {@link AliasedBlockItem}，且指向一个作物方块；</li>
+     *   <li><b>名字和某个作物方块对得上</b>：小麦、甜菜根这类收下来的产物本身不是种子，
+     *       但物品名和方块名有稳定的对应关系，见 {@link #isCropProduce}。</li>
+     * </ol>
+     *
+     * <p>它刻意<b>不</b>认「可种植的东西」以外的物品，所以不会把玩家自己丢的杂物
+     * 一股脑捡回来 —— 它只负责把从地里飞出去的东西收回来。
+     */
+    public static boolean isCropDrop(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+        Item item = stack.getItem();
+        // 1. 放下去变作物方块 = 种子（胡萝卜、土豆这种「作物本体」也算）
+        if (item instanceof AliasedBlockItem aliased && isCropBlock(aliased.getBlock())) {
+            return true;
+        }
+        return isCropProduce(item);
+    }
+
+    /**
+     * 收下来的产物本身（不是种子）——比如小麦、甜菜根、土豆。
+     *
+     * <p>物品名和作物方块名的关系并不统一：小麦方块就叫 {@code wheat}，
+     * 而胡萝卜 / 土豆 / 甜菜根这些方块是<b>复数</b>（{@code carrots} /
+     * {@code potatoes} / {@code beetroots}），收下来的东西却是单数。
+     * 所以这里把「原样、加 s、加 es」三种写法都试一遍，
+     * 再用 {@code block.asItem() == item} 确认它们确实指同一件东西。
+     */
+    private static boolean isCropProduce(Item item) {
+        Identifier id = Registries.ITEM.getId(item);
+        String path = id.getPath();
+        for (String candidate : new String[]{path, path + "s", path + "es"}) {
+            Block block = Registries.BLOCK.get(new Identifier(id.getNamespace(), candidate));
+            if (block != Blocks.AIR && isCropBlock(block) && block.asItem() == item) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 带 {@code age} 属性、而且已经顶到最大值（长满了） */

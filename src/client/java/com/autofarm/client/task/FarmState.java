@@ -9,6 +9,7 @@ public enum FarmState {
     IDLE("autofarm.state.idle"),
     SCANNING("autofarm.state.scanning"),
     MOVING("autofarm.state.moving"),
+    PICKUP("autofarm.state.pickup"),
     HARVESTING("autofarm.state.harvesting"),
     REPLANTING("autofarm.state.replanting"),
     TO_SUPPLY("autofarm.state.supply"),

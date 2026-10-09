@@ -14,8 +14,11 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 「按路线把角色走过去」的执行器。
@@ -94,6 +97,17 @@ public final class PathWalker {
     /** 已经「处理完」的点（走到了，或者判定过不去放弃了） */
     private static final ArrayDeque<BlockPos> resolved = new ArrayDeque<>();
 
+    /**
+     * 「要走到它自己那一格」的目标。
+     *
+     * <p>平时走到一个目标跟前，是站在<b>旁边</b>看着它干活（作物得抬头挖、对着种），
+     * 所以 {@link BlockNavigator#findViewSpot} 会挑一个能看见它的落脚点。
+     * 但有一类目标不是「要看的东西」，而是<b>要去碰到的东西</b> ——
+     * 掉在地上的掉落物就是这样：人得站到它那一格上，原版才会把它吸进背包。
+     * 农场大脑每次规划路线前把这类目标丢进来，挑落脚点时就会直接走它本身。
+     */
+    private static final Set<BlockPos> exactTargets = new HashSet<>();
+
     private static PathPlanner.Plan plan;
     private static int index = -1;
 
@@ -152,6 +166,7 @@ public final class PathWalker {
         wantForward = false;
         wantJump = false;
         holding = false;
+        exactTargets.clear();
         // 注意：resolved 里可能有还没被取走的点，留着让调用方取完再清
     }
 
@@ -190,6 +205,18 @@ public final class PathWalker {
     /** 打开界面等需要挂起的情况 */
     public static void setPaused(boolean value) {
         paused = value;
+    }
+
+    /**
+     * 声明「这些目标要精确走到它本身那一格」（掉落物拾取用，见 {@link #exactTargets}）。
+     *
+     * <p>路线每次重新规划时由调用方重新设置一遍，所以传空集合就等于「这一趟全是普通目标」。
+     */
+    public static void setExactTargets(Collection<BlockPos> targets) {
+        exactTargets.clear();
+        if (targets != null) {
+            exactTargets.addAll(targets);
+        }
     }
 
     public static BlockPos getCurrentTarget() {
@@ -508,7 +535,12 @@ public final class PathWalker {
         // 照直走会直接走进作物里 —— 那样看着别扭，挖它的时候视角还得垂直朝下，
         // 服务端看到的是一个把头埋进地里的角色。
         // 所以首选「站在旁边能看着作物」的那一格，实在找不到才退回站在作物那一格上。
-        BlockPos spot = BlockNavigator.findViewSpot(client.world, target);
+        //
+        // 例外是 {@link #exactTargets} 里那类「要碰到才算数」的目标（掉落物）：
+        // 它们必须站到那一格上，站在旁边看是捡不到的，所以直接以它本身为落点。
+        BlockPos spot = exactTargets.contains(target)
+                ? target
+                : BlockNavigator.findViewSpot(client.world, target);
         List<BlockPos> candidates = spot == null || spot.equals(target)
                 ? List.of(target)
                 : List.of(spot, target);

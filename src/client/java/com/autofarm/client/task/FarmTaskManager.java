@@ -14,9 +14,11 @@ import com.autofarm.client.path.PathPlanner;
 import com.autofarm.client.path.PathStep;
 import com.autofarm.client.path.PathWalker;
 import com.autofarm.client.scan.CropFilter;
+import com.autofarm.client.scan.CropRegistry;
 import com.autofarm.client.scan.CropScanner;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
@@ -73,6 +75,17 @@ public final class FarmTaskManager {
 
     /** 背包空格少于等于这个数就算「快满了」，该去补给点存一趟 */
     private static final int INVENTORY_RESERVE = 1;
+
+    /**
+     * 走到掉落物所在格之后，原地停留几 tick 再放行。
+     *
+     * <p>「站上去」和「东西进背包」之间隔着原版的拾取判定，不是同一 tick 完成的。
+     * 停这一小会儿，等它真的被吸走了再走开，否则会出现「明明去过、东西还在地上」。
+     */
+    private static final int PICKUP_WAIT_TICKS = 6;
+
+    /** 掉落物离玩家近到这种程度（格）就当「抬脚就捡到了」，不再专门排进路线 */
+    private static final double PICKUP_IGNORE_DISTANCE = 1.6;
 
     /**
      * 一趟补给「没办成」之后的冷却（tick）。
@@ -189,6 +202,21 @@ public final class FarmTaskManager {
      * 它改记在定时器里，到点自动重新排进路线。
      */
     private static final Map<BlockPos, Long> failedUntil = new HashMap<>();
+
+    /**
+     * 「优先拾取掉落物」：这一轮扫描认出来的、掉在地上还没进包的作物掉落物（记的是所在格）。
+     *
+     * <p>它和 {@link #matureCrops} 一样是「本轮的目标」，但走的是完全不同的处理：
+     * 到了那一格不用挖也不用种，站上去等原版把东西吸进背包就行。
+     * 关掉这个附加功能时它恒为空表，等于不存在。
+     */
+    private static final Set<BlockPos> pickupTargets = new HashSet<>();
+
+    /** 正在掉落物格上等拾取时的倒计时；换目标时重新计时 */
+    private static int pickupWaitTicks;
+
+    /** 正在等待拾取的那一格（换目标时用来重置上面的倒计时） */
+    private static BlockPos pickupWaitPos;
 
     /** 拟人化节奏的停顿倒计时（tick）：>0 时先愣一下，不动手也不推进路线 */
     private static int humanizeDelay;
@@ -351,6 +379,9 @@ public final class FarmTaskManager {
         restRemaining = 0;
         workTicks = 0;
         sessionTicks = 0;
+        pickupTargets.clear();
+        pickupWaitTicks = 0;
+        pickupWaitPos = null;
     }
 
     /**
@@ -390,6 +421,9 @@ public final class FarmTaskManager {
             failedUntil.clear();
             humanizeDelay = 0;
             restRemaining = 0;
+            pickupTargets.clear();
+            pickupWaitTicks = 0;
+            pickupWaitPos = null;
             state = FarmState.IDLE;
         } else {
             // 打开 → 假装「刚进入这个世界」：清空记忆、下一 tick 立刻重扫
@@ -444,6 +478,9 @@ public final class FarmTaskManager {
                 restRemaining = 0;
                 workTicks = 0;
                 sessionTicks = 0;
+                pickupTargets.clear();
+                pickupWaitTicks = 0;
+                pickupWaitPos = null;
             }
             lastEnabled = config.enabled;
         }
@@ -575,12 +612,22 @@ public final class FarmTaskManager {
         matureCrops = scanned.mature();
         emptyFarmland = wantFarmland ? scanned.emptyFarmland() : Collections.emptyList();
 
+        // 附加功能「优先拾取掉落物」：顺手看看田里有没有掉在外面、还没进包的作物掉落物。
+        // 得到的是「在哪一格」，下一步会排进路线最前面。
+        pickupTargets.clear();
+        if (config.pickupDroppedItems) {
+            collectPickupTargets(client, config, pickupTargets);
+        }
+
         // 让「已处理」集合跟着扫描结果瘦身，避免玩家在同一片区域待久了无限膨胀。
         // 收掉的作物会变成空气、补种后变成幼苗，两者都不再是「成熟作物」，
         // 所以它们会自然地从 handled 里掉出去。
+        // 掉落物也算「这一轮还在的目标」：如果某件东西够不到、一直留在地上，
+        // 把它一起保留下来，就不会每一轮都重新去试同一件捡不到的东西。
         if (!handled.isEmpty()) {
             Set<BlockPos> current = new HashSet<>(matureCrops);
             current.addAll(emptyFarmland);
+            current.addAll(pickupTargets);
             handled.retainAll(current);
         }
 
@@ -625,6 +672,16 @@ public final class FarmTaskManager {
         }
 
         List<BlockPos> pending = new ArrayList<>();
+
+        // 附加功能「优先拾取掉落物」：先把散在地上的作物掉落物排进路线。
+        // 它排在成熟作物前面 —— 掉落物不会自己长回去，还可能被水冲走、被怪撞飞，
+        // 或者干脆因为存在太久而消失，所以先把它捡回来，再谈地里的活。
+        for (BlockPos pos : pickupTargets) {
+            if (!handled.contains(pos)) {
+                pending.add(pos);
+            }
+        }
+
         for (BlockPos pos : matureCrops) {
             if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
                 pending.add(pos);
@@ -658,8 +715,37 @@ public final class FarmTaskManager {
                 pending,
                 config.optimizePath
         );
+        // 掉落物是「要碰到才算数」的目标：必须走到它那一格上原版才会把它吸进背包，
+        // 不能像作物那样站在旁边看着。把这类格子单独告诉执行器。
+        PathWalker.setExactTargets(pickupTargets);
         PathWalker.start(plan);
         state = FarmState.MOVING;
+    }
+
+    /**
+     * 把附近「掉在地上、还没进包」的农作物掉落物找出来（附加功能，默认关闭）。
+     *
+     * <p>三条判据，缺一不可：
+     * <ol>
+     *   <li>它得是<b>农作物产物</b>（见 {@link CropRegistry#isCropDrop}）——
+     *       不然会把玩家自己丢的杂物也一股脑捡回来；</li>
+     *   <li>它得在地上待够 {@link AutoFarmConfig#pickupDelaySeconds} 秒还没进背包 ——
+     *       刚掉出来的那一小会儿，原版正把它往玩家身上吸，这时候不该算「漏捡」；</li>
+     *   <li>它得离玩家有点距离 —— 就在脚边的，走过去顺手就捡了，不必当成一个专门的目标。</li>
+     * </ol>
+     */
+    private static void collectPickupTargets(MinecraftClient client, AutoFarmConfig config,
+                                             Set<BlockPos> out) {
+        long minAge = Math.max(1, config.pickupDelaySeconds) * 20L; // 秒 → tick
+        double ignoreSq = PICKUP_IGNORE_DISTANCE * PICKUP_IGNORE_DISTANCE;
+        Box box = client.player.getBoundingBox().expand(config.scanRadius);
+        for (ItemEntity item : client.world.getEntitiesByClass(ItemEntity.class, box,
+                e -> e.isAlive()
+                        && e.getItemAge() >= minAge
+                        && e.squaredDistanceTo(client.player) > ignoreSq
+                        && CropRegistry.isCropDrop(e.getStack()))) {
+            out.add(item.getBlockPos().toImmutable());
+        }
     }
 
     /**
@@ -688,6 +774,26 @@ public final class FarmTaskManager {
         if (held == null) {
             PathWalker.tick(client);
             drainResolved();
+            return;
+        }
+
+        // 附加功能「优先拾取掉落物」：这一趟是去捡地上的东西。
+        // 到了那一格不用挖也不用种，站上去等原版把它吸进背包即可 ——
+        // 但要停一小会儿再放行，否则刚站到就转身走开，东西还留在原地。
+        if (pickupTargets.contains(held)) {
+            if (!held.equals(pickupWaitPos)) {
+                pickupWaitPos = held;
+                pickupWaitTicks = PICKUP_WAIT_TICKS;
+            }
+            if (pickupWaitTicks > 0) {
+                pickupWaitTicks--;
+                state = FarmState.PICKUP;
+                return;
+            }
+            pickupWaitPos = null;
+            PathWalker.releaseTarget();
+            drainResolved();
+            state = PathWalker.isActive() ? FarmState.MOVING : FarmState.IDLE;
             return;
         }
 
