@@ -20,10 +20,11 @@ import net.minecraft.text.Text;
  * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
  * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
  *
- * <h2>五段</h2>
+ * <h2>六段</h2>
  * <ol>
  *   <li><b>安全与隐蔽</b> —— 玩家接近停机、拟人化节奏、定时随机休息；</li>
  *   <li><b>防踢模式</b> —— 一整套「把机器味抹掉」的措施，带四档强度；</li>
+ *   <li><b>行为真实感</b> —— 危险反应延迟、空闲时环顾四周、仅在指定时段工作；</li>
  *   <li><b>工具维护</b> —— 工具耐久自动换新；</li>
  *   <li><b>容错与统计</b> —— 失败目标暂时拉黑、HUD 详细统计；</li>
  *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物。</li>
@@ -56,8 +57,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_ANTIKICK_Y = SEC_STEALTH_H + SECTION_GAP;
     private static final int SEC_ANTIKICK_H = ROW_FIRST + ANTIKICK_ROWS * ROW_GAP + 4;
 
+    private static final int BEHAVIOR_ROWS = 6;
+    private static final int SEC_BEHAVIOR_Y = SEC_ANTIKICK_Y + SEC_ANTIKICK_H + SECTION_GAP;
+    private static final int SEC_BEHAVIOR_H = ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 4;
+
     private static final int TOOL_ROWS = 2;
-    private static final int SEC_TOOL_Y = SEC_ANTIKICK_Y + SEC_ANTIKICK_H + SECTION_GAP;
+    private static final int SEC_TOOL_Y = SEC_BEHAVIOR_Y + SEC_BEHAVIOR_H + SECTION_GAP;
     private static final int SEC_TOOL_H = ROW_FIRST + TOOL_ROWS * ROW_GAP + 4;
 
     private static final int MISC_ROWS = 3;
@@ -81,6 +86,18 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] PICKUP_DELAY_CHOICES = {1, 2, 3, 5};
     /** 防踢档位：0 = 关闭、1 = 轻度、2 = 中度、3 = 强力（和 Humanizer 的常量一致） */
     private static final int[] ANTIKICK_LEVEL_CHOICES = {0, 1, 2, 3};
+    /** 行为真实感：反应延迟时长（tick，1 秒 = 20 tick） */
+    private static final int[] REACTION_CHOICES = {4, 10, 20, 30};
+    /** 工作时段：0~23 整点（循环按钮在这 24 档之间轮换） */
+    private static final int[] HOUR_CHOICES = buildHours();
+
+    private static int[] buildHours() {
+        int[] hours = new int[24];
+        for (int i = 0; i < hours.length; i++) {
+            hours[i] = i;
+        }
+        return hours;
+    }
 
     private final AutoFarmConfig draft;
     /** 进来时的快照，「取消」时用它还原附加功能这几项 */
@@ -101,6 +118,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget pickupDelayButton;
     private ButtonWidget antiKickButton;
     private ButtonWidget antiKickLevelButton;
+    private ButtonWidget reactionDelayButton;
+    private ButtonWidget reactionTimeButton;
+    private ButtonWidget idleLookButton;
+    private ButtonWidget scheduleButton;
+    private ButtonWidget scheduleStartButton;
+    private ButtonWidget scheduleEndButton;
 
     public ExtrasScreen(Screen parent, AutoFarmConfig sharedDraft) {
         super(parent, Text.translatable("autofarm.extras.title"));
@@ -172,6 +195,44 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         antiKickLevelButton.setTooltip(Tooltip.of(Text.translatable("autofarm.antikick_level.tip")));
         addScrolling(antiKickLevelButton);
+
+        // ---- 行为真实感 ----
+
+        this.reactionDelayButton = toggle("autofarm.option.reaction_delay",
+                draft.reactionDelay, value -> draft.reactionDelay = value,
+                "autofarm.reaction_delay.tip");
+        layout(reactionDelayButton, contentX, 0, fullW);
+
+        this.reactionTimeButton = ButtonWidget.builder(reactionTimeLabel(), b -> {
+            draft.reactionDelayTicks = nextChoice(REACTION_CHOICES, draft.reactionDelayTicks);
+            b.setMessage(reactionTimeLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        reactionTimeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.reaction_time.tip")));
+        addScrolling(reactionTimeButton);
+
+        this.idleLookButton = toggle("autofarm.option.idle_look",
+                draft.idleLookAround, value -> draft.idleLookAround = value,
+                "autofarm.idle_look.tip");
+        layout(idleLookButton, contentX, 0, fullW);
+
+        this.scheduleButton = toggle("autofarm.option.schedule",
+                draft.scheduleEnabled, value -> draft.scheduleEnabled = value,
+                "autofarm.schedule.tip");
+        layout(scheduleButton, contentX, 0, fullW);
+
+        this.scheduleStartButton = ButtonWidget.builder(scheduleStartLabel(), b -> {
+            draft.scheduleStartHour = nextChoice(HOUR_CHOICES, draft.scheduleStartHour);
+            b.setMessage(scheduleStartLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        scheduleStartButton.setTooltip(Tooltip.of(Text.translatable("autofarm.schedule_start.tip")));
+        addScrolling(scheduleStartButton);
+
+        this.scheduleEndButton = ButtonWidget.builder(scheduleEndLabel(), b -> {
+            draft.scheduleEndHour = nextChoice(HOUR_CHOICES, draft.scheduleEndHour);
+            b.setMessage(scheduleEndLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        scheduleEndButton.setTooltip(Tooltip.of(Text.translatable("autofarm.schedule_end.tip")));
+        addScrolling(scheduleEndButton);
 
         // ---- 工具维护 ----
 
@@ -255,6 +316,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.verbose_hud" -> draft.verboseHud;
             case "autofarm.option.pickup_drops" -> draft.pickupDroppedItems;
             case "autofarm.option.antikick" -> draft.antiKickMode;
+            case "autofarm.option.reaction_delay" -> draft.reactionDelay;
+            case "autofarm.option.idle_look" -> draft.idleLookAround;
+            case "autofarm.option.schedule" -> draft.scheduleEnabled;
             default -> false;
         };
     }
@@ -280,6 +344,14 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(antiKickButton, antiKick + ROW_FIRST);
         setRowY(antiKickLevelButton, antiKick + ROW_FIRST + ROW_GAP);
 
+        int behavior = originY + SEC_BEHAVIOR_Y;
+        setRowY(reactionDelayButton, behavior + ROW_FIRST);
+        setRowY(reactionTimeButton, behavior + ROW_FIRST + ROW_GAP);
+        setRowY(idleLookButton, behavior + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(scheduleButton, behavior + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(scheduleStartButton, behavior + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(scheduleEndButton, behavior + ROW_FIRST + 5 * ROW_GAP);
+
         int tool = originY + SEC_TOOL_Y;
         setRowY(replaceToolButton, tool + ROW_FIRST);
         setRowY(durabilityButton, tool + ROW_FIRST + ROW_GAP);
@@ -303,6 +375,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
         drawSection(context, originY, SEC_ANTIKICK_Y, SEC_ANTIKICK_H);
         drawHeader(context, originY, SEC_ANTIKICK_Y, "autofarm.extras.section.antikick");
+
+        drawSection(context, originY, SEC_BEHAVIOR_Y, SEC_BEHAVIOR_H);
+        drawHeader(context, originY, SEC_BEHAVIOR_Y, "autofarm.extras.section.behavior");
 
         drawSection(context, originY, SEC_TOOL_Y, SEC_TOOL_H);
         drawHeader(context, originY, SEC_TOOL_Y, "autofarm.extras.section.tool");
@@ -334,6 +409,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.playerNearRadius = 16;
         draft.antiKickMode = false;
         draft.antiKickLevel = 2;
+        draft.reactionDelay = false;
+        draft.reactionDelayTicks = 10;
+        draft.idleLookAround = false;
+        draft.scheduleEnabled = false;
+        draft.scheduleStartHour = 8;
+        draft.scheduleEndHour = 23;
         draft.humanizeTiming = false;
         draft.randomRest = false;
         draft.restIntervalMinutes = 10;
@@ -358,6 +439,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.playerNearRadius = old.playerNearRadius;
         draft.antiKickMode = old.antiKickMode;
         draft.antiKickLevel = old.antiKickLevel;
+        draft.reactionDelay = old.reactionDelay;
+        draft.reactionDelayTicks = old.reactionDelayTicks;
+        draft.idleLookAround = old.idleLookAround;
+        draft.scheduleEnabled = old.scheduleEnabled;
+        draft.scheduleStartHour = old.scheduleStartHour;
+        draft.scheduleEndHour = old.scheduleEndHour;
         draft.humanizeTiming = old.humanizeTiming;
         draft.randomRest = old.randomRest;
         draft.restIntervalMinutes = old.restIntervalMinutes;
@@ -421,6 +508,24 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private Text antiKickLevelLabel() {
         return optionLabel("autofarm.option.antikick_level",
                 Text.translatable("autofarm.antikick.level." + levelKey(draft.antiKickLevel)));
+    }
+
+    private Text reactionTimeLabel() {
+        return optionLabel("autofarm.option.reaction_time",
+                Text.translatable("autofarm.value.seconds",
+                        String.format("%.1f", draft.reactionDelayTicks / 20.0)));
+    }
+
+    private Text scheduleStartLabel() {
+        return optionLabel("autofarm.option.schedule_start", hourText(draft.scheduleStartHour));
+    }
+
+    private Text scheduleEndLabel() {
+        return optionLabel("autofarm.option.schedule_end", hourText(draft.scheduleEndHour));
+    }
+
+    private static Text hourText(int hour) {
+        return Text.translatable("autofarm.value.hour", String.format("%02d", hour));
     }
 
     /** 档位数字 → 语言键后缀。认不出来的档位一律当「关闭」显示 */

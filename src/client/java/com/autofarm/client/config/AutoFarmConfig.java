@@ -456,6 +456,54 @@ public class AutoFarmConfig {
      */
     public int antiKickLevel = 2;
 
+    /**
+     * 危险反应延迟：遇到危险时不「瞬间」停手（默认关闭）。
+     *
+     * <p>防踢模式解决的是「动作节奏」，这里解决的是<b>决策时机</b>。
+     * 现在一旦附近冒出敌对生物、或者血量掉了下去，模组会在<b>同一 tick</b> 停手 ——
+     * 而真人从「看见危险」到「松手」总要花上几百毫秒。人反应得比机器还快，本身就是破绽。
+     *
+     * <p>打开它之后，危险第一次出现会先「愣」{@link #reactionDelayTicks} tick 才真正停手；
+     * 危险种类变了（比如从「有怪」变成「血量低」）会重新计时。
+     * 代价是这几百毫秒里人是照常在干活的，所以默认关着。
+     */
+    public boolean reactionDelay = false;
+
+    /** 「危险反应延迟」的延迟时长（tick）。默认 10 tick（0.5 秒） */
+    public int reactionDelayTicks = 10;
+
+    /**
+     * 空闲时环顾四周：没事干的时候视角缓慢地东张西望（默认关闭）。
+     *
+     * <p>作物收完了、或者在休息，模组会把角色定在原地。真人的「站着不动」其实
+     * 视角也在慢慢游走 —— 一个把视准星钉死在同一个方向、连呼吸般的小幅转头都没有的角色，
+     * 反而比在动更显眼。
+     *
+     * <p>打开后只在这三种空闲状态生效：等作物成熟、定时休息、其它无事可做；
+     * <b>危险停机时不会环顾</b>（那时候「装死」比「东张西望」安全）。
+     * 而且它每次都会和你自己的视角比对：你一动手把鼠标，它立刻让开。
+     */
+    public boolean idleLookAround = false;
+
+    /**
+     * 仅在指定时段工作：只在设定的时间窗口内收割（默认关闭）。
+     *
+     * <p>前面那些措施都是在「看起来像不像人」，但有一条比它们都致命 ——
+     * <b>这个账号 24 小时不下线</b>。真人再肝也要睡觉，一个从不出现在凌晨 3 点的角色，
+     * 一眼就能看出不对。
+     *
+     * <p>用<b>本机时间</b>判断：在 {@link #scheduleStartHour} 到 {@link #scheduleEndHour}
+     * 之间才干活，其余时间停手。注意它<b>只是停止收割，账号仍然在线</b> ——
+     * 想彻底隐藏在线时长，还得配合「到点自己下线」。
+     */
+    public boolean scheduleEnabled = false;
+
+    /** 工作时段起点（0~23 整点）。默认 8 点 */
+    public int scheduleStartHour = 8;
+
+    /** 工作时段终点（0~23 整点，不含这一小时）。默认 23 点 */
+    public int scheduleEndHour = 23;
+
     /** 当前启用了几个附加功能（主面板摘要行用） */
     public int extrasEnabledCount() {
         int n = 0;
@@ -467,6 +515,9 @@ public class AutoFarmConfig {
         if (verboseHud) n++;
         if (pickupDroppedItems) n++;
         if (antiKickMode) n++;
+        if (reactionDelay) n++;
+        if (idleLookAround) n++;
+        if (scheduleEnabled) n++;
         return n;
     }
 
@@ -519,6 +570,12 @@ public class AutoFarmConfig {
         c.pickupDelaySeconds = this.pickupDelaySeconds;
         c.antiKickMode = this.antiKickMode;
         c.antiKickLevel = this.antiKickLevel;
+        c.reactionDelay = this.reactionDelay;
+        c.reactionDelayTicks = this.reactionDelayTicks;
+        c.idleLookAround = this.idleLookAround;
+        c.scheduleEnabled = this.scheduleEnabled;
+        c.scheduleStartHour = this.scheduleStartHour;
+        c.scheduleEndHour = this.scheduleEndHour;
         // 数组 / 列表都要深拷贝：不然「取消」时把草稿改回去，会把原配置一起改掉
         c.storageKeep = this.storageKeep == null ? null : this.storageKeep.clone();
         c.cropFilter = this.cropFilter == null ? new ArrayList<>() : new ArrayList<>(this.cropFilter);
@@ -601,6 +658,16 @@ public class AutoFarmConfig {
         // 防踢档位：0~3（具体的档位含义在 Humanizer 里）
         if (antiKickLevel < 0) antiKickLevel = 0;
         if (antiKickLevel > 3) antiKickLevel = 3;
+
+        // 行为真实感：反应延迟不能为 0（0 就等于「瞬间反应」，那这个开关就没意义了）
+        if (reactionDelayTicks < 2) reactionDelayTicks = 2;
+        if (reactionDelayTicks > 60) reactionDelayTicks = 60;
+
+        // 工作时段：都拉回 0~23 整点
+        if (scheduleStartHour < 0) scheduleStartHour = 0;
+        if (scheduleStartHour > 23) scheduleStartHour = 23;
+        if (scheduleEndHour < 0) scheduleEndHour = 0;
+        if (scheduleEndHour > 23) scheduleEndHour = 23;
     }
 
     // ---- 描边外观的派生值 ----

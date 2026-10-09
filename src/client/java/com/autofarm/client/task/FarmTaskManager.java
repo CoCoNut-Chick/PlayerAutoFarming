@@ -7,6 +7,7 @@ import com.autofarm.client.container.ContainerCompat;
 import com.autofarm.client.container.ContainerTransfer;
 import com.autofarm.client.harvest.CropHarvester;
 import com.autofarm.client.human.Humanizer;
+import com.autofarm.client.human.IdleLook;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.AutoEater;
 import com.autofarm.client.inventory.InventoryScanner;
@@ -239,6 +240,16 @@ public final class FarmTaskManager {
     /** 本轮（从打开开关算起）真正干了活的 tick 数，给 HUD 详细统计用 */
     private static int sessionTicks;
 
+    /**
+     * 「危险反应延迟」的计时状态。
+     *
+     * <p>危险第一次出现时记下它的类型（{@link #pendingSafety}）并开始数 tick，
+     * 数够 {@link AutoFarmConfig#reactionDelayTicks} 才真正停手。
+     * 危险消失、或者换了一种危险，都重新计时。
+     */
+    private static String pendingSafety;
+    private static int safetySeenTicks;
+
     private FarmTaskManager() {
     }
 
@@ -392,7 +403,10 @@ public final class FarmTaskManager {
         pickupWaitTicks = 0;
         pickupWaitPos = null;
         hesitatedAt = null;
+        pendingSafety = null;
+        safetySeenTicks = 0;
         Humanizer.reset();
+        IdleLook.reset();
     }
 
     /**
@@ -436,7 +450,10 @@ public final class FarmTaskManager {
             pickupWaitTicks = 0;
             pickupWaitPos = null;
             hesitatedAt = null;
+            pendingSafety = null;
+            safetySeenTicks = 0;
             Humanizer.reset();
+            IdleLook.reset();
             state = FarmState.IDLE;
         } else {
             // 打开 → 假装「刚进入这个世界」：清空记忆、下一 tick 立刻重扫
@@ -448,6 +465,8 @@ public final class FarmTaskManager {
             failedUntil.clear();
             workTicks = 0;
             sessionTicks = 0;
+            pendingSafety = null;
+            safetySeenTicks = 0;
         }
         lastEnabled = config.enabled;
 
@@ -499,6 +518,8 @@ public final class FarmTaskManager {
                 pickupWaitTicks = 0;
                 pickupWaitPos = null;
                 hesitatedAt = null;
+                pendingSafety = null;
+                safetySeenTicks = 0;
             }
             lastEnabled = config.enabled;
         }
@@ -532,8 +553,10 @@ public final class FarmTaskManager {
         // ================================================================
         boolean stopForFull = config.enabled && shouldStopForFullInventory(client, config);
         // 安全条件：血量太低、或者附近有敌对生物。它比「收菜」重要 ——
-        // 人被打了还低着头收菜，是最容易出事的状态
-        String safety = config.enabled ? safetyNotice(client, config) : null;
+        // 人被打了还低着头收菜，是最容易出事的状态。
+        // 附加功能「危险反应延迟」：危险第一次出现时先愣一下再停手 ——
+        // 机器会在冒出危险的同一 tick 停手，真人总要花上几百毫秒（见 applyReactionDelay）。
+        String safety = config.enabled ? applyReactionDelay(config, safetyNotice(client, config)) : null;
 
         if (stopForFull) {
             cancelSupply(null);
@@ -552,17 +575,26 @@ public final class FarmTaskManager {
             supplyNotice = null;
         }
 
-        // 这一 tick 要不要整个人停手（背包满、安全保护、或者附加功能里的「定时休息」）
+        // 这一 tick 要不要整个人停手（背包满、安全保护、外加两个附加功能）
         boolean resting = config.enabled && updateRest(config);
-        boolean paused = stopForFull || safety != null || resting;
+        // 附加功能「仅在指定时段工作」：不在工作时段就停手（账号仍然在线，只是不干活）
+        boolean offSchedule = config.enabled && config.scheduleEnabled && !insideSchedule(config);
+        boolean paused = stopForFull || safety != null || resting || offSchedule;
 
         // 一停机就播报一次（actionbar），免得你以为是模组卡了 ——
         // 同一个原因只说一次，危险过去后自动允许下次再说。
-        // 休息在 supplyNotice 里没有位置（那栏留给「缺种子」「箱子满了」这类事），
-        // 所以它用自己的键，同样走「只说一次」这套。
-        String pauseKey = stopForFull || safety != null
-                ? supplyNotice
-                : (resting ? "autofarm.notice.paused_resting" : null);
+        // 休息 / 工作时段在 supplyNotice 里没有位置（那栏留给「缺种子」「箱子满了」这类事），
+        // 所以它们各用自己的键，同样走「只说一次」这套。
+        String pauseKey;
+        if (stopForFull || safety != null) {
+            pauseKey = supplyNotice;
+        } else if (resting) {
+            pauseKey = "autofarm.notice.paused_resting";
+        } else if (offSchedule) {
+            pauseKey = "autofarm.notice.paused_schedule";
+        } else {
+            pauseKey = null;
+        }
         announcePause(client, paused ? pauseKey : null);
 
         // 附加功能：HUD 详细统计的「运行时长」——只数真正干活的时间，
@@ -583,10 +615,23 @@ public final class FarmTaskManager {
 
         // 玩家打开任意界面（背包、聊天、ESC……）、或者已经躺下了的时候立刻挂起，
         // 否则角色会在你翻背包的时候自顾自走开。危险和背包满也走同一条「暂停」通道。
-        PathWalker.setPaused(client.currentScreen != null
+        boolean walkPaused = client.currentScreen != null
                 || !client.player.isAlive()
                 || freecamPaused
-                || paused);
+                || paused;
+        PathWalker.setPaused(walkPaused);
+
+        // 附加功能「空闲时环顾四周」：只有在「没在动、没在收、没在补给、也没因危险停机」时，
+        // 才让视角慢慢游走。危险停机时不环顾 —— 那时候「装死」比「东张西望」更安全；
+        // 自由视角下也不环顾（摄像机和身体是分开的，转头只会让人看着别扭）。
+        boolean viewBusy = !walkPaused && (PathWalker.isActive() || CropHarvester.isBusy());
+        IdleLook.tick(client, config, config.enabled
+                && !stopForFull
+                && safety == null
+                && !offSchedule
+                && client.currentScreen == null
+                && !CameraCompat.isCameraDetached()
+                && !viewBusy);
 
         // ================================================================
         // 优先级 2 —— 补给 / 走 / 收
@@ -1221,6 +1266,47 @@ public final class FarmTaskManager {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 给「危险提示」套一层反应延迟（附加功能，默认关闭）。
+     *
+     * <p>没开这个功能、或者本来就没有危险时，原样返回。
+     * 开着的时候：危险第一次出现先记下类型、开始数 tick，数够
+     * {@link AutoFarmConfig#reactionDelayTicks} 才真正把它当成「要停手」——
+     * 在此之前返回 {@code null}，等于「还没反应过来，继续干」。
+     *
+     * <p>危险消失、或者换了一种危险（比如从「有怪」变成「血量低」），计时都重新开始。
+     */
+    private static String applyReactionDelay(AutoFarmConfig config, String safety) {
+        if (!config.reactionDelay || safety == null) {
+            pendingSafety = null;
+            safetySeenTicks = 0;
+            return safety;
+        }
+        if (safety.equals(pendingSafety)) {
+            safetySeenTicks++;
+        } else {
+            pendingSafety = safety;
+            safetySeenTicks = 0;
+        }
+        return safetySeenTicks >= Math.max(1, config.reactionDelayTicks) ? safety : null;
+    }
+
+    /**
+     * 现在是不是在「允许工作的时段」内（附加功能，默认关闭）。
+     *
+     * <p>用<b>本机时间</b>判断：起止都是 0~23 的整点、终点不含。起止相同表示全天。
+     * 起点大于终点表示跨午夜（比如 22 点到次日 6 点）。
+     */
+    private static boolean insideSchedule(AutoFarmConfig config) {
+        int start = Math.max(0, Math.min(23, config.scheduleStartHour));
+        int end = Math.max(0, Math.min(23, config.scheduleEndHour));
+        if (start == end) {
+            return true; // 起止相同 = 全天，等于没限制
+        }
+        int hour = java.time.LocalTime.now().getHour();
+        return start < end ? (hour >= start && hour < end) : (hour >= start || hour < end);
     }
 
     /** 这句话是不是「停机原因」——停机解除时要记得把它撤掉 */
