@@ -1,0 +1,41 @@
+{
+	"schemaVersion": 1,
+	"id": "autofarm",
+	"version": "${version}",
+	"name": "AutoFarm",
+	"description": "Drives your character to harvest fully-grown crops and replant the seeds, with a visual control panel and shortest-path route planning.",
+	"authors": [
+		"CoCoNutChick"
+	],
+	"contact": {},
+	"license": "CC0-1.0",
+	"icon": "assets/autofarm/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"main": [
+			"com.autofarm.AutoFarm"
+		],
+		"client": [
+			"com.autofarm.client.AutoFarmClient"
+		],
+		"modmenu": [
+			"com.autofarm.client.compat.AutoFarmModMenu"
+		]
+	},
+	"mixins": [
+		"autofarm.mixins.json",
+		{
+			"config": "autofarm.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~1.20.1",
+		"java": ">=17",
+		"fabric-api": "*"
+	},
+	"recommends": {
+		"modmenu": "*"
+	}
+}
