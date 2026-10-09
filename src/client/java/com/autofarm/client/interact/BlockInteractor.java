@@ -1,6 +1,7 @@
 package com.autofarm.client.interact;
 
 import com.autofarm.client.config.ConfigManager;
+import com.autofarm.client.human.Humanizer;
 import com.autofarm.client.inventory.InventoryScanner;
 import com.autofarm.client.path.BlockNavigator;
 import net.minecraft.block.BlockState;
@@ -113,14 +114,18 @@ public final class BlockInteractor {
             return;
         }
 
-        float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        // 防踢模式：给「该瞄哪儿」叠一点点人手晃动。幅度控制在 1.5 度以内，
+        // 远小于 {@value #PLACE_AIM_TOLERANCE} 度的交互容差 —— 视角不再精确压在
+        // 方块正中心，但该命中的照样命中。
+        float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz)) + Humanizer.aimYawJitter();
         // pitch 正值代表低头：目标在下方（dy < 0）时 -atan2 得到正值
-        float desiredPitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal));
+        float desiredPitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal)) + Humanizer.aimPitchJitter();
 
+        float limit = Humanizer.turnLimit(MAX_TURN_PER_TICK);
         player.setYaw(approach(player.getYaw(), desiredYaw));
         player.setPitch(MathHelper.clamp(
                 player.getPitch() + MathHelper.clamp(
-                        desiredPitch - player.getPitch(), -MAX_TURN_PER_TICK, MAX_TURN_PER_TICK),
+                        desiredPitch - player.getPitch(), -limit, limit),
                 -90.0f, 90.0f));
     }
 
@@ -168,10 +173,17 @@ public final class BlockInteractor {
                 pos.getZ() + 0.5, tolerance);
     }
 
-    /** 从当前角度朝目标角度靠近一步，最多 {@value #MAX_TURN_PER_TICK} 度 */
+    /**
+     * 从当前角度朝目标角度靠近一步。
+     *
+     * <p>步长是 {@value #MAX_TURN_PER_TICK} 度 —— 但防踢模式开着时，
+     * 这个上限本身会随时间小幅起伏（见 {@link Humanizer#turnLimit}），
+     * 于是转头速度不再是「每 tick 刚好 18 度」这种一眼假的匀速度。
+     */
     private static float approach(float current, float desired) {
         float diff = MathHelper.wrapDegrees(desired - current);
-        return current + MathHelper.clamp(diff, -MAX_TURN_PER_TICK, MAX_TURN_PER_TICK);
+        float limit = Humanizer.turnLimit(MAX_TURN_PER_TICK);
+        return current + MathHelper.clamp(diff, -limit, limit);
     }
 
     /** 玩家该朝向方块的哪一面（服务端要拿它校验，随便给一个会掉线） */

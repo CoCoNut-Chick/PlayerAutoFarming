@@ -20,9 +20,10 @@ import net.minecraft.text.Text;
  * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
  * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
  *
- * <h2>四段</h2>
+ * <h2>五段</h2>
  * <ol>
  *   <li><b>安全与隐蔽</b> —— 玩家接近停机、拟人化节奏、定时随机休息；</li>
+ *   <li><b>防踢模式</b> —— 一整套「把机器味抹掉」的措施，带四档强度；</li>
  *   <li><b>工具维护</b> —— 工具耐久自动换新；</li>
  *   <li><b>容错与统计</b> —— 失败目标暂时拉黑、HUD 详细统计；</li>
  *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物。</li>
@@ -51,8 +52,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_STEALTH_Y = 0;
     private static final int SEC_STEALTH_H = ROW_FIRST + STEALTH_ROWS * ROW_GAP + 4;
 
+    private static final int ANTIKICK_ROWS = 2;
+    private static final int SEC_ANTIKICK_Y = SEC_STEALTH_H + SECTION_GAP;
+    private static final int SEC_ANTIKICK_H = ROW_FIRST + ANTIKICK_ROWS * ROW_GAP + 4;
+
     private static final int TOOL_ROWS = 2;
-    private static final int SEC_TOOL_Y = SEC_STEALTH_H + SECTION_GAP;
+    private static final int SEC_TOOL_Y = SEC_ANTIKICK_Y + SEC_ANTIKICK_H + SECTION_GAP;
     private static final int SEC_TOOL_H = ROW_FIRST + TOOL_ROWS * ROW_GAP + 4;
 
     private static final int MISC_ROWS = 3;
@@ -74,6 +79,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] DURABILITY_CHOICES = {5, 10, 15, 20, 30};
     private static final int[] COOLDOWN_CHOICES = {5, 10, 15, 30, 60};
     private static final int[] PICKUP_DELAY_CHOICES = {1, 2, 3, 5};
+    /** 防踢档位：0 = 关闭、1 = 轻度、2 = 中度、3 = 强力（和 Humanizer 的常量一致） */
+    private static final int[] ANTIKICK_LEVEL_CHOICES = {0, 1, 2, 3};
 
     private final AutoFarmConfig draft;
     /** 进来时的快照，「取消」时用它还原附加功能这几项 */
@@ -92,6 +99,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget verboseHudButton;
     private ButtonWidget pickupDropsButton;
     private ButtonWidget pickupDelayButton;
+    private ButtonWidget antiKickButton;
+    private ButtonWidget antiKickLevelButton;
 
     public ExtrasScreen(Screen parent, AutoFarmConfig sharedDraft) {
         super(parent, Text.translatable("autofarm.extras.title"));
@@ -149,6 +158,20 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         restDurationButton.setTooltip(Tooltip.of(Text.translatable("autofarm.rest_duration.tip")));
         addScrolling(restDurationButton);
+
+        // ---- 防踢模式 ----
+
+        this.antiKickButton = toggle("autofarm.option.antikick",
+                draft.antiKickMode, value -> draft.antiKickMode = value,
+                "autofarm.antikick.tip");
+        layout(antiKickButton, contentX, 0, fullW);
+
+        this.antiKickLevelButton = ButtonWidget.builder(antiKickLevelLabel(), b -> {
+            draft.antiKickLevel = nextChoice(ANTIKICK_LEVEL_CHOICES, draft.antiKickLevel);
+            b.setMessage(antiKickLevelLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        antiKickLevelButton.setTooltip(Tooltip.of(Text.translatable("autofarm.antikick_level.tip")));
+        addScrolling(antiKickLevelButton);
 
         // ---- 工具维护 ----
 
@@ -231,6 +254,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.failure_cooldown" -> draft.failureCooldown;
             case "autofarm.option.verbose_hud" -> draft.verboseHud;
             case "autofarm.option.pickup_drops" -> draft.pickupDroppedItems;
+            case "autofarm.option.antikick" -> draft.antiKickMode;
             default -> false;
         };
     }
@@ -252,6 +276,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(restIntervalButton, stealth + ROW_FIRST + 4 * ROW_GAP);
         setRowY(restDurationButton, stealth + ROW_FIRST + 5 * ROW_GAP);
 
+        int antiKick = originY + SEC_ANTIKICK_Y;
+        setRowY(antiKickButton, antiKick + ROW_FIRST);
+        setRowY(antiKickLevelButton, antiKick + ROW_FIRST + ROW_GAP);
+
         int tool = originY + SEC_TOOL_Y;
         setRowY(replaceToolButton, tool + ROW_FIRST);
         setRowY(durabilityButton, tool + ROW_FIRST + ROW_GAP);
@@ -272,6 +300,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
     protected void renderContent(DrawContext context, int originY, int mouseX, int mouseY, float delta) {
         drawSection(context, originY, SEC_STEALTH_Y, SEC_STEALTH_H);
         drawHeader(context, originY, SEC_STEALTH_Y, "autofarm.extras.section.stealth");
+
+        drawSection(context, originY, SEC_ANTIKICK_Y, SEC_ANTIKICK_H);
+        drawHeader(context, originY, SEC_ANTIKICK_Y, "autofarm.extras.section.antikick");
 
         drawSection(context, originY, SEC_TOOL_Y, SEC_TOOL_H);
         drawHeader(context, originY, SEC_TOOL_Y, "autofarm.extras.section.tool");
@@ -301,6 +332,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private void resetAllOff() {
         draft.pauseWhenPlayerNear = false;
         draft.playerNearRadius = 16;
+        draft.antiKickMode = false;
+        draft.antiKickLevel = 2;
         draft.humanizeTiming = false;
         draft.randomRest = false;
         draft.restIntervalMinutes = 10;
@@ -323,6 +356,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         // 只还原附加功能这几项，草稿里的其他设置（扫描半径、存放策略……）保持不动
         draft.pauseWhenPlayerNear = old.pauseWhenPlayerNear;
         draft.playerNearRadius = old.playerNearRadius;
+        draft.antiKickMode = old.antiKickMode;
+        draft.antiKickLevel = old.antiKickLevel;
         draft.humanizeTiming = old.humanizeTiming;
         draft.randomRest = old.randomRest;
         draft.restIntervalMinutes = old.restIntervalMinutes;
@@ -381,5 +416,20 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private Text pickupDelayLabel() {
         return optionLabel("autofarm.option.pickup_delay",
                 Text.translatable("autofarm.value.seconds", draft.pickupDelaySeconds));
+    }
+
+    private Text antiKickLevelLabel() {
+        return optionLabel("autofarm.option.antikick_level",
+                Text.translatable("autofarm.antikick.level." + levelKey(draft.antiKickLevel)));
+    }
+
+    /** 档位数字 → 语言键后缀。认不出来的档位一律当「关闭」显示 */
+    private static String levelKey(int level) {
+        return switch (level) {
+            case 1 -> "light";
+            case 2 -> "medium";
+            case 3 -> "high";
+            default -> "off";
+        };
     }
 }

@@ -2,6 +2,7 @@ package com.autofarm.client.path;
 
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
+import com.autofarm.client.human.Humanizer;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.AutoEater;
 import com.autofarm.client.inventory.InventoryScanner;
@@ -118,6 +119,14 @@ public final class PathWalker {
 
     /** 当前这个挖/垫动作已经持续了多少 tick */
     private static int actionTicks;
+
+    /**
+     * 下一次允许垫方块的时刻（{@link #actionTicks} 口径）。
+     *
+     * <p>原来是 {@code actionTicks % PLACE_RETRY_INTERVAL == 0}，间隔像钟表一样准；
+     * 换成「上次动作 + 一个带抖动的间隔」之后，防踢模式就能把这份规律性打散。
+     */
+    private static int nextPlaceAt;
 
     private static Vec3d lastPos;
     private static int stuckTicks;
@@ -367,7 +376,8 @@ public final class PathWalker {
         //      所以朝向 (dx, dz) 需要的 yaw 是 atan2(-dx, dz) ----
         float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
         float diff = MathHelper.wrapDegrees(desiredYaw - player.getYaw());
-        player.setYaw(player.getYaw() + MathHelper.clamp(diff, -MAX_TURN_PER_TICK, MAX_TURN_PER_TICK));
+        float turnLimit = Humanizer.turnLimit(MAX_TURN_PER_TICK);
+        player.setYaw(player.getYaw() + MathHelper.clamp(diff, -turnLimit, turnLimit));
 
         // ---- 卡住检测（只在「真的在往前走」时算，否则挖方块时会误判成卡住） ----
         Vec3d pos = player.getPos();
@@ -390,12 +400,27 @@ public final class PathWalker {
         // ---- 输出意图：转得差不多了才往前走 ----
         boolean facing = Math.abs(diff) < FORWARD_ANGLE;
         boolean needJump = target.getY() > player.getY() + 0.4;
+
+        // 防踢模式：偶尔「悬一下脚」，把前进和疾跑一起放下，让脚步声不再是等间距的。
+        // 这一停是<b>我们自己</b>松的手，不是走不动，所以必须把卡住计数和上一帧位置清掉 ——
+        // 否则下一 tick 它会把这次停顿当成「卡住了」，接着去跳、甚至放弃这个目标。
+        if (facing && Humanizer.stumble()) {
+            wantForward = false;
+            wantJump = false;
+            player.setSprinting(false);
+            stuckTicks = 0;
+            lastPos = null;
+            return;
+        }
+
         wantForward = facing;
         // 下一个落脚点比当前高，就是要上台阶 —— 得跳一下
         wantJump = (facing && needJump) || stuckTicks >= STUCK_JUMP_TICKS;
 
         // ---- 疾跑：赶路时替玩家按住 Ctrl ----
-        applySprint(player, facing && !needJump && Math.abs(diff) < SPRINT_ALIGN_ANGLE);
+        // 防踢模式下再叠一层「疾跑间歇」：真人不会一路从头跑到尾，中间总要走两步喘口气
+        applySprint(player, facing && !needJump && Math.abs(diff) < SPRINT_ALIGN_ANGLE
+                && Humanizer.allowSprint());
     }
 
     /**
@@ -480,8 +505,9 @@ public final class PathWalker {
             if (!BlockInteractor.isAimedAt(player, step.pos(), WORK_AIM_TOLERANCE)) {
                 return true;
             }
-            if (actionTicks % PLACE_RETRY_INTERVAL == 0) {
+            if (actionTicks >= nextPlaceAt) {
                 placeBridge(client, step.pos());
+                nextPlaceAt = actionTicks + Humanizer.gap(PLACE_RETRY_INTERVAL);
             }
             return true;
         }
@@ -626,13 +652,17 @@ public final class PathWalker {
         segment = Collections.emptyList();
         waypoint = 0;
         actionTicks = 0;
+        nextPlaceAt = 0;
     }
 
     // ================= 内部小工具 =================
 
     private static boolean hasReached(ClientPlayerEntity player, BlockPos pos) {
-        double dx = pos.getX() + 0.5 - player.getX();
-        double dz = pos.getZ() + 0.5 - player.getZ();
+        // 防踢模式：落脚点带一点点固定偏移（按坐标哈希，所以同一格每次都一样）。
+        // 效果是「人不再每一步都精确踩在格子正中心」，但偏移只有 ±0.15 格，
+        // 离格中心仍然很近，不会一步踩到隔壁或卡在边上。
+        double dx = pos.getX() + 0.5 + Humanizer.spotJitter(pos, 0) - player.getX();
+        double dz = pos.getZ() + 0.5 + Humanizer.spotJitter(pos, 1) - player.getZ();
         if (dx * dx + dz * dz > WAYPOINT_RADIUS * WAYPOINT_RADIUS) {
             return false;
         }

@@ -433,6 +433,29 @@ public class AutoFarmConfig {
      */
     public int pickupDelaySeconds = 1;
 
+    /**
+     * 防踢模式：把整套「机器味」一次性抹掉（默认关闭）。
+     *
+     * <p>它和上面的「拟人化节奏」不是一回事：拟人化节奏只做了一件事 ——
+     * 收完一棵停一下。防踢模式是一整套，见 {@code Humanizer}：
+     * 转向不再是匀速的、视角不再精确得像刻上去的、脚步偶尔悬一下、
+     * 疾跑有间歇、动手前会犹豫、干久了会「累」、甚至偶尔不走最优路线。
+     *
+     * <p>它<b>不改任何游戏规则</b>：不发额外的包、不突破移动速度上限、
+     * 不绕过碰撞检测 —— 只是把本来恒定不变的那几个量换成有惯性的随机量。
+     *
+     * <p>代价是会慢一些，所以给了 {@link #antiKickLevel} 四档让你自己拿捏。
+     */
+    public boolean antiKickMode = false;
+
+    /**
+     * 防踢档位：0 = 关闭、1 = 轻度、2 = 中度、3 = 强力（常量见 {@code Humanizer}）。
+     *
+     * <p>档位越高，加进来的措施越多、越明显，也越慢。默认中度：
+     * 打开开关就能感觉到区别，但还不至于明显拖慢作业。
+     */
+    public int antiKickLevel = 2;
+
     /** 当前启用了几个附加功能（主面板摘要行用） */
     public int extrasEnabledCount() {
         int n = 0;
@@ -443,6 +466,7 @@ public class AutoFarmConfig {
         if (failureCooldown) n++;
         if (verboseHud) n++;
         if (pickupDroppedItems) n++;
+        if (antiKickMode) n++;
         return n;
     }
 
@@ -493,6 +517,8 @@ public class AutoFarmConfig {
         c.verboseHud = this.verboseHud;
         c.pickupDroppedItems = this.pickupDroppedItems;
         c.pickupDelaySeconds = this.pickupDelaySeconds;
+        c.antiKickMode = this.antiKickMode;
+        c.antiKickLevel = this.antiKickLevel;
         // 数组 / 列表都要深拷贝：不然「取消」时把草稿改回去，会把原配置一起改掉
         c.storageKeep = this.storageKeep == null ? null : this.storageKeep.clone();
         c.cropFilter = this.cropFilter == null ? new ArrayList<>() : new ArrayList<>(this.cropFilter);
@@ -571,6 +597,10 @@ public class AutoFarmConfig {
 
         if (pickupDelaySeconds < 1) pickupDelaySeconds = 1;
         if (pickupDelaySeconds > 30) pickupDelaySeconds = 30;
+
+        // 防踢档位：0~3（具体的档位含义在 Humanizer 里）
+        if (antiKickLevel < 0) antiKickLevel = 0;
+        if (antiKickLevel > 3) antiKickLevel = 3;
     }
 
     // ---- 描边外观的派生值 ----

@@ -6,6 +6,7 @@ import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.container.ContainerCompat;
 import com.autofarm.client.container.ContainerTransfer;
 import com.autofarm.client.harvest.CropHarvester;
+import com.autofarm.client.human.Humanizer;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.AutoEater;
 import com.autofarm.client.inventory.InventoryScanner;
@@ -218,6 +219,14 @@ public final class FarmTaskManager {
     /** 正在等待拾取的那一格（换目标时用来重置上面的倒计时） */
     private static BlockPos pickupWaitPos;
 
+    /**
+     * 防踢模式：已经「打量过」的目标。
+     *
+     * <p>犹豫只在<b>第一次</b>站到某一棵跟前时发生一次 —— 靠它把「同一个目标反复犹豫」
+     * 挡掉，否则这个目标会被无限期地拖下去，永远轮不到动手。
+     */
+    private static BlockPos hesitatedAt;
+
     /** 拟人化节奏的停顿倒计时（tick）：>0 时先愣一下，不动手也不推进路线 */
     private static int humanizeDelay;
 
@@ -382,6 +391,8 @@ public final class FarmTaskManager {
         pickupTargets.clear();
         pickupWaitTicks = 0;
         pickupWaitPos = null;
+        hesitatedAt = null;
+        Humanizer.reset();
     }
 
     /**
@@ -424,6 +435,8 @@ public final class FarmTaskManager {
             pickupTargets.clear();
             pickupWaitTicks = 0;
             pickupWaitPos = null;
+            hesitatedAt = null;
+            Humanizer.reset();
             state = FarmState.IDLE;
         } else {
             // 打开 → 假装「刚进入这个世界」：清空记忆、下一 tick 立刻重扫
@@ -457,6 +470,10 @@ public final class FarmTaskManager {
         // BlockInteractor 会再把它置起来。原版读的就是这个标记（见 MinecraftClientMixin）。
         BlockInteractor.beginTick();
 
+        // 防踢模式：推进一次内部随机量（转向速度、瞄准微颤、疾跑节奏）。
+        // 放在最前面，是为了保证「同一 tick 里不管谁读它，读到的都是同一个值」。
+        Humanizer.beginTick();
+
         AutoFarmConfig config = ConfigManager.get();
         if (!config.enabled && !config.visualize) {
             reset();
@@ -481,6 +498,7 @@ public final class FarmTaskManager {
                 pickupTargets.clear();
                 pickupWaitTicks = 0;
                 pickupWaitPos = null;
+                hesitatedAt = null;
             }
             lastEnabled = config.enabled;
         }
@@ -552,6 +570,10 @@ public final class FarmTaskManager {
         if (config.enabled && !paused) {
             sessionTicks++;
         }
+
+        // 防踢模式：把「这一 tick 到底有没有在干活」喂给疲劳模型 ——
+        // 干得越久，动作越容易走神；歇下来（暂停、开界面）它会慢慢回落
+        Humanizer.feedWorking(config.enabled && !paused);
 
         // 自由视角（masa 全家桶的「灵魂出窍」）：摄像机和身体分开之后，
         // 屏幕上看到的人是不动的，可世界里方块却在自己碎 —— 那太显眼了。
@@ -710,10 +732,13 @@ public final class FarmTaskManager {
             return;
         }
 
+        // 防踢模式：偶尔「偷个懒」不做 2-opt 优化 —— 真人规划路线本来就不会次次都是最优解，
+        // 每次都被算出一条数学上最短的走法，反而比走岔一点更像机器
+        boolean optimize = config.optimizePath && !Humanizer.skipOptimize();
         PathPlanner.Plan plan = PathPlanner.plan(
                 client.player.getBlockPos(),
                 pending,
-                config.optimizePath
+                optimize
         );
         // 掉落物是「要碰到才算数」的目标：必须走到它那一格上原版才会把它吸进背包，
         // 不能像作物那样站在旁边看着。把这类格子单独告诉执行器。
@@ -824,6 +849,16 @@ public final class FarmTaskManager {
                 state = FarmState.HARVESTING;
                 return;
             }
+            // 防踢模式：动手之前先「打量一下」这一棵。每个目标只犹豫一次 ——
+            // 犹豫过就记下来，否则站在同一棵前面来回打量，永远不开工。
+            boolean fresh = !held.equals(hesitatedAt);
+            hesitatedAt = held;
+            if (fresh && Humanizer.rollHesitate()) {
+                humanizeDelay = Math.max(humanizeDelay, Humanizer.hesitateTicks());
+                state = FarmState.HARVESTING;
+                return;
+            }
+
             supplyNotice = null; // 新的活开始了，上一次补给的那句话可以撤掉
             CropHarvester.start(client.world, held, config);
         }

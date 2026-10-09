@@ -1,6 +1,7 @@
 package com.autofarm.client.harvest;
 
 import com.autofarm.client.config.AutoFarmConfig;
+import com.autofarm.client.human.Humanizer;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.InventoryScanner;
 import com.autofarm.client.scan.CropRegistry;
@@ -112,6 +113,14 @@ public final class CropHarvester {
     private static CropRegistry.HarvestMode mode = CropRegistry.HarvestMode.SKIP;
     private static int ticks;
 
+    /**
+     * 下一次允许发交互的时刻（{@link #ticks} 口径）。
+     *
+     * <p>原来是「每 4 tick 试一次」这种等间距的重试；换成「上次动作 + 一个带抖动的间隔」
+     * 之后，防踢模式就能把这份节拍感打散，而重试的密度基本不变。
+     */
+    private static int nextActionAt;
+
     /** 有没有真的把它收掉、有没有补上种，都只用于状态展示 */
     private static boolean harvested;
     private static boolean replanted;
@@ -205,6 +214,7 @@ public final class CropHarvester {
         cropBlock = null;
         mode = CropRegistry.HarvestMode.SKIP;
         ticks = 0;
+        nextActionAt = 0;
         harvested = false;
         replanted = false;
         picked = false;
@@ -250,6 +260,7 @@ public final class CropHarvester {
         cropBlock = null;
         mode = CropRegistry.HarvestMode.SKIP;
         ticks = 0;
+        nextActionAt = 0;
         harvested = false;
         replanted = false;
         picked = false;
@@ -323,9 +334,11 @@ public final class CropHarvester {
         }
 
         // 够得着才发交互：隔着两格按右键，服务端会当成作弊
-        if (BlockInteractor.isWithinReach(player, target, REACH)
-                && ticks % PICK_RETRY_INTERVAL == 0) {
+        // 重试的密度和以前一样，只是「隔多久试一次」带上了随机抖动 ——
+        // 等间距的重试本身就是一个很明显的机器特征
+        if (BlockInteractor.isWithinReach(player, target, REACH) && ticks >= nextActionAt) {
             BlockInteractor.useBlock(client, target);
+            nextActionAt = ticks + Humanizer.gap(PICK_RETRY_INTERVAL);
         }
         ticks++;
 
@@ -374,6 +387,7 @@ public final class CropHarvester {
                 != CropRegistry.HarvestMode.BREAK) {
             harvested = true;
             ticks = 0;
+            nextActionAt = 0;
             return config.replant ? Stage.REPLANT : Stage.DONE;
         }
         return Stage.MINE;
@@ -401,8 +415,9 @@ public final class CropHarvester {
         }
 
         // 种子是「种在下面那块耕地上的」，所以要贴着耕地往上一格放
-        if (ticks % REPLANT_RETRY_INTERVAL == 0) {
+        if (ticks >= nextActionAt) {
             BlockInteractor.placeWith(client, target, slot);
+            nextActionAt = ticks + Humanizer.gap(REPLANT_RETRY_INTERVAL);
         }
         ticks++;
 
@@ -463,8 +478,9 @@ public final class CropHarvester {
             return Stage.PLANT;
         }
 
-        if (ticks % REPLANT_RETRY_INTERVAL == 0) {
+        if (ticks >= nextActionAt) {
             BlockInteractor.placeWith(client, target, slot);
+            nextActionAt = ticks + Humanizer.gap(REPLANT_RETRY_INTERVAL);
         }
         ticks++;
 
