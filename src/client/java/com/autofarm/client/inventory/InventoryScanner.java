@@ -114,6 +114,65 @@ public final class InventoryScanner {
     }
 
     /**
+     * 手里的工具快用坏了 → 从背包里换一把更好的（附加功能，默认关闭）。
+     *
+     * <p>判据只有两条，都很保守：
+     * <ol>
+     *   <li>手上拿的确实是<b>有耐久的东西</b>（不是方块、不是空手）；</li>
+     *   <li>它的剩余耐久已经低于 {@code thresholdPercent}% —— 也就是快见底了。</li>
+     * </ol>
+     * 满足之后，去背包里找<b>同一种物品</b>、而且剩余耐久<b>更多</b>的那一把换成主手。
+     * 找不到就什么也不做 —— 绝不会用一把破的换掉你手上好的。
+     *
+     * <p>换手走的是 {@link #swapToHotbar}，也就是原版「按数字键换位」那条路，
+     * 全程不打开任何界面。和新工具之间不留空窗：调用方应当在它返回 {@code true} 时
+     * 跳过本 tick 的动作，下一 tick 再用新手继续。
+     *
+     * @param thresholdPercent 剩余耐久低于百分之几就该换（1~50）
+     * @return 有没有真的换了手
+     */
+    public static boolean replaceWornTool(MinecraftClient client, ClientPlayerEntity player,
+                                          int thresholdPercent) {
+        if (client == null || player == null) {
+            return false;
+        }
+        PlayerInventory inventory = player.getInventory();
+        int selected = inventory.selectedSlot;
+        ItemStack held = inventory.getStack(selected);
+        if (held.isEmpty() || held.getMaxDamage() <= 0) {
+            return false; // 手上不是工具，不掺和
+        }
+        int maxDamage = held.getMaxDamage();
+        int remaining = maxDamage - held.getDamage();
+        int threshold = Math.max(1, maxDamage * thresholdPercent / 100);
+        if (remaining > threshold) {
+            return false; // 还够用
+        }
+
+        // 找同种物品里剩余耐久最多的那一把。基准是「手上这把」，所以只有确实更好才换
+        int bestSlot = -1;
+        int bestRemaining = remaining;
+        for (int slot = 0; slot < INVENTORY_SLOTS; slot++) {
+            if (slot == selected) {
+                continue;
+            }
+            ItemStack stack = inventory.getStack(slot);
+            if (stack.isEmpty() || stack.getMaxDamage() <= 0 || !stack.isOf(held.getItem())) {
+                continue;
+            }
+            int rest = stack.getMaxDamage() - stack.getDamage();
+            if (rest > bestRemaining) {
+                bestRemaining = rest;
+                bestSlot = slot;
+            }
+        }
+        if (bestSlot < 0) {
+            return false;
+        }
+        return swapToHotbar(client, player, bestSlot, selected);
+    }
+
+    /**
      * 快捷栏里「回饱食度最多」的那一格食物。
      *
      * <p>比的是 {@link FoodComponent#getHunger()}，也就是物品栏里显示的那半个鸡腿数，

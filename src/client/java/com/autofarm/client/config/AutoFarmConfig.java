@@ -326,6 +326,104 @@ public class AutoFarmConfig {
      */
     public List<String> cropFilter = new ArrayList<>();
 
+    // ================================================================
+    // 附加功能（Extras）
+    //
+    // 统一放在「附加功能」次级面板里，**全部默认关闭**：
+    // 不打开它们，模组的行为和以前一模一样。它们是「锦上添花」的一层，
+    // 有的改变节奏（拟人化、随机休息），有的改变安全边界（玩家接近停机），
+    // 有的只是多干活（工具换新、失败重试、HUD 统计）——
+    // 共同点是：不做任何绕过游戏规则的事，只是替玩家做他本来也会做的决定。
+    // ================================================================
+
+    /**
+     * 附近有别的玩家时停机。
+     *
+     * <p>自动收割最怕的从来不是怪物，而是<b>被别的玩家看见</b>：一个低着头、
+     * 动作整齐划一的人形生物，谁看都觉得不对劲。打开这个开关，附近出现其他玩家
+     * 就先停手、装成挂机，人走远了再继续。
+     *
+     * <p>判定只看<b>服务端同步过来的玩家实体</b>，半径见 {@link #playerNearRadius}。
+     * 离线单人世界里永远不会有别人，所以这项只在服务器上有意义。
+     */
+    public boolean pauseWhenPlayerNear = false;
+
+    /** 「附近有玩家时停机」的警戒半径（格）。 */
+    public int playerNearRadius = 16;
+
+    /**
+     * 拟人化节奏：收完一棵之后随机愣一下，再去下一棵。
+     *
+     * <p>机器和真人最大的区别往往不在「做了什么」，而在「节奏」：真人不会以
+     * 恒定间隔连续操作几十次。打开之后，每个目标之间插入一小段随机停顿
+     * （约 0.1~0.3 秒），让整段动作的时间分布不再是一条直线。
+     *
+     * <p>代价是会略微变慢，而且它是纯粹的「防检测」措施、不提升任何效率。
+     */
+    public boolean humanizeTiming = false;
+
+    /**
+     * 定时随机休息：连续工作一段时间后自动歇一会儿。
+     *
+     * <p>和拟人化节奏是同一个思路，只是尺度更大 —— 拟人化管的是「动作之间」，
+     * 这个管的是「整场作业」：干 {@link #restIntervalMinutes} 分钟就停下来
+     * {@link #restDurationSeconds} 秒，像真人一样中途喝水、看消息。
+     */
+    public boolean randomRest = false;
+
+    /** 连续工作多少分钟后休息一次（分钟） */
+    public int restIntervalMinutes = 10;
+
+    /** 每次休息停多久（秒） */
+    public int restDurationSeconds = 20;
+
+    /**
+     * 工具耐久自动换新：手里的工具快用坏了，自动从背包换一把好的。
+     *
+     * <p>收割本身不怎么耗耐久（作物硬度是 0），但开着「允许挖路」时镐子是真会坏的。
+     * 打开这个开关，工具剩余耐久低于 {@link #toolDurabilityPercent} 时会自动
+     * 从背包里找一把<b>同种、而且更耐用</b>的换上；找不到就保持不动，
+     * 绝不会把你好好的工具换走。
+     */
+    public boolean autoReplaceTool = false;
+
+    /** 换工具的耐久阈值（百分数）：剩余耐久低于这个比例就换 */
+    public int toolDurabilityPercent = 10;
+
+    /**
+     * 失败目标暂时拉黑：收不动的作物先跳过一个冷却，之后自动重试。
+     *
+     * <p>默认行为是「一个目标失败就本轮不再碰它」，得等它自己不再是成熟作物、
+     * 或者你手动关开一次自动收割才会重来。这对「暂时性失败」太苛刻了
+     * —— 比如那一下准星没跟上、背包刚腾出一个格子。
+     * 打开后，失败的目标只冷却 {@link #failureCooldownSeconds} 秒，
+     * 到点自动重新排进路线，不用你插手。
+     */
+    public boolean failureCooldown = false;
+
+    /** 失败目标的冷却时长（秒） */
+    public int failureCooldownSeconds = 15;
+
+    /**
+     * HUD 详细统计：状态栏多显示一行本轮运行时长与补种数。
+     *
+     * <p>默认那两行告诉你「在干嘛、收了多少、种子够不够」；打开这个会再加一行
+     * 「干了多久、补了几棵」，方便估算效率、或者单纯看看它这一趟的战果。
+     */
+    public boolean verboseHud = false;
+
+    /** 当前启用了几个附加功能（主面板摘要行用） */
+    public int extrasEnabledCount() {
+        int n = 0;
+        if (pauseWhenPlayerNear) n++;
+        if (humanizeTiming) n++;
+        if (randomRest) n++;
+        if (autoReplaceTool) n++;
+        if (failureCooldown) n++;
+        if (verboseHud) n++;
+        return n;
+    }
+
     /** 复制一份，供面板做「草稿」，取消时可以整体丢弃 */
     public AutoFarmConfig copy() {
         AutoFarmConfig c = new AutoFarmConfig();
@@ -360,6 +458,17 @@ public class AutoFarmConfig {
         c.fillEmptyFarmland = this.fillEmptyFarmland;
         c.plantCrop = this.plantCrop;
         c.cropFilterMode = this.cropFilterMode;
+        c.pauseWhenPlayerNear = this.pauseWhenPlayerNear;
+        c.playerNearRadius = this.playerNearRadius;
+        c.humanizeTiming = this.humanizeTiming;
+        c.randomRest = this.randomRest;
+        c.restIntervalMinutes = this.restIntervalMinutes;
+        c.restDurationSeconds = this.restDurationSeconds;
+        c.autoReplaceTool = this.autoReplaceTool;
+        c.toolDurabilityPercent = this.toolDurabilityPercent;
+        c.failureCooldown = this.failureCooldown;
+        c.failureCooldownSeconds = this.failureCooldownSeconds;
+        c.verboseHud = this.verboseHud;
         // 数组 / 列表都要深拷贝：不然「取消」时把草稿改回去，会把原配置一起改掉
         c.storageKeep = this.storageKeep == null ? null : this.storageKeep.clone();
         c.cropFilter = this.cropFilter == null ? new ArrayList<>() : new ArrayList<>(this.cropFilter);
@@ -420,6 +529,21 @@ public class AutoFarmConfig {
         if (cropFilterMode == FILTER_WHITELIST && cropFilter.isEmpty()) {
             cropFilterMode = FILTER_OFF;
         }
+
+        // 附加功能：单纯把数值拉回合理区间。它们的「关 / 开」是布尔量，不需要钳制。
+        if (playerNearRadius < 4) playerNearRadius = 4;
+        if (playerNearRadius > 48) playerNearRadius = 48;
+
+        if (restIntervalMinutes < 1) restIntervalMinutes = 1;
+        if (restIntervalMinutes > 60) restIntervalMinutes = 60;
+        if (restDurationSeconds < 5) restDurationSeconds = 5;
+        if (restDurationSeconds > 120) restDurationSeconds = 120;
+
+        if (toolDurabilityPercent < 1) toolDurabilityPercent = 1;
+        if (toolDurabilityPercent > 50) toolDurabilityPercent = 50;
+
+        if (failureCooldownSeconds < 3) failureCooldownSeconds = 3;
+        if (failureCooldownSeconds > 120) failureCooldownSeconds = 120;
     }
 
     // ---- 描边外观的派生值 ----

@@ -19,15 +19,19 @@ import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 自动收割任务的大脑。
@@ -174,6 +178,30 @@ public final class FarmTaskManager {
     /** 上一次播报过的「事件类」提示（补给结果、种子用完） */
     private static String lastEventAnnounce;
 
+    // ================= 附加功能运行时状态 =================
+    // 下面这几项只在「附加功能」面板里对应的开关打开时才会被读写；
+    // 全关的时候它们保持不动，等于不存在。
+
+    /**
+     * 「失败目标暂时拉黑」：位置 → 解禁时刻（{@code world.getTime()}）。
+     *
+     * <p>失败的目标本来会被塞进 {@link #handled} 永久跳过；开了这个功能之后，
+     * 它改记在定时器里，到点自动重新排进路线。
+     */
+    private static final Map<BlockPos, Long> failedUntil = new HashMap<>();
+
+    /** 拟人化节奏的停顿倒计时（tick）：>0 时先愣一下，不动手也不推进路线 */
+    private static int humanizeDelay;
+
+    /** 随机休息的剩余时长（tick）：>0 表示正在休息 */
+    private static int restRemaining;
+
+    /** 距离下一次休息已经连续工作了多少 tick */
+    private static int workTicks;
+
+    /** 本轮（从打开开关算起）真正干了活的 tick 数，给 HUD 详细统计用 */
+    private static int sessionTicks;
+
     private FarmTaskManager() {
     }
 
@@ -270,6 +298,16 @@ public final class FarmTaskManager {
     }
 
     /**
+     * 这一轮实际干了多少秒（「HUD 详细统计」用）。
+     *
+     * <p>统计的是<b>干活的时间</b>：暂停（背包满、危险、休息、开着界面）的 tick 不算，
+     * 所以它反映的是真实作业时长，而不是「从打开开关到现在过了多久」。
+     */
+    public static int getSessionSeconds() {
+        return sessionTicks / 20;
+    }
+
+    /**
      * 手边还有多少「能补种的东西」（HUD 用）。
      *
      * <p>有明确的作物目标时只数那一种作物的种子 —— 你要看的正是「这种菜还够种几次」；
@@ -307,6 +345,12 @@ public final class FarmTaskManager {
         plantedCount = 0;
         lastPauseAnnounce = null;
         lastEventAnnounce = null;
+        // 附加功能的运行时状态也一并归零
+        failedUntil.clear();
+        humanizeDelay = 0;
+        restRemaining = 0;
+        workTicks = 0;
+        sessionTicks = 0;
     }
 
     /**
@@ -343,6 +387,9 @@ public final class FarmTaskManager {
             refillWanted = false;
             missingSeeds.clear();
             supplyContainer = null;
+            failedUntil.clear();
+            humanizeDelay = 0;
+            restRemaining = 0;
             state = FarmState.IDLE;
         } else {
             // 打开 → 假装「刚进入这个世界」：清空记忆、下一 tick 立刻重扫
@@ -351,6 +398,9 @@ public final class FarmTaskManager {
             supplyNotice = null;
             harvestedCount = 0;
             plantedCount = 0;
+            failedUntil.clear();
+            workTicks = 0;
+            sessionTicks = 0;
         }
         lastEnabled = config.enabled;
 
@@ -388,6 +438,12 @@ public final class FarmTaskManager {
                 lastScanTick = Long.MIN_VALUE;
                 CropHarvester.reset();
                 supplyNotice = null;
+                // 附加功能的计时也重来一遍，否则「休息」和「运行时长」会带着上一轮的账继续走
+                failedUntil.clear();
+                humanizeDelay = 0;
+                restRemaining = 0;
+                workTicks = 0;
+                sessionTicks = 0;
             }
             lastEnabled = config.enabled;
         }
@@ -441,12 +497,24 @@ public final class FarmTaskManager {
             supplyNotice = null;
         }
 
-        // 这一 tick 要不要整个人停手（背包满、或者触发了安全保护）
-        boolean paused = stopForFull || safety != null;
+        // 这一 tick 要不要整个人停手（背包满、安全保护、或者附加功能里的「定时休息」）
+        boolean resting = config.enabled && updateRest(config);
+        boolean paused = stopForFull || safety != null || resting;
 
         // 一停机就播报一次（actionbar），免得你以为是模组卡了 ——
-        // 同一个原因只说一次，危险过去后自动允许下次再说
-        announcePause(client, paused ? supplyNotice : null);
+        // 同一个原因只说一次，危险过去后自动允许下次再说。
+        // 休息在 supplyNotice 里没有位置（那栏留给「缺种子」「箱子满了」这类事），
+        // 所以它用自己的键，同样走「只说一次」这套。
+        String pauseKey = stopForFull || safety != null
+                ? supplyNotice
+                : (resting ? "autofarm.notice.paused_resting" : null);
+        announcePause(client, paused ? pauseKey : null);
+
+        // 附加功能：HUD 详细统计的「运行时长」——只数真正干活的时间，
+        // 暂停（满包 / 危险 / 休息 / 开着界面）的 tick 不算，这样它更像一块秒表。
+        if (config.enabled && !paused) {
+            sessionTicks++;
+        }
 
         // 自由视角（masa 全家桶的「灵魂出窍」）：摄像机和身体分开之后，
         // 屏幕上看到的人是不动的，可世界里方块却在自己碎 —— 那太显眼了。
@@ -550,9 +618,15 @@ public final class FarmTaskManager {
             return;
         }
 
+        // 附加功能「失败目标暂时拉黑」：先把已经到期的解禁掉，
+        // 再把还在冷却里的目标跳过。全关时 failedUntil 恒为空，这两步都是空转。
+        if (!failedUntil.isEmpty()) {
+            failedUntil.entrySet().removeIf(entry -> entry.getValue() <= now);
+        }
+
         List<BlockPos> pending = new ArrayList<>();
         for (BlockPos pos : matureCrops) {
-            if (!handled.contains(pos)) {
+            if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
                 pending.add(pos);
             }
         }
@@ -563,7 +637,7 @@ public final class FarmTaskManager {
         if (config.fillEmptyFarmland && !emptyFarmland.isEmpty()) {
             if (InventoryScanner.countSeeds(client.player, null) > 0) {
                 for (BlockPos pos : emptyFarmland) {
-                    if (!handled.contains(pos)) {
+                    if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
                         pending.add(pos);
                     }
                 }
@@ -601,6 +675,13 @@ public final class FarmTaskManager {
      * 走到目标不再直接 index++ 去下一个，而是把目标交出来，活干完才放行。
      */
     private static void drive(MinecraftClient client, AutoFarmConfig config) {
+        // 附加功能「拟人化节奏」：刚干完一棵，先愣一下再去下一棵。
+        // 停顿期间不推进路线、也不挥镐子 —— 真人也不会以恒定的节拍连续操作。
+        if (humanizeDelay > 0) {
+            humanizeDelay--;
+            return;
+        }
+
         BlockPos held = PathWalker.getHeldTarget();
 
         // 还没到站（没在等收割）→ 只管走路
@@ -630,6 +711,13 @@ public final class FarmTaskManager {
         }
 
         if (!CropHarvester.isBusy()) {
+            // 附加功能「工具耐久换新」：手上的工具剩余耐久见底了，先从背包换一把好的。
+            // 换手要发一个换位包，所以这一 tick 先不动手，下一 tick 用新工具继续。
+            if (config.autoReplaceTool
+                    && InventoryScanner.replaceWornTool(client, client.player, config.toolDurabilityPercent)) {
+                state = FarmState.HARVESTING;
+                return;
+            }
             supplyNotice = null; // 新的活开始了，上一次补给的那句话可以撤掉
             CropHarvester.start(client.world, held, config);
         }
@@ -669,6 +757,25 @@ public final class FarmTaskManager {
             }
             PathWalker.releaseTarget();
             drainResolved();
+
+            // 附加功能「失败目标暂时拉黑」：这一棵没干成、而且给出了原因（挖不动、
+            // 种不下去……）才拉黑。单纯「这一格已经不是成熟作物」不算失败 ——
+            // 那是被别人收走了，重试也没意义。拉黑的做法是从 handled 里撤回来、
+            // 记个到期时间，到点自然会重新排进路线，不用你手动关开一次。
+            boolean failed = !CropHarvester.wasHarvested() && !CropHarvester.wasPlanted()
+                    && CropHarvester.getNotice() != null;
+            if (config.failureCooldown && failed && held != null) {
+                failedUntil.put(held.toImmutable(),
+                        client.world.getTime() + config.failureCooldownSeconds * 20L);
+                handled.remove(held);
+            }
+
+            // 附加功能「拟人化节奏」：这一次真的动了手（收了或种了），就歇一小会儿
+            if (config.humanizeTiming
+                    && (CropHarvester.wasHarvested() || CropHarvester.wasPlanted())) {
+                humanizeDelay = 2 + ThreadLocalRandom.current().nextInt(4); // 2~5 tick
+            }
+
             state = PathWalker.isActive() ? FarmState.MOVING : FarmState.IDLE;
         }
     }
@@ -894,14 +1001,16 @@ public final class FarmTaskManager {
     /**
      * 现在有没有「该马上停手」的危险。
      *
-     * <p>两个条件，任意一个成立就返回对应的提示键：
+     * <p>三类条件，任意一类成立就返回对应的提示键：
      * <ol>
      *   <li><b>血量太低</b>（{@link AutoFarmConfig#lowHealthStopHearts}，单位心，0 = 关闭）。
      *       收割的时候人一直低着头，被偷袭或者掉进坑里都反应不过来 ——
      *       与其等你事后发现人没了，不如先站着不动；</li>
      *   <li><b>附近有敌对生物</b>（{@link AutoFarmConfig#pauseWhenMobsNear}）。
      *       认的是原版那套「敌对生物」标记，所以僵尸、骷髅、苦力怕、蜘蛛，
-     *       以及按同样方式实现的模组怪都算数。</li>
+     *       以及按同样方式实现的模组怪都算数；</li>
+     *   <li><b>附近有别的玩家</b>（{@link AutoFarmConfig#pauseWhenPlayerNear}，附加功能，
+     *       默认关闭）—— 自动收割最容易被发现的就是「被别的玩家撞见」。</li>
      * </ol>
      *
      * <p>这两件事都<b>只是停手</b>，不会替你做任何反击或者逃跑的动作 ——
@@ -929,14 +1038,56 @@ public final class FarmTaskManager {
                 return "autofarm.notice.paused_mobs_near";
             }
         }
+
+        // 附加功能：附近有别的玩家时停机。凭空多出来的人形很少是好事 ——
+        // 要么是来自找你的，要么是来看你「演戏」的，两种都值得先停下装挂机。
+        // 判据是服务端同步过来的玩家实体，离线单人世界里永远为空，所以不碍事。
+        if (config.pauseWhenPlayerNear) {
+            Box box = client.player.getBoundingBox().expand(config.playerNearRadius);
+            List<PlayerEntity> others = client.world.getEntitiesByClass(PlayerEntity.class, box,
+                    other -> other != client.player && other.isAlive());
+            if (!others.isEmpty()) {
+                return "autofarm.notice.paused_player_near";
+            }
+        }
         return null;
+    }
+
+    /**
+     * 推进「定时随机休息」的计时（附加功能，默认关闭）。
+     *
+     * <p>逻辑很简单：一直累计「连续工作了多久」，到点了就把人按下去休息一会儿，
+     * 休息结束再重新累计。关掉这个功能时会把计时归零 —— 否则下次打开时
+     * 可能「一上来就欠着几分钟」，立刻就开始休息，很莫名其妙。
+     *
+     * @return 这一 tick 是不是在休息
+     */
+    private static boolean updateRest(AutoFarmConfig config) {
+        if (!config.randomRest) {
+            restRemaining = 0;
+            workTicks = 0;
+            return false;
+        }
+        if (restRemaining > 0) {
+            restRemaining--;
+            return true;
+        }
+        workTicks++;
+        int interval = Math.max(1, config.restIntervalMinutes) * 20 * 60; // 分钟 → tick
+        if (workTicks >= interval) {
+            workTicks = 0;
+            restRemaining = Math.max(1, config.restDurationSeconds) * 20; // 秒 → tick
+            return true;
+        }
+        return false;
     }
 
     /** 这句话是不是「停机原因」——停机解除时要记得把它撤掉 */
     private static boolean isPauseNotice(String key) {
         return "autofarm.notice.inventory_full_no_supply".equals(key)
                 || "autofarm.notice.paused_low_health".equals(key)
-                || "autofarm.notice.paused_mobs_near".equals(key);
+                || "autofarm.notice.paused_mobs_near".equals(key)
+                || "autofarm.notice.paused_player_near".equals(key);
     }
 
     // ================= actionbar 播报 =================

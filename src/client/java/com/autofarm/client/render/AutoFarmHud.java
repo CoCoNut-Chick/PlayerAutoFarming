@@ -89,6 +89,14 @@ public final class AutoFarmHud {
                 FarmTaskManager.getHarvestedCount(), seeds),
                 seedsMatter && seeds <= SEED_WARN ? COLOR_NOTICE : COLOR_HINT));
 
+        // 附加功能「HUD 详细统计」（默认关闭）：多一行本轮运行时长与补种数。
+        // 时长统计的是真正干活的时间，暂停的那段不算，所以更像一块秒表。
+        if (config.verboseHud) {
+            lines.add(new Line(Text.translatable("autofarm.hud.verbose",
+                    duration(FarmTaskManager.getSessionSeconds()),
+                    FarmTaskManager.getPlantedCount()), COLOR_HINT));
+        }
+
         String notice = FarmTaskManager.getHarvestNotice();
         if (notice != null) {
             lines.add(new Line(Text.translatable(notice), COLOR_NOTICE));
@@ -115,5 +123,18 @@ public final class AutoFarmHud {
 
     /** 一行字 + 它的颜色 */
     private record Line(Text text, int color) {
+    }
+
+    /**
+     * 秒数 → 「1m23s」这样的短格式。
+     *
+     * <p>用 m / s 而不是「分」「秒」：这行字很窄，而这两种单位在中文玩家眼里
+     * 也早就见惯了；省下来的宽度留给数字。不满一分钟就不显示分钟那一段。
+     */
+    private static String duration(int seconds) {
+        if (seconds < 60) {
+            return seconds + "s";
+        }
+        return (seconds / 60) + "m" + (seconds % 60) + "s";
     }
 }

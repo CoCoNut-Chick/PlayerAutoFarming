@@ -37,6 +37,8 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private static final int SEC_SAFETY_Y = 592, SEC_SAFETY_H = 76;
     /** 作物与筛选：补种空耕地 + 进次级面板挑作物。同样追加在最后 */
     private static final int SEC_CROP_Y = 674, SEC_CROP_H = 64;
+    /** 附加功能：默认全关的增强项，单独一页。追加在最后 */
+    private static final int SEC_EXTRAS_Y = 742, SEC_EXTRAS_H = 44;
 
     private static final int ROW_ENABLED = 82;
     private static final int ROW_RADIUS = 102;
@@ -71,6 +73,9 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private static final int ROW_FILL_EMPTY = 690;
     private static final int ROW_CROP_FILTER = 710;
 
+    /** 附加功能分区的一行 */
+    private static final int ROW_EXTRAS = 758;
+
     private static final int AXIS_LABEL_W = 14;
     private static final int ICON_SIZE = ROW_H;
     /** 「可视化」分区标题右边那句提示的横坐标偏移 */
@@ -102,6 +107,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private ButtonWidget mobsNearButton;
     private ButtonWidget fillEmptyButton;
     private ButtonWidget cropFilterButton;
+    private ButtonWidget extrasButton;
     private PaletteIconButton paletteButton;
 
     private TextFieldWidget fieldX;
@@ -120,7 +126,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
 
     @Override
     protected int contentHeight() {
-        return SEC_CROP_Y + SEC_CROP_H + 4;
+        return SEC_EXTRAS_Y + SEC_EXTRAS_H + 4;
     }
 
     // ================= 建控件 =================
@@ -364,6 +370,15 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         cropFilterButton.setTooltip(Tooltip.of(Text.translatable("autofarm.crop.tip")));
         addScrolling(cropFilterButton);
 
+        // ---- 附加功能 ----
+        // 默认全部关闭的增强项，单独一页。放在最后，是因为它们不是「收割必需」，
+        // 而是可选的锦上添花 —— 打开面板第一眼看到的仍然该是主流程那几项。
+        this.extrasButton = ButtonWidget.builder(
+                Text.translatable("autofarm.option.extras"), b -> openExtras())
+                .dimensions(contentX, 0, fullW, ROW_H).build();
+        extrasButton.setTooltip(Tooltip.of(Text.translatable("autofarm.extras.tip")));
+        addScrolling(extrasButton);
+
         // ---- 页脚（固定在面板底部，不参与滚动） ----
         addFooter(
                 ButtonWidget.builder(Text.translatable("autofarm.button.save"), b -> onSave())
@@ -405,6 +420,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         setRowY(mobsNearButton, originY + ROW_MOBS_NEAR);
         setRowY(fillEmptyButton, originY + ROW_FILL_EMPTY);
         setRowY(cropFilterButton, originY + ROW_CROP_FILTER);
+        setRowY(extrasButton, originY + ROW_EXTRAS);
     }
 
     private TextFieldWidget coordField(int x, int width, Integer value) {
@@ -513,6 +529,16 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         context.drawTextWithShadow(this.textRenderer, summary,
                 contentX + 62, originY + SEC_CROP_Y + 4,
                 draft.fillEmptyFarmland ? COLOR_TEXT : COLOR_HINT);
+
+        // ---- 附加功能 ----
+        drawSection(context, originY, SEC_EXTRAS_Y, SEC_EXTRAS_H);
+        drawHeader(context, originY, SEC_EXTRAS_Y, "autofarm.section.extras");
+        // 一行摘要：现在开了几项。全关时压暗，开了就换成暖色，一眼能看出「有没有动过」
+        int enabledExtras = draft.extrasEnabledCount();
+        context.drawTextWithShadow(this.textRenderer,
+                Text.translatable("autofarm.extras.summary", enabledExtras),
+                contentX + 62, originY + SEC_EXTRAS_Y + 4,
+                enabledExtras > 0 ? COLOR_NOTICE : COLOR_HINT);
     }
 
     /** 筛选模式的显示名（和「作物」次级面板用同一套键） */
@@ -612,6 +638,16 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         draft.supplyZ = parseOrNull(fieldZ);
         if (this.client != null) {
             this.client.setScreen(new HighlightStyleScreen(this, draft));
+        }
+    }
+
+    /** 进「附加功能」次级面板。它编辑的是同一个 draft，回来时这里不用再同步 */
+    private void openExtras() {
+        draft.supplyX = parseOrNull(fieldX);
+        draft.supplyY = parseOrNull(fieldY);
+        draft.supplyZ = parseOrNull(fieldZ);
+        if (this.client != null) {
+            this.client.setScreen(new ExtrasScreen(this, draft));
         }
     }
 

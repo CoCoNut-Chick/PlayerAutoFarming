@@ -1,9 +1,41 @@
 # AutoFarm
 
-## Setup
+Minecraft Java 版 **1.20.1** 的 Fabric **客户端**模组：自动收割 + 补种。
 
-For setup instructions, please see the [Fabric Documentation page](https://docs.fabricmc.net/develop/getting-started/creating-a-project#setting-up) related to the IDE that you are using.
+全部逻辑在客户端完成，服务端只当你是一个普通玩家 —— 原版服务器和模组服务器都能用，
+服主不需要安装任何东西。
 
-## License
+## 功能
 
-This template is available under the CC0 license. Feel free to learn from it and incorporate it in your own projects.
+- **自动收割**：扫描周围成熟作物 → 规划访问路线 → 走过去 → 挖掉 / 摘取 → 补种
+- **三种收获方式自动判别**：挖（小麦等）、摘（甜浆果、发光浆果，植株保留）、跳过（瓜茎）
+- **存放与补给**：物品按能力分七类、逐类设置「不存 / 全存 / 保留 n 组」；
+  背包将满自动去补给点存放，缺种子自动去取，没设补给点则满包停机
+- **补种回退**：默认种子槽位 → 快捷栏 → 深度搜索背包（找到后换到手上）
+- **作物筛选**：全收 / 白名单 / 黑名单 / 只收能补种的
+- **空地补种**（可选）：把附近空着的耕地也种上
+- **行走**：A* 寻路 + 2-opt 路线优化，可选锁定疾跑、自动进食
+- **安全保护**：低血量停机、附近敌对生物停机
+- **附加功能**（默认全部关闭）：附近有玩家停机、拟人化节奏、定时随机休息、
+  工具耐久自动换新、失败目标暂时重试、HUD 详细统计
+- **界面**：主控制面板 + 存放策略 / 作物筛选 / 高亮样式 / 附加功能 四个次级面板
+- **兼容**：Mod Menu 集成；masa 全家桶自由视角 / 灵魂出窍
+
+## 版本
+
+当前版本 **1.0.1**。版本规范与完整变更记录见 [CHANGELOG.md](CHANGELOG.md)；
+各版本构建产物归档在 `versions/<版本号>/`。
+
+## 构建
+
+需要 JDK 17 或更高。
+
+```bash
+./gradlew build
+```
+
+产物在 `build/libs/autofarm-<版本号>.jar`。
+
+## 许可
+
+见 [LICENSE](LICENSE)。
