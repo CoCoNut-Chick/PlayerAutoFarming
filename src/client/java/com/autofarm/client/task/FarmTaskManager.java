@@ -1638,7 +1638,7 @@ public final class FarmTaskManager {
             supplyNotice = "autofarm.notice.supply_not_container";
             return false;
         }
-        BlockPos stand = BlockNavigator.findViewSpot(client.world, container);
+        BlockPos stand = BlockNavigator.findViewSpot(client.world, container, client.player.getBlockPos());
         if (stand == null) {
             supplyNotice = "autofarm.notice.supply_no_spot";
             return false;
@@ -2088,7 +2088,7 @@ public final class FarmTaskManager {
         }
         // 目标那一格可能站不住人（被填了方块），退而求其次找个能看见它的落脚点
         if (!BlockNavigator.canStand(client.world, goal)) {
-            BlockPos spot = BlockNavigator.findViewSpot(client.world, goal);
+            BlockPos spot = BlockNavigator.findViewSpot(client.world, goal, client.player.getBlockPos());
             if (spot == null) {
                 return;
             }

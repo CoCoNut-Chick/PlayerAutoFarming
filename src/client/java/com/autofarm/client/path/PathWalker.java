@@ -566,7 +566,7 @@ public final class PathWalker {
         // 它们必须站到那一格上，站在旁边看是捡不到的，所以直接以它本身为落点。
         BlockPos spot = exactTargets.contains(target)
                 ? target
-                : BlockNavigator.findViewSpot(client.world, target);
+                : BlockNavigator.findViewSpot(client.world, target, player.getBlockPos());
         List<BlockPos> candidates = spot == null || spot.equals(target)
                 ? List.of(target)
                 : List.of(spot, target);

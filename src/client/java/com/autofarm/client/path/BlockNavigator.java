@@ -5,6 +5,8 @@ import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.BlockView;
 
+import java.util.Arrays;
+
 /**
  * 「这一格能不能站人」以及「这两点能不能直着走过去」的判断。
  *
@@ -129,12 +131,25 @@ public final class BlockNavigator {
      * @return 旁边一格都站不住时返回 null
      */
     public static BlockPos findViewSpot(BlockView world, BlockPos target) {
+        return findViewSpot(world, target, null);
+    }
+
+    /**
+     * 找一个「站在上面能看到 target」的落脚点，并且<b>尽量让角色到站后脸正好朝 target</b>。
+     *
+     * <p>{@code from} 是玩家当前大致位置（可为 null）。它决定了四邻的<b>遍历顺序</b>：
+     * 优先选「朝向玩家来向」那一侧的格子。原因是走路的最后一步，角色是脸朝「上一个
+     * 落脚点 → 这个落脚点」的方向停下的 —— 若落脚点就选在玩家和目标之间的那一侧，
+     * 到站时脸自然朝目标，省掉一次掉头；反之选到背面那一格，就得先回头再挖/种/催熟。
+     */
+    public static BlockPos findViewSpot(BlockView world, BlockPos target, BlockPos from) {
         if (world == null || target == null) {
             return null;
         }
         BlockPos fallback = null;
+        int[][] dirs = orderedDirections(target, from);
         for (int dy : new int[]{0, 1, -1}) {
-            for (int[] direction : HORIZONTAL) {
+            for (int[] direction : dirs) {
                 int x = target.getX() + direction[0];
                 int y = target.getY() + dy;
                 int z = target.getZ() + direction[1];
@@ -151,6 +166,29 @@ public final class BlockNavigator {
             }
         }
         return fallback;
+    }
+
+    /**
+     * 按「玩家来向」给四邻排序：越指向玩家那一侧的越靠前。
+     *
+     * <p>玩家相对目标的向量是 {@code (from - target)}，每个邻居偏移 {@code (ox, oz)} 和它的
+     * 点积越大，说明这个邻居越在「玩家来的方向」上 —— 走到那里停下，脸正好朝目标。
+     * {@code from} 为 null（或和目标同格）时保持原顺序，行为不变。
+     */
+    private static int[][] orderedDirections(BlockPos target, BlockPos from) {
+        if (from == null) {
+            return HORIZONTAL;
+        }
+        int dx = from.getX() - target.getX();
+        int dz = from.getZ() - target.getZ();
+        if (dx == 0 && dz == 0) {
+            return HORIZONTAL;
+        }
+        // 浅拷贝外层数组再排 —— 只重排 int[] 引用，不动内层内容、也不动共享常量
+        int[][] ordered = Arrays.copyOf(HORIZONTAL, HORIZONTAL.length);
+        Arrays.sort(ordered, (a, b) ->
+                Integer.compare(b[0] * dx + b[1] * dz, a[0] * dx + a[1] * dz));
+        return ordered;
     }
 
     /**
