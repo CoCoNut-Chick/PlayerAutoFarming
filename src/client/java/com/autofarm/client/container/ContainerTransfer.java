@@ -14,6 +14,7 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * 在补给点的箱子里「存东西 / 取种子」。
@@ -119,6 +121,20 @@ public final class ContainerTransfer {
 
     private static boolean wantDeposit;
     private static boolean wantRefill;
+    /**
+     * 这一趟要不要顺带取<b>耗材</b>（目前就是骨粉）。
+     *
+     * <p>它是「耗材自给」那一项的需求：骨粉催熟开着、而手边的骨粉快见底时，
+     * 去补给点顺手补一栈，免得催熟开着却因为没骨粉而干等着。
+     */
+    private static boolean wantSupplies;
+    /**
+     * 这一趟要不要顺带取一件<b>有耐久的工具</b>。
+     *
+     * <p>对应「备用工具自给」：背包里一把还带余量的工具都没有时（挖路挖断了、镐子丢了……），
+     * 去补给点补一把，否则只能站着等玩家回来。
+     */
+    private static boolean wantTool;
     private static final Set<Block> wantedSeeds = new HashSet<>();
 
     private static int ticks;
@@ -156,11 +172,16 @@ public final class ContainerTransfer {
      * @param deposit  这一趟要不要存东西
      * @param refill   这一趟要不要取种子
      * @param seeds    优先要取的种子（空集合表示「箱子里的作物种子都拿」）
+     * @param supplies 这一趟要不要顺带取耗材（骨粉）
+     * @param tool     这一趟要不要顺带取一件有耐久的工具
      */
-    public static void begin(BlockPos pos, boolean deposit, boolean refill, Collection<Block> seeds) {
+    public static void begin(BlockPos pos, boolean deposit, boolean refill, Collection<Block> seeds,
+                             boolean supplies, boolean tool) {
         target = pos == null ? null : pos.toImmutable();
         wantDeposit = deposit;
         wantRefill = refill;
+        wantSupplies = supplies;
+        wantTool = tool;
         wantedSeeds.clear();
         if (seeds != null) {
             wantedSeeds.addAll(seeds);
@@ -188,6 +209,8 @@ public final class ContainerTransfer {
         phase = Phase.CLOSING;
         target = null;
         wantedSeeds.clear();
+        wantSupplies = false;
+        wantTool = false;
         failure = null;
         forceStage = 0;
     }
@@ -310,13 +333,15 @@ public final class ContainerTransfer {
         int slot = nextDepositSlot(handler);
         boolean depositing = slot >= 0;
         if (!depositing) {
-            slot = nextRefillSlot(handler);
+            slot = nextTakeSlot(handler);
         }
 
         if (slot < 0) {
-            // 没有要搬的了：这一趟结束
-            if (wantRefill && takenStacks == 0) {
+            // 没有要搬的了：这一趟结束。原因要说清楚是哪一样没拿到
+            if (wantRefill && refillStacks == 0) {
                 failure = "autofarm.notice.supply_no_seed";
+            } else if ((wantSupplies || wantTool) && takenStacks == 0) {
+                failure = "autofarm.notice.supply_no_supply";
             }
             phase = Phase.CLOSING;
             return Result.RUNNING;
@@ -499,20 +524,62 @@ public final class ContainerTransfer {
     }
 
     /**
-     * 下一个该从箱子里取走的格子（也就是种子）。
+     * 下一个该从箱子里取走的格子。
+     *
+     * <p>三样东西共用这一条「取」的通道，优先级从高到低：
+     * <ol>
+     *   <li><b>种子</b> —— 不取到就没法补种，这是最要紧的；</li>
+     *   <li><b>骨粉</b> —— 「耗材自给」要的，给「骨粉催熟」续航；</li>
+     *   <li><b>有耐久的工具</b> —— 「备用工具自给」要的。</li>
+     * </ol>
+     * 一次只搬一栈（Shift + 左键原版会一整栈搬走），总栈数受
+     * {@link #REFILL_MAX_STACKS} 限制 —— 免得反过来把背包塞满。
      *
      * @return -1 表示没有要取的了
      */
-    private static int nextRefillSlot(ScreenHandler handler) {
-        if (!wantRefill || refillStacks >= REFILL_MAX_STACKS) {
+    private static int nextTakeSlot(ScreenHandler handler) {
+        if (takenStacks >= REFILL_MAX_STACKS) {
             return -1;
         }
+        if (wantRefill) {
+            int seed = findContainerSlot(handler, ContainerTransfer::isWantedSeed);
+            if (seed >= 0) {
+                return seed;
+            }
+        }
+        if (wantSupplies) {
+            int meal = findContainerSlot(handler, stack -> stack.isOf(Items.BONE_MEAL));
+            if (meal >= 0) {
+                return meal;
+            }
+        }
+        if (wantTool) {
+            int tool = findContainerSlot(handler, ContainerTransfer::isTool);
+            if (tool >= 0) {
+                return tool;
+            }
+        }
+        return -1;
+    }
+
+    /** 箱子里（不含玩家背包）第一个满足条件的格子；没有返回 -1 */
+    private static int findContainerSlot(ScreenHandler handler, Predicate<ItemStack> test) {
         for (Slot slot : handler.slots) {
-            if (!(slot.inventory instanceof PlayerInventory) && isWantedSeed(slot.getStack())) {
+            if (!(slot.inventory instanceof PlayerInventory) && test.test(slot.getStack())) {
                 return slot.id;
             }
         }
         return -1;
+    }
+
+    /**
+     * 这个物品算不算「有耐久的工具」—— 能被 {@code BoneMealItem} 之外的那套耐久系统管的东西。
+     *
+     * <p>判据就是「有耐久条」：镐子、斧、剑、弓、盾、鞘翅都算。刻意<b>不维护工具名单</b>，
+     * 模组工具一样能被认出来（它只要带 {@code maxDamage}）。
+     */
+    private static boolean isTool(ItemStack stack) {
+        return stack != null && !stack.isEmpty() && stack.getMaxDamage() > 0;
     }
 
     private static Result closing(MinecraftClient client) {

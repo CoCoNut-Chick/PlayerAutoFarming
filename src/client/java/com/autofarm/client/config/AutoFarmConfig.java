@@ -470,6 +470,66 @@ public class AutoFarmConfig {
      */
     public List<String> customHarvestBlocks = new ArrayList<>();
 
+    // ---- 资源自给（D 组：骨粉催熟 + 从补给点自取耗材 / 备用工具） ----
+    //
+    // 前面那些附加功能管的是「像不像人」「安不安全」，这一组管的是**续航**：
+    // 种子会自己补（refillSeeds），可骨粉用完了、镐子磨断了，仍然只能干等玩家回来。
+    // 这一组让模组把这两样也自己接上。
+
+    /**
+     * 骨粉催熟：对<b>还没熟</b>的作物自动用骨粉推进生长（默认关闭）。
+     *
+     * <p>默认扫描只找「已经熟了」的作物，所以从种下到成熟那段时间，角色只能干等随机刻。
+     * 打开这个开关后，它会把田里<b>还没熟、但已经种下了</b>的作物也当作目标：
+     * 走到跟前、切一块骨粉到手上、对准作物右键一次。
+     *
+     * <p>骨粉的效果是<b>随机</b>推进 0~2 个生长阶段，所以可能要撒好几次才熟；
+     * {@link #boneMealLimit} 就是「同一株最多撒几次」的上限 —— 撒满还没熟就放弃，
+     * 免得在一株上耗掉整袋骨粉。
+     *
+     * <p>它会<b>消耗骨粉</b>，所以默认关闭。而且和「防踢」是矛盾的：
+     * 真人不会对着每一棵没熟的苗挨个撒骨粉，服务器看到这种规律动作反而显眼 ——
+     * 当成「赶时间的时候用一下」就好，别当成常规开着的功能。
+     */
+    public boolean boneMealBoost = false;
+
+    /**
+     * 同一株作物最多撒几次骨粉。
+     *
+     * <p>原版一次骨粉随机推进 0~2 段，从幼苗到成熟通常 2~4 次就够；
+     * 上限存在的意义是「万一这株是那种怎么催都不熟的（比如需要特定光照），
+     * 别把整袋骨粉耗在它身上」。
+     */
+    public int boneMealLimit = 4;
+
+    /**
+     * 耗材自给：骨粉低于 {@link #boneMealThreshold} 个时，自动去补给点取（默认关闭）。
+     *
+     * <p>它是 {@link #boneMealBoost} 的续航配套 —— 光有催熟、没骨粉，等于白开。
+     * 取的量和取种子一样：走「Shift + 左键」一键搬一栈，不多拿。
+     */
+    public boolean autoFetchSupplies = false;
+
+    /**
+     * 骨粉少于多少个就该去补给点补一趟。
+     *
+     * <p>不是「用光了才去」：真人是发现快没了就顺手补，而不是每次用到 0 才跑一趟。
+     */
+    public int boneMealThreshold = 16;
+
+    /**
+     * 备用工具自给：背包里一把<b>还带余量</b>的工具都没有时，自动去补给点取（默认关闭）。
+     *
+     * <p>和附加功能「工具维护」（从背包里换一把同种更好的）是两件事：
+     * 那个解决「手上这把快断了」，这个解决「背包里全断了」。
+     * 后者是真正会卡住作业的一种 —— 收割本身不怎么耗耐久，但「允许挖路」开着时镐子是真会坏的，
+     * 一把都没了只能等玩家回来。
+     *
+     * <p>判定很保守：只认<b>还有至少一半耐久</b>的「有耐久物品」（工具、武器、鞘翅）。
+     * 从箱子里取回来的是原版那把东西，取哪一把由原版规则决定，不做任何额外操作。
+     */
+    public boolean autoFetchTool = false;
+
     /**
      * 防踢模式：把整套「机器味」一次性抹掉（默认关闭）。
      *
@@ -841,6 +901,9 @@ public class AutoFarmConfig {
         if (pickupDroppedItems) n++;
         if (melonHarvest) n++;
         if (customHarvestBlocks != null && !customHarvestBlocks.isEmpty()) n++;
+        if (boneMealBoost) n++;
+        if (autoFetchSupplies) n++;
+        if (autoFetchTool) n++;
         if (antiKickMode) n++;
         if (reactionDelay) n++;
         if (idleLookAround) n++;
@@ -907,6 +970,11 @@ public class AutoFarmConfig {
         c.melonHarvest = this.melonHarvest;
         c.customHarvestBlocks = this.customHarvestBlocks == null
                 ? new ArrayList<>() : new ArrayList<>(this.customHarvestBlocks);
+        c.boneMealBoost = this.boneMealBoost;
+        c.boneMealLimit = this.boneMealLimit;
+        c.autoFetchSupplies = this.autoFetchSupplies;
+        c.boneMealThreshold = this.boneMealThreshold;
+        c.autoFetchTool = this.autoFetchTool;
         c.antiKickMode = this.antiKickMode;
         c.antiKickLevel = this.antiKickLevel;
         c.reactionDelay = this.reactionDelay;
@@ -1031,6 +1099,12 @@ public class AutoFarmConfig {
         } else {
             customHarvestBlocks.removeIf(id -> id == null || id.isBlank());
         }
+
+        // 资源自给（D 组）
+        if (boneMealLimit < 1) boneMealLimit = 1;
+        if (boneMealLimit > 20) boneMealLimit = 20;
+        if (boneMealThreshold < 1) boneMealThreshold = 1;
+        if (boneMealThreshold > 256) boneMealThreshold = 256;
 
         // 防踢档位：0~3（具体的档位含义在 Humanizer 里）
         if (antiKickLevel < 0) antiKickLevel = 0;

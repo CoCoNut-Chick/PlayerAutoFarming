@@ -65,6 +65,8 @@ public final class CropHarvester {
         REPLANT,
         /** 正在往空着的耕地上种（种什么还不知道，得现场挑） */
         PLANT,
+        /** 正在对还没熟的作物撒骨粉（附加功能「骨粉催熟」） */
+        BONE_MEAL,
         /** 这一棵处理完了 */
         DONE
     }
@@ -83,6 +85,17 @@ public final class CropHarvester {
 
     /** 补种最多试多少 tick */
     private static final int REPLANT_TIMEOUT_TICKS = 40;
+
+    /**
+     * 撒骨粉的两次间隔（tick）。
+     *
+     * <p>比「摘一次」的间隔大：骨粉推进一次之后要等一会儿才会结算生长，
+     * 连着点既浪费骨粉（随机推进可能白推）也更像机器。
+     */
+    private static final int BONE_MEAL_RETRY_INTERVAL = 8;
+
+    /** 撒骨粉最多花多少 tick，超了就放弃这一株 */
+    private static final int BONE_MEAL_TIMEOUT_TICKS = 120;
 
     /**
      * 动手之前准星允许偏目标中心多少度。
@@ -120,6 +133,15 @@ public final class CropHarvester {
      * 挖完按开关决定要不要补种。
      */
     private static boolean extraBreak;
+
+    /** 这次目标是不是「对还没熟的作物撒骨粉」（附加功能，入口见 {@link #startBoneMeal}） */
+    private static boolean boneMeal;
+
+    /** 这一株已经撒了几次骨粉 —— 受配置的 {@code boneMealLimit} 约束 */
+    private static int boneMealUsed;
+
+    /** 这一趟是不是因为快捷栏里没有骨粉才没干成（任务大脑据此决定去补给点取） */
+    private static boolean missingBoneMeal;
 
     private static int ticks;
 
@@ -282,6 +304,9 @@ public final class CropHarvester {
         cropBlock = null;
         mode = CropRegistry.HarvestMode.SKIP;
         extraBreak = false;
+        boneMeal = false;
+        boneMealUsed = 0;
+        missingBoneMeal = false;
         ticks = 0;
         nextActionAt = 0;
         harvested = false;
@@ -293,6 +318,35 @@ public final class CropHarvester {
         notice = null;
     }
 
+    /**
+     * 对一株<b>还没熟</b>的作物撒骨粉（附加功能「骨粉催熟」，默认关闭）。
+     *
+     * <p>和另外两个入口的区别：这一条<b>不挖、不摘、不种</b> —— 它只是站在那儿
+     * 把骨粉丢在作物上。走完之后那一格仍然是一株作物（可能熟了、可能还要接着催），
+     * 所以绝不能顺手把它当成「收完了」给补种。
+     *
+     * <p>「熟没熟」每 tick 都重新问一次 {@link CropRegistry#isGrowing}：
+     * 熟了、或者被人挖了、或者压根不是作物了，立刻收工 —— 这样就算中途出了意外，
+     * 也不会在原地反复对着一格不该动的东西撒骨粉。
+     */
+    public static void startBoneMeal(ClientWorld world, BlockPos pos, AutoFarmConfig config) {
+        begin(pos);
+        if (world == null || target == null) {
+            stage = Stage.DONE;
+            return;
+        }
+        boneMeal = true;
+        boneMealUsed = 0;
+        stage = CropRegistry.isGrowing(world.getBlockState(target))
+                ? Stage.BONE_MEAL
+                : Stage.DONE;
+    }
+
+    /** 这一趟是不是因为快捷栏里没有骨粉才没干成 —— 任务大脑据此决定去补给点取一趟 */
+    public static boolean needsBoneMeal() {
+        return missingBoneMeal;
+    }
+
     /** 停手（退出世界、关掉开关时用） */
     public static void reset() {
         target = null;
@@ -300,6 +354,9 @@ public final class CropHarvester {
         cropBlock = null;
         mode = CropRegistry.HarvestMode.SKIP;
         extraBreak = false;
+        boneMeal = false;
+        boneMealUsed = 0;
+        missingBoneMeal = false;
         ticks = 0;
         nextActionAt = 0;
         harvested = false;
@@ -333,6 +390,7 @@ public final class CropHarvester {
             case PICK -> pick(client, player);
             case REPLANT -> replant(client, player, config);
             case PLANT -> plant(client, player, config);
+            case BONE_MEAL -> boneMealTick(client, player, config);
             case DONE -> Stage.DONE;
         };
         stage = next;
@@ -552,6 +610,70 @@ public final class CropHarvester {
             return Stage.DONE;
         }
         return Stage.PLANT;
+    }
+
+    /**
+     * 对着一株还没熟的作物撒骨粉（附加功能「骨粉催熟」）。
+     *
+     * <p>四个动作按顺序来，每一步都可能被打断：
+     * <ol>
+     *   <li>这一格还是不是「还没熟的作物」？不是 → 收工（熟了就该去收割了）；</li>
+     *   <li>撒够次数了吗？撒满了 → 收手，别在一株上耗掉整袋骨粉；</li>
+     *   <li>把骨粉换到手上 —— <b>换手那一 tick 不撒</b>，等下一 tick 确认手上真拿着它；</li>
+     *   <li>对准、够得着，才撒。每撒一次记一次数，中间隔
+     *       {@link #BONE_MEAL_RETRY_INTERVAL} tick 再撒下一次。</li>
+     * </ol>
+     *
+     * <p>它<b>不挖、不摘、也不补种</b>：撒完骨粉这一格仍然是一株作物 ——
+     * 熟了就交给收割流程，没熟就下一轮扫描再来。真正的「收完了」永远只有
+     * {@link #mine} 和 {@link #pick} 两条路会置位。
+     */
+    private static Stage boneMealTick(MinecraftClient client, ClientPlayerEntity player,
+                                      AutoFarmConfig config) {
+        if (!CropRegistry.isGrowing(client.world.getBlockState(target))) {
+            return Stage.DONE;
+        }
+
+        int limit = config == null ? 1 : Math.max(1, config.boneMealLimit);
+        if (boneMealUsed >= limit) {
+            notice = "autofarm.notice.bone_meal_limit";
+            return Stage.DONE;
+        }
+
+        // 快捷栏里得有骨粉。背包深处的不管 —— 那要占着一格快捷栏才能用，
+        // 不如把「没骨粉了」这件事交给「耗材自给」去补给点取一趟。
+        int slot = InventoryScanner.findBoneMealSlot(player);
+        if (slot < 0) {
+            notice = "autofarm.notice.no_bone_meal";
+            missingBoneMeal = true;
+            return Stage.DONE;
+        }
+        if (player.getInventory().selectedSlot != slot) {
+            if (InventoryScanner.selectHotbarSlot(client, player, slot)) {
+                ticks = 0;
+                nextActionAt = 0;
+            }
+            return Stage.BONE_MEAL;
+        }
+
+        BlockInteractor.aimAt(player, target);
+        if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
+            return Stage.BONE_MEAL; // 转视角很快（几 tick），所以这段时间不计入超时
+        }
+
+        // 够得着才撒：隔着两格按右键，服务端会当成作弊
+        if (BlockInteractor.isWithinReach(player, target, REACH) && ticks >= nextActionAt) {
+            BlockInteractor.useBlock(client, target);
+            boneMealUsed++;
+            nextActionAt = ticks + Humanizer.gap(BONE_MEAL_RETRY_INTERVAL);
+        }
+        ticks++;
+
+        if (ticks > BONE_MEAL_TIMEOUT_TICKS) {
+            notice = "autofarm.notice.bone_meal_stuck";
+            return Stage.DONE;
+        }
+        return Stage.BONE_MEAL;
     }
 
     /** 面板上指定的「空地补种作物」；没设置、或者那个名字认不出来时返回 null（= 自动挑） */

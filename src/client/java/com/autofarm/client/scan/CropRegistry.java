@@ -157,6 +157,40 @@ public final class CropRegistry {
     }
 
     /**
+     * 这一格是不是「<b>还没熟、但已经种下了</b>」的作物 —— 附加功能「骨粉催熟」的目标。
+     *
+     * <p>它是「还没到收割的时候」那半张表：{@link #harvestMode} 判出 {@code SKIP}
+     * 的作物里，有一部分是刚种下的幼苗（该催），另一部分是压根不该碰的东西
+     * （瓜茎、发光浆果……不该催）。这里把后者剔掉。
+     *
+     * <p>两类要排除的，各有各的道理：
+     * <ul>
+     *   <li><b>瓜茎</b>（西瓜 / 南瓜茎）—— 它带 age，所以 {@link #isCropBlock} 会认它；
+     *       但骨粉对瓜茎没有用，真正要等的是<b>旁边那格瓜</b>（见 {@link #isGourdBlock}），
+     *       而且那也根本不是「催熟」能解决的 —— 所以整个排除；</li>
+     *   <li><b>发光浆果 / 洞穴藤蔓</b>（{@link CaveVines}）—— 它没有 age，熟没熟看的是
+     *       「有没有结浆果」，而骨粉对它无效，催了也白催。</li>
+     * </ul>
+     *
+     * <p>剩下的就是真正能被骨粉推进的作物：小麦、胡萝卜、土豆、甜菜、甜浆果丛……
+     * 以及各类模组作物 —— 只要它遵循原版「带 age」这套写法就自动适配。
+     */
+    public static boolean isGrowing(BlockState state) {
+        if (state == null) {
+            return false;
+        }
+        Block block = state.getBlock();
+        if (block instanceof StemBlock || block instanceof AttachedStemBlock) {
+            return false; // 瓜茎：骨粉没用，收成在旁边那格瓜上
+        }
+        if (block instanceof CaveVines) {
+            return false; // 发光浆果：没有 age，骨粉也不吃它
+        }
+        // 得先是「作物」，然后才是「还没熟」。已成熟的那些归收割管，不归催熟管
+        return isCropBlock(block) && harvestMode(state) == HarvestMode.SKIP;
+    }
+
+    /**
      * 这一格是不是「空着的耕地」——也就是可以补种的地方。
      *
      * <p>判据两条：<b>这一格是空气</b>，而且<b>下面那一格是耕地</b>。

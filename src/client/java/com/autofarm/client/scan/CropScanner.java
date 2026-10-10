@@ -108,6 +108,24 @@ public final class CropScanner {
         return findMatureCrops(world, center, radius, DEFAULT_DOWN, DEFAULT_UP);
     }
 
+    /**
+     * 找「还没熟、但已经种下了」的作物 —— 附加功能「骨粉催熟」的目标。
+     *
+     * <p>判据是 {@link CropRegistry#isGrowing}：是作物、还没熟、而且骨粉对它有效
+     * （瓜茎和发光浆果已经被排除在外）。这类格子<b>不会</b>进「成熟作物」列表，
+     * 所以在「骨粉催熟」关着的时候，这里连扫都不扫。
+     */
+    public static List<BlockPos> findImmatureCrops(ClientWorld world, BlockPos center, int radius,
+                                                  int down, int up) {
+        List<BlockPos> result = new ArrayList<>();
+        forEachBlock(world, center, radius, down, up, (pos, state) -> {
+            if (CropRegistry.isGrowing(state)) {
+                result.add(pos.toImmutable());
+            }
+        });
+        return result;
+    }
+
     // ================= 瓜茎识别 + 自定义方块 =================
 
     /**

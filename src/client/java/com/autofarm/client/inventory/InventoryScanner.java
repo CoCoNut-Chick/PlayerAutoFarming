@@ -11,6 +11,7 @@ import net.minecraft.item.BlockItem;
 import net.minecraft.item.FoodComponent;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.screen.PlayerScreenHandler;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
@@ -313,6 +314,112 @@ public final class InventoryScanner {
             return false;
         }
         int source = playerSlotId(handler, invIndex);
+        if (source < 0) {
+            return false;
+        }
+        client.interactionManager.clickSlot(handler.syncId, source, hotbarIndex,
+                SlotActionType.SWAP, player);
+        return true;
+    }
+
+    /**
+     * 背包里一共多少个<b>骨粉</b>（快捷栏 + 主背包）。
+     *
+     * <p>「耗材自给」用它判断该不该去补给点补一趟（见
+     * {@link AutoFarmConfig#boneMealThreshold}），「骨粉催熟」则用它决定这一趟值不值得跑。
+     */
+    public static int countBoneMeal(ClientPlayerEntity player) {
+        if (player == null) {
+            return 0;
+        }
+        PlayerInventory inventory = player.getInventory();
+        int total = 0;
+        for (int slot = 0; slot < INVENTORY_SLOTS; slot++) {
+            ItemStack stack = inventory.getStack(slot);
+            if (stack.isOf(Items.BONE_MEAL)) {
+                total += stack.getCount();
+            }
+        }
+        return total;
+    }
+
+    /**
+     * 快捷栏里第一个有骨粉的格号；没有就返回 -1。
+     *
+     * <p>骨粉必须先在<b>快捷栏</b>里才能用（原版只用主手，而主手拿的是快捷栏
+     * 选中的那一格）。返回 -1 就说明没法就地撒 —— 这时该走「耗材自给」去补给点取，
+     * 而不是翻背包深处（挖背包同样要占着快捷栏一格，反而更绕）。
+     */
+    public static int findBoneMealSlot(ClientPlayerEntity player) {
+        if (player == null) {
+            return -1;
+        }
+        PlayerInventory inventory = player.getInventory();
+        int hotbar = PlayerInventory.getHotbarSize();
+        for (int slot = 0; slot < hotbar; slot++) {
+            if (inventory.getStack(slot).isOf(Items.BONE_MEAL)) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 背包里还有几件「<b>还带一半以上余量</b>」的有耐久物品（工具、武器、鞘翅）。
+     *
+     * <p>给「备用工具自给」当判据用：只要还剩一把能用的，就不用去补给点跑这一趟。
+     * 为什么按「一半」而不是「没断」：一把只剩 3 点耐久的镐子对收割来说和没有差不多 ——
+     * 与其现在跑一趟，不如等它真断了再说，免得来回折腾。
+     */
+    public static int countUsableTools(ClientPlayerEntity player) {
+        if (player == null) {
+            return 0;
+        }
+        PlayerInventory inventory = player.getInventory();
+        int total = 0;
+        for (int slot = 0; slot < INVENTORY_SLOTS; slot++) {
+            ItemStack stack = inventory.getStack(slot);
+            int max = stack.isEmpty() ? 0 : stack.getMaxDamage();
+            if (max <= 0) {
+                continue; // 方块、种子这些没有耐久的
+            }
+            if (max - stack.getDamage() >= max / 2) {
+                total++;
+            }
+        }
+        return total;
+    }
+
+    /**
+     * 把快捷栏选中格切到 {@code hotbarIndex}。
+     *
+     * <p>走的是原版「按数字键 1~9」那条路（{@code clickSlot} + {@code SlotActionType.SWAP}，
+     * button 位传目标格号），也就是真人伸手去按数字键做的那件事。服务端收到的是一个
+     * 普通的换位包 —— 直接改客户端的 {@code selectedSlot} 是不行的，那样本地显示换了、
+     * 服务端还以为你拿着旧东西。
+     *
+     * <p>和 {@link #swapToHotbar} 的区别：那个是<b>交换两格物品</b>，
+     * 这个只是<b>切换选中哪一格</b>，不搬动任何东西。
+     *
+     * @return 有没有真的发出了这次换位（本来就在这一格上也返回 true）
+     */
+    public static boolean selectHotbarSlot(MinecraftClient client, ClientPlayerEntity player,
+                                           int hotbarIndex) {
+        if (client == null || client.interactionManager == null || player == null) {
+            return false;
+        }
+        int hotbar = PlayerInventory.getHotbarSize();
+        if (hotbarIndex < 0 || hotbarIndex >= hotbar) {
+            return false;
+        }
+        if (player.getInventory().selectedSlot == hotbarIndex) {
+            return true; // 本来就在这一格
+        }
+        ScreenHandler handler = player.currentScreenHandler;
+        if (!(handler instanceof PlayerScreenHandler)) {
+            return false;
+        }
+        int source = playerSlotId(handler, hotbarIndex);
         if (source < 0) {
             return false;
         }

@@ -122,6 +122,15 @@ public final class FarmTaskManager {
      */
     private static final Set<BlockPos> extraTargets = new HashSet<>();
 
+    /**
+     * 骨粉催熟目标：田里那些「<b>还没熟、但已经种下了</b>」的作物。
+     *
+     * <p>它和成熟作物分开的理由很实际：催熟是「有富余才做」的事，收成是「熟了就该收」的事，
+     * 所以它排在路线最后（见下面 {@code pending} 的拼接顺序）。而且开关一关，
+     * 这块连扫都不扫 —— 成熟作物列表里不会有它，世界里也不会给它画框。
+     */
+    private static final Set<BlockPos> boneMealTargets = new HashSet<>();
+
     private static long lastScanTick = Long.MIN_VALUE;
 
     /**
@@ -158,6 +167,23 @@ public final class FarmTaskManager {
     private static boolean supplyDeposit;
     /** 这一趟要不要取种子 */
     private static boolean supplyRefill;
+
+    /**
+     * 这一趟要顺带取<b>骨粉</b>（附加功能「耗材自给」）。
+     *
+     * <p>它在每次规划路线前重新算一次：开了「骨粉催熟」、又开了「耗材自给」、
+     * 而手边骨粉已经掉到阈值以下 —— 那就记一笔，下面的补给流程会顺路去取一栈。
+     * 不开催熟就不需要骨粉，所以那时它恒为 false，白跑一趟的可能都没有。
+     */
+    private static boolean suppliesWanted;
+
+    /**
+     * 这一趟要顺带取<b>一件有耐久的工具</b>（附加功能「备用工具自给」）。
+     *
+     * <p>判据是「背包里一把还带一半以上余量的都没有」。不挖路的时候工具本来就不会坏，
+     * 所以平时它恒为 false，只有真断了一把时才成立。
+     */
+    private static boolean toolWanted;
 
     /**
      * 这一趟实际要去的容器方块。
@@ -449,6 +475,8 @@ public final class FarmTaskManager {
         supplyPhase = SupplyPhase.NONE;
         supplyDeposit = false;
         supplyRefill = false;
+        suppliesWanted = false;
+        toolWanted = false;
         refillWanted = false;
         missingSeeds.clear();
         supplyNotice = null;
@@ -466,6 +494,7 @@ public final class FarmTaskManager {
         sessionTicks = 0;
         pickupTargets.clear();
         extraTargets.clear();
+        boneMealTargets.clear();
         pickupWaitTicks = 0;
         pickupWaitPos = null;
         hesitatedAt = null;
@@ -521,6 +550,8 @@ public final class FarmTaskManager {
             supplyPhase = SupplyPhase.NONE;
             supplyDeposit = false;
             supplyRefill = false;
+            suppliesWanted = false;
+            toolWanted = false;
             refillWanted = false;
             missingSeeds.clear();
             supplyContainer = null;
@@ -529,6 +560,7 @@ public final class FarmTaskManager {
             restRemaining = 0;
             pickupTargets.clear();
             extraTargets.clear();
+            boneMealTargets.clear();
             pickupWaitTicks = 0;
             pickupWaitPos = null;
             hesitatedAt = null;
@@ -996,6 +1028,19 @@ public final class FarmTaskManager {
                     pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
         }
 
+        // 附加功能「骨粉催熟」：把田里还没熟、但已经种下的作物也找出来。
+        // 关着时整块跳过 —— 成熟作物表里不会有它们，也不会有任何额外开销。
+        boneMealTargets.clear();
+        if (config.boneMealBoost) {
+            boneMealTargets.addAll(CropScanner.findImmatureCrops(
+                    client.world, client.player.getBlockPos(),
+                    config.scanRadius, CropScanner.DEFAULT_DOWN, CropScanner.DEFAULT_UP));
+            if (config.workAreaEnabled && config.hasWorkArea() && !boneMealTargets.isEmpty()) {
+                boneMealTargets.removeIf(pos -> !config.insideWorkArea(
+                        pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
+            }
+        }
+
         // 附加功能「优先拾取掉落物」：顺手看看田里有没有掉在外面、还没进包的作物掉落物。
         // 得到的是「在哪一格」，下一步会排进路线最前面。
         pickupTargets.clear();
@@ -1013,6 +1058,7 @@ public final class FarmTaskManager {
             current.addAll(emptyFarmland);
             current.addAll(pickupTargets);
             current.addAll(extraTargets);
+            current.addAll(boneMealTargets);
             handled.retainAll(current);
         }
 
@@ -1050,16 +1096,24 @@ public final class FarmTaskManager {
 
         // ---- 优先级 3：手上没路线了，看看要不要去补给点，或者新规划一条 ----
 
+        // 附加功能「资源自给」：先算清楚这一趟除了种子之外还要顺带取什么。
+        // 两项都默认关着，所以关着的时候这两行是纯粹的常数判断，不会多花什么。
+        suppliesWanted = config.autoFetchSupplies && config.boneMealBoost
+                && InventoryScanner.countBoneMeal(client.player) < config.boneMealThreshold;
+        toolWanted = config.autoFetchTool
+                && InventoryScanner.countUsableTools(client.player) == 0;
+
         // 3a. 背包快满了 → 先去存一趟
         if (shouldGoDeposit(client, config)
                 && startSupplyRun(client, config, true, refillWanted)) {
             return;
         }
 
-        // 3b. 缺种子 → 去取一趟
-        if (refillWanted && config.refillSeeds && config.hasSupplyPoint()
+        // 3b. 缺种子 / 缺骨粉 / 没备用工具 → 去取一趟（一趟顺路办完，别跑三趟）
+        boolean wantSeeds = refillWanted && config.refillSeeds;
+        if ((wantSeeds || suppliesWanted || toolWanted) && config.hasSupplyPoint()
                 && supplyCooldown == 0
-                && startSupplyRun(client, config, false, true)) {
+                && startSupplyRun(client, config, false, wantSeeds)) {
             return;
         }
 
@@ -1091,6 +1145,17 @@ public final class FarmTaskManager {
         for (BlockPos pos : extraTargets) {
             if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
                 pending.add(pos);
+            }
+        }
+
+        // 附加功能「骨粉催熟」：排在所有收成目标之后。催熟是「有富余才做」的事，
+        // 而收成放着不收会被别人抢走 —— 所以顺序上永远是收成优先。
+        // 手边没骨粉时干脆不排：跑过去也撒不了，白走一趟。
+        if (config.boneMealBoost && InventoryScanner.findBoneMealSlot(client.player) >= 0) {
+            for (BlockPos pos : boneMealTargets) {
+                if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
+                    pending.add(pos);
+                }
             }
         }
 
@@ -1245,8 +1310,11 @@ public final class FarmTaskManager {
             }
 
             supplyNotice = null; // 新的活开始了，上一次补给的那句话可以撤掉
-            // 额外目标（瓜 / 自定义方块）不是作物，走「挖掉不补种」；其余走正常收割
-            if (extraTargets.contains(held)) {
+            // 额外目标（瓜 / 自定义方块）不是作物，走「挖掉不补种」；
+            // 骨粉目标不是收成，撒完就撒完了 —— 三者各有各的入口
+            if (boneMealTargets.contains(held)) {
+                CropHarvester.startBoneMeal(client.world, held, config);
+            } else if (extraTargets.contains(held)) {
                 CropHarvester.startBreak(client.world, held);
             } else {
                 CropHarvester.start(client.world, held, config);
@@ -1288,6 +1356,9 @@ public final class FarmTaskManager {
             }
             if (!extraTargets.isEmpty()) {
                 extraTargets.remove(held);
+            }
+            if (!boneMealTargets.isEmpty()) {
+                boneMealTargets.remove(held);
             }
             PathWalker.releaseTarget();
             drainResolved();
@@ -1413,7 +1484,8 @@ public final class FarmTaskManager {
         }
         supplyPhase = SupplyPhase.TRANSFERRING;
         state = FarmState.TRANSFERRING;
-        ContainerTransfer.begin(container, supplyDeposit, supplyRefill, missingSeeds);
+        ContainerTransfer.begin(container, supplyDeposit, supplyRefill, missingSeeds,
+                suppliesWanted, toolWanted);
     }
 
     /**
@@ -1465,6 +1537,7 @@ public final class FarmTaskManager {
         state = FarmState.TRANSFERRING;
         boolean didRefill = supplyRefill;
         boolean didDeposit = supplyDeposit;
+        boolean didTakeMore = suppliesWanted || toolWanted;
 
         ContainerTransfer.Result result = ContainerTransfer.tick(client);
         if (result == ContainerTransfer.Result.RUNNING) {
@@ -1483,11 +1556,11 @@ public final class FarmTaskManager {
         // 补给点的结果是「一趟才有一次」的事，直接播报一条就够了
         announceEvent(client, supplyNotice);
 
-        // 「要办的事一件都没办成」（箱子满了、箱子里没种子）→ 歇一会儿再去，
+        // 「要办的事一件都没办成」（箱子满了、箱子里没种子/没骨粉/没工具）→ 歇一会儿再去，
         // 否则下一 tick 条件照样成立，它会立刻掉头再跑一趟，变成两个点之间横跳
         boolean achieved = result == ContainerTransfer.Result.DONE
                 && (!didDeposit || ContainerTransfer.getDepositedStacks() > 0)
-                && (!didRefill || ContainerTransfer.getTakenStacks() > 0);
+                && (!(didRefill || didTakeMore) || ContainerTransfer.getTakenStacks() > 0);
         supplyCooldown = achieved ? 0 : SUPPLY_RETRY_COOLDOWN_TICKS;
 
         finishSupply();
@@ -1498,6 +1571,8 @@ public final class FarmTaskManager {
         supplyPhase = SupplyPhase.NONE;
         supplyDeposit = false;
         supplyRefill = false;
+        suppliesWanted = false;
+        toolWanted = false;
         refillWanted = false;
         missingSeeds.clear();
         supplyContainer = null;
@@ -1514,6 +1589,8 @@ public final class FarmTaskManager {
         supplyPhase = SupplyPhase.NONE;
         supplyDeposit = false;
         supplyRefill = false;
+        suppliesWanted = false;
+        toolWanted = false;
         refillWanted = false;
         missingSeeds.clear();
         supplyContainer = null;

@@ -32,7 +32,7 @@ import java.util.List;
  * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
  * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
  *
- * <h2>十一段</h2>
+ * <h2>十二段</h2>
  * <ol>
  *   <li><b>战斗（高风险）</b> —— 自动打怪、目标范围、攻击间隔（输入框）、攻击距离、
  *       暴力模式与暴力程度。默认关闭、警示配色、开启与调高参数都要过风险确认屏，
@@ -49,6 +49,7 @@ import java.util.List;
  *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物；</li>
  *   <li><b>瓜类与自定义作物</b> —— 瓜茎识别（收割茎旁自然长出的瓜）+ 自定义方块名单
  *       （非矿透）。</li>
+ *   <li><b>资源自给</b> —— 骨粉催熟，以及骨粉 / 备用工具从补给点自取。</li>
  * </ol>
  * 每个「功能开关」下面跟着的参数行（半径、周期、阈值……）都用循环按钮调，
  * 点一下换一档，不用滑块 —— 和主面板的「默认种子槽位」一个习惯。
@@ -135,8 +136,17 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_GOURD_Y = SEC_PICKUP_Y + SEC_PICKUP_H + SECTION_GAP;
     private static final int SEC_GOURD_H = ROW_FIRST + GOURD_ROWS * ROW_GAP + 4;
 
+    /**
+     * 资源自给（D 组）：骨粉催熟（开关 + 单株上限）、耗材自给（开关 + 骨粉下限）、
+     * 备用工具自给（开关）—— 共 5 行。两个参数行都是各自开关的子项，靠
+     * {@link #relayout()} 里的 visible 切换。
+     */
+    private static final int SUPPLY_ROWS = 5;
+    private static final int SEC_SUPPLY_Y = SEC_GOURD_Y + SEC_GOURD_H + SECTION_GAP;
+    private static final int SEC_SUPPLY_H = ROW_FIRST + SUPPLY_ROWS * ROW_GAP + 4;
+
     /** 最底下那句「默认全关」的总说明 */
-    private static final int NOTE_Y = SEC_GOURD_Y + SEC_GOURD_H + 8;
+    private static final int NOTE_Y = SEC_SUPPLY_Y + SEC_SUPPLY_H + 8;
     private static final int NOTE_H = 24;
 
     // ---------------- 循环档位（都含出厂默认值，见 AutoFarmConfig） ----------------
@@ -174,6 +184,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] RECONNECT_DELAY_CHOICES = {5, 10, 20, 30, 60};
     /** 生存自保：最多重连次数；0 = 不限 */
     private static final int[] RECONNECT_ATTEMPT_CHOICES = {0, 3, 5, 10, 20};
+    /** 资源自给：同一株作物最多撒几次骨粉 */
+    private static final int[] BONE_MEAL_LIMIT_CHOICES = {1, 2, 4, 6, 10};
+    /** 资源自给：骨粉少于多少个就去补给点补一趟 */
+    private static final int[] BONE_MEAL_THRESHOLD_CHOICES = {8, 16, 32, 64};
 
     private static int[] buildHours() {
         int[] hours = new int[24];
@@ -237,6 +251,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget melonHarvestButton;
     private ButtonWidget addCustomBlockButton;
     private ButtonWidget customBlocksButton;
+    private ButtonWidget boneMealBoostButton;
+    private ButtonWidget boneMealLimitButton;
+    private ButtonWidget autoSuppliesButton;
+    private ButtonWidget boneMealThresholdButton;
+    private ButtonWidget autoFetchToolButton;
 
     public ExtrasScreen(Screen parent, AutoFarmConfig sharedDraft) {
         super(parent, Text.translatable("autofarm.extras.title"));
@@ -592,6 +611,40 @@ public class ExtrasScreen extends ScrollPanelScreen {
         customBlocksButton.setTooltip(Tooltip.of(Text.translatable("autofarm.custom_blocks.tip")));
         addScrolling(customBlocksButton);
 
+        // ---- 资源自给 ----
+        // 让模组把骨粉、备用工具这两样也自己接上：骨粉催熟 / 耗材自给 / 备用工具自给。
+        // 两个参数行分别是各自开关的子项，靠 relayout() 切换显隐。
+
+        this.boneMealBoostButton = toggle("autofarm.option.bone_meal",
+                draft.boneMealBoost, value -> draft.boneMealBoost = value,
+                "autofarm.bone_meal.tip");
+        layout(boneMealBoostButton, contentX, 0, fullW);
+
+        this.boneMealLimitButton = ButtonWidget.builder(boneMealLimitLabel(), b -> {
+            draft.boneMealLimit = nextChoice(BONE_MEAL_LIMIT_CHOICES, draft.boneMealLimit);
+            b.setMessage(boneMealLimitLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        boneMealLimitButton.setTooltip(Tooltip.of(Text.translatable("autofarm.bone_meal_limit.tip")));
+        addScrolling(boneMealLimitButton);
+
+        this.autoSuppliesButton = toggle("autofarm.option.auto_supplies",
+                draft.autoFetchSupplies, value -> draft.autoFetchSupplies = value,
+                "autofarm.auto_supplies.tip");
+        layout(autoSuppliesButton, contentX, 0, fullW);
+
+        this.boneMealThresholdButton = ButtonWidget.builder(boneMealThresholdLabel(), b -> {
+            draft.boneMealThreshold = nextChoice(BONE_MEAL_THRESHOLD_CHOICES, draft.boneMealThreshold);
+            b.setMessage(boneMealThresholdLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        boneMealThresholdButton.setTooltip(Tooltip.of(
+                Text.translatable("autofarm.bone_meal_threshold.tip")));
+        addScrolling(boneMealThresholdButton);
+
+        this.autoFetchToolButton = toggle("autofarm.option.auto_fetch_tool",
+                draft.autoFetchTool, value -> draft.autoFetchTool = value,
+                "autofarm.auto_fetch_tool.tip");
+        layout(autoFetchToolButton, contentX, 0, fullW);
+
         // ---- 页脚 ----
         int btnW = (contentWidth - 8) / 3;
         addFooter(
@@ -820,6 +873,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.self_rescue" -> draft.selfRescueEnabled;
             case "autofarm.option.auto_reconnect" -> draft.autoReconnectEnabled;
             case "autofarm.option.melon_harvest" -> draft.melonHarvest;
+            case "autofarm.option.bone_meal" -> draft.boneMealBoost;
+            case "autofarm.option.auto_supplies" -> draft.autoFetchSupplies;
+            case "autofarm.option.auto_fetch_tool" -> draft.autoFetchTool;
             default -> false;
         };
     }
@@ -860,6 +916,14 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }
         if (workAreaCornerBButton != null) {
             workAreaCornerBButton.visible = workAreaCornerBButton.visible && box;
+        }
+        // 资源自给的两个参数行同样是子项：主子项关着时它们不该出现
+        if (boneMealLimitButton != null) {
+            boneMealLimitButton.visible = boneMealLimitButton.visible && draft.boneMealBoost;
+        }
+        if (boneMealThresholdButton != null) {
+            boneMealThresholdButton.visible = boneMealThresholdButton.visible
+                    && draft.autoFetchSupplies;
         }
     }
 
@@ -938,6 +1002,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(melonHarvestButton, gourd + ROW_FIRST);
         setRowY(addCustomBlockButton, gourd + ROW_FIRST + ROW_GAP);
         setRowY(customBlocksButton, gourd + ROW_FIRST + 2 * ROW_GAP);
+
+        int supply = originY + SEC_SUPPLY_Y;
+        setRowY(boneMealBoostButton, supply + ROW_FIRST);
+        setRowY(boneMealLimitButton, supply + ROW_FIRST + ROW_GAP);
+        setRowY(autoSuppliesButton, supply + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(boneMealThresholdButton, supply + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(autoFetchToolButton, supply + ROW_FIRST + 4 * ROW_GAP);
     }
 
     // ================= 自绘 =================
@@ -985,6 +1056,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
         context.drawTextWithShadow(this.textRenderer,
                 Text.translatable("autofarm.gourd.hint"),
                 contentX + INDENT + 4, originY + SEC_GOURD_Y + ROW_FIRST + 3 * ROW_GAP + 5, COLOR_HINT);
+
+        drawSection(context, originY, SEC_SUPPLY_Y, SEC_SUPPLY_H);
+        drawHeader(context, originY, SEC_SUPPLY_Y, "autofarm.extras.section.supply");
 
         // 最底下那句总说明：强调「默认全关」，让第一次进来的人放心
         int shown = 0;
@@ -1050,6 +1124,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.pickupDelaySeconds = 1;
         draft.melonHarvest = false;
         draft.customHarvestBlocks = new ArrayList<>();
+        draft.boneMealBoost = false;
+        draft.boneMealLimit = 4;
+        draft.autoFetchSupplies = false;
+        draft.boneMealThreshold = 16;
+        draft.autoFetchTool = false;
         // 标签文字要跟着变，直接重建整页最省事
         rebuild();
     }
@@ -1109,6 +1188,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.pickupDelaySeconds = old.pickupDelaySeconds;
         draft.melonHarvest = old.melonHarvest;
         draft.customHarvestBlocks = new ArrayList<>(old.customHarvestBlocks);
+        draft.boneMealBoost = old.boneMealBoost;
+        draft.boneMealLimit = old.boneMealLimit;
+        draft.autoFetchSupplies = old.autoFetchSupplies;
+        draft.boneMealThreshold = old.boneMealThreshold;
+        draft.autoFetchTool = old.autoFetchTool;
         backToParent();
     }
 
@@ -1290,6 +1374,18 @@ public class ExtrasScreen extends ScrollPanelScreen {
         int n = draft.customHarvestBlocks == null ? 0 : draft.customHarvestBlocks.size();
         return optionLabel("autofarm.option.custom_blocks",
                 Text.translatable("autofarm.value.count", n));
+    }
+
+    /** 骨粉催熟：同一株最多撒几次 */
+    private Text boneMealLimitLabel() {
+        return optionLabel("autofarm.option.bone_meal_limit",
+                Text.translatable("autofarm.value.count", draft.boneMealLimit));
+    }
+
+    /** 耗材自给：骨粉低于多少个就去补给点补一趟 */
+    private Text boneMealThresholdLabel() {
+        return optionLabel("autofarm.option.bone_meal_threshold",
+                Text.translatable("autofarm.value.count", draft.boneMealThreshold));
     }
 
     /** 把准星指向的那个方块加进自定义名单；加之前先弹一道提醒屏 */
