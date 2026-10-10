@@ -6,6 +6,17 @@ AutoFarm 采用语义化版本：`主版本.次版本.修订号`。
 
 ---
 
+## 1.13.1
+
+**主题：修复四个容器未设置时的空指针崩溃**
+
+- `hasCropOut()`/`hasSeedIn()`/`hasToolIn()`/`hasJunkOut()` 误用了 `complete()` 判「已设置」——
+  `complete()` 的语义是「三个坐标要么都有、要么都没有」，三个都是 `null` 时也返回 true，
+  于是 `containerFor` 在专用容器没设（三个坐标都 null）时仍然去 `new BlockPos(...)`，
+  拆箱空指针直接崩。改成和 `hasSupplyPoint()` 一致的「三个都非 null」才算已设置。
+
+---
+
 ## 1.13.0
 
 **主题：扩展存储与补给（四个专用容器）+ 修复关闭后透视仍在**

@@ -1347,22 +1347,22 @@ public class AutoFarmConfig {
 
     /** 农作物输出容器是否已完整设置 */
     public boolean hasCropOut() {
-        return complete(outCropX, outCropY, outCropZ);
+        return outCropX != null && outCropY != null && outCropZ != null;
     }
 
     /** 种子输入容器是否已完整设置 */
     public boolean hasSeedIn() {
-        return complete(inSeedX, inSeedY, inSeedZ);
+        return inSeedX != null && inSeedY != null && inSeedZ != null;
     }
 
     /** 工具补给容器是否已完整设置 */
     public boolean hasToolIn() {
-        return complete(inToolX, inToolY, inToolZ);
+        return inToolX != null && inToolY != null && inToolZ != null;
     }
 
     /** 杂物临时存储容器是否已完整设置 */
     public boolean hasJunkOut() {
-        return complete(outJunkX, outJunkY, outJunkZ);
+        return outJunkX != null && outJunkY != null && outJunkZ != null;
     }
 
     // ---- 工作区域（B 组①） ----
