@@ -259,8 +259,6 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     }
 
     private void buildMoveTab() {
-        int fullW = contentWidth;
-
         this.optimizeButton = toggle("autofarm.option.optimize", draft.optimizePath,
                 v -> draft.optimizePath = v, "autofarm.optimize.tip");
 

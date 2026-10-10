@@ -14,6 +14,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +62,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
     /** 攻击间隔行的左侧标签宽度 / 输入框宽度 */
     private static final int INTERVAL_LABEL_W = 60;
     private static final int INTERVAL_FIELD_W = 56;
+    /** 「转向时间」输入框右边的「确认」按钮：宽度与左侧留白 */
+    private static final int TURN_OK_W = 46;
+    private static final int TURN_OK_GAP = 4;
 
     // ---- 战斗（tab 0）----
     private static final int COMBAT_ROWS = 6;
@@ -177,6 +181,15 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget reactionTimeButton;
     private ButtonWidget idleLookButton;
     private TextFieldWidget turnTimeField;
+    /** 「转向时间」右边那颗确认按钮 */
+    private ButtonWidget turnTimeOkButton;
+    /**
+     * 「转向时间」输入框里有没有一个<b>还没确认的危险值</b>（小于安全阈值、含 0）。
+     *
+     * <p>危险值不会直接写进草稿 —— 必须先按 Enter 或点「确认」，过一次风险提示屏才生效。
+     * 这样「填 0 然后保存」就不可能悄悄发生：要么在离页前被拦下来确认，要么根本没写进去。
+     */
+    private boolean turnTimePending;
     private ButtonWidget instantActionsButton;
     private ButtonWidget scheduleButton;
     private ButtonWidget scheduleStartButton;
@@ -251,7 +264,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
                         .dimensions(contentX, 0, btnW, ROW_H).build(),
                 ButtonWidget.builder(Text.translatable("autofarm.button.cancel"), b -> onCancel())
                         .dimensions(contentX + btnW + 4, 0, btnW, ROW_H).build(),
-                ButtonWidget.builder(Text.translatable("autofarm.highlight.done"), b -> backToParent())
+                ButtonWidget.builder(Text.translatable("autofarm.highlight.done"), b -> onDone())
                         .dimensions(contentX + 2 * (btnW + 4), 0, btnW, ROW_H).build()
         );
     }
@@ -404,18 +417,18 @@ public class ExtrasScreen extends ScrollPanelScreen {
         turnTimeField.setMaxLength(4);
         turnTimeField.setTextPredicate(s -> s.isEmpty() || s.matches("\\d{1,4}"));
         turnTimeField.setText(Integer.toString(draft.turnDurationMs));
-        turnTimeField.setChangedListener(text -> {
-            if (text == null || text.isEmpty()) {
-                return;
-            }
-            try {
-                draft.turnDurationMs = Integer.parseInt(text);
-            } catch (NumberFormatException ignored) {
-                // 只收数字，理论上进不来
-            }
-        });
+        turnTimeField.setChangedListener(text -> onTurnTimeEdited(text));
         turnTimeField.setTooltip(Tooltip.of(Text.translatable("autofarm.turn_time.tip")));
         addScrolling(turnTimeField);
+
+        // 输入框右边的「确认」：把刚填的值定下来。危险的（含 0）会弹一次风险提示屏。
+        // 和直接按 Enter 是同一件事，看玩家顺手用哪个。
+        this.turnTimeOkButton = ButtonWidget.builder(Text.translatable("autofarm.turn_time.ok"),
+                        b -> commitTurnTime())
+                .dimensions(subX + INTERVAL_LABEL_W + INTERVAL_FIELD_W + TURN_OK_GAP, 0, TURN_OK_W, ROW_H)
+                .build();
+        turnTimeOkButton.setTooltip(Tooltip.of(Text.translatable("autofarm.turn_time.ok.tip")));
+        addScrolling(turnTimeOkButton);
 
         this.instantActionsButton = toggle("autofarm.option.instant_actions",
                 draft.instantActions, value -> draft.instantActions = value,
@@ -784,7 +797,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
     /** 重建本页（草稿原样带过去）。用于需要「整页重排」的动作 */
     private void rebuild() {
         if (this.client != null) {
-            this.client.setScreen(new ExtrasScreen(this.parent, draft));
+            ExtrasScreen next = new ExtrasScreen(this.parent, draft);
+            next.currentTab = currentTab; // 重建后还停在原来那一页
+            this.client.setScreen(next);
         }
     }
 
@@ -970,6 +985,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(reactionTimeButton, behavior + ROW_FIRST + ROW_GAP);
         setRowY(idleLookButton, behavior + ROW_FIRST + 2 * ROW_GAP);
         setRowY(turnTimeField, behavior + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(turnTimeOkButton, behavior + ROW_FIRST + 3 * ROW_GAP);
         setRowY(instantActionsButton, behavior + ROW_FIRST + 4 * ROW_GAP);
         setRowY(scheduleButton, behavior + ROW_FIRST + 5 * ROW_GAP);
         setRowY(scheduleStartButton, behavior + ROW_FIRST + 6 * ROW_GAP);
@@ -1312,7 +1328,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
                         String.format("%.1f", draft.reactionDelayTicks / 20.0)));
     }
 
-    /** 「行为真实感」分区的自绘部分：转向时间的标签、范围提示、过小警告 */
+    /** 「行为真实感」分区的自绘部分：转向时间的标签、范围提示、待确认 / 过小警告 */
     private void drawBehaviorExtras(DrawContext context, int originY) {
         int behavior = originY + SEC_BEHAVIOR_Y;
         int row = behavior + ROW_FIRST + 3 * ROW_GAP;
@@ -1322,14 +1338,122 @@ public class ExtrasScreen extends ScrollPanelScreen {
         context.drawTextWithShadow(this.textRenderer,
                 Text.translatable("autofarm.turn_time.hint",
                         AutoFarmConfig.TURN_DURATION_MIN, AutoFarmConfig.TURN_DURATION_MAX),
-                contentX + INTERVAL_LABEL_W + INTERVAL_FIELD_W + 8, row + 5, COLOR_HINT);
-        // 0 是「不缓动」，不提示（那是玩家主动去掉真实感）；但 1 ~ 阈值 之间属于
-        // 「又快又突兀」，提示一句：这样转很容易被看出是机器在动视角。
-        if (draft.turnDurationMs > 0 && draft.turnDurationMs < AutoFarmConfig.TURN_DURATION_SAFE_MS) {
+                contentX + INDENT + INTERVAL_LABEL_W + INTERVAL_FIELD_W + TURN_OK_GAP
+                        + TURN_OK_W + 6,
+                row + 5, COLOR_HINT);
+        // 分区底部那一行留给了「危险值」的提示。两种情况共用这一行：
+        //   · 还没确认 → 暖色：填了但没生效，按 Enter / 点「确认」才应用；
+        //   · 已经确认 → 红色：这个值会让转身太突兀，容易被看出是机器在操作。
+        //   0 = 完全关掉平滑转向，同样按「危险值」对待。
+        int warnY = behavior + ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 2;
+        if (turnTimePending) {
+            context.drawTextWithShadow(this.textRenderer,
+                    Text.translatable("autofarm.turn_time.pending"),
+                    contentX + 4, warnY, COLOR_NOTICE);
+        } else if (draft.turnDurationMs < AutoFarmConfig.TURN_DURATION_SAFE_MS) {
             context.drawTextWithShadow(this.textRenderer,
                     Text.translatable("autofarm.turn_time.warn", AutoFarmConfig.TURN_DURATION_SAFE_MS),
-                    contentX + 4, behavior + ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 2, COLOR_DANGER);
+                    contentX + 4, warnY, COLOR_DANGER);
         }
+    }
+
+    // ================= 「转向时间」的确认流程 =================
+
+    /**
+     * 输入框被改动时：安全值<b>即时生效</b>，危险值（小于安全阈值，含 0）<b>先挂着</b>。
+     *
+     * <p>挂着的意思是「只在输入框里显示，不写进草稿」—— 于是哪怕玩家转头就去点保存，
+     * 存下去的也是上一个安全值，绝不会是那个突兀的 0。
+     */
+    private void onTurnTimeEdited(String text) {
+        Integer typed = parseTurnTime(text);
+        if (typed == null) {
+            return; // 空着 / 非法 → 不动草稿
+        }
+        int value = clampInt(typed, AutoFarmConfig.TURN_DURATION_MIN, AutoFarmConfig.TURN_DURATION_MAX);
+        if (value >= AutoFarmConfig.TURN_DURATION_SAFE_MS) {
+            draft.turnDurationMs = value;
+            turnTimePending = false;
+        } else {
+            // 危险值：先不写。等 Enter / 「确认」/ 离页时统一过一次风险提示屏。
+            turnTimePending = value != draft.turnDurationMs;
+        }
+    }
+
+    /**
+     * 把输入框里的值定下来。
+     *
+     * @return true 表示「弹了风险提示屏、正等着玩家答复」—— 调用方此时别再往下走
+     */
+    private boolean commitTurnTime() {
+        if (turnTimeField == null) {
+            return false;
+        }
+        Integer typed = parseTurnTime(turnTimeField.getText());
+        if (typed == null) {
+            // 空 / 非法：恢复成当前生效值，不用确认
+            turnTimeField.setText(Integer.toString(draft.turnDurationMs));
+            turnTimePending = false;
+            return false;
+        }
+        int value = clampInt(typed, AutoFarmConfig.TURN_DURATION_MIN, AutoFarmConfig.TURN_DURATION_MAX);
+        if (value != typed) {
+            turnTimeField.setText(Integer.toString(value)); // 超出范围：拉回边界并回填
+        }
+
+        // 安全值 或 本来就是当前值 → 直接生效
+        if (value >= AutoFarmConfig.TURN_DURATION_SAFE_MS || value == draft.turnDurationMs) {
+            draft.turnDurationMs = value;
+            turnTimePending = false;
+            return false;
+        }
+        if (this.client == null) {
+            draft.turnDurationMs = value;
+            turnTimePending = false;
+            return false;
+        }
+
+        // 危险值：过一次风险提示屏。确认才写进草稿；取消则什么都改（输入框会在重建时回到旧值）。
+        turnTimePending = false;
+        this.client.setScreen(new DangerConfirmScreen(this, () -> {
+            draft.turnDurationMs = value;
+            if (turnTimeField != null) {
+                turnTimeField.setText(Integer.toString(value));
+            }
+        }, "autofarm.danger.title", "autofarm.turn_time.danger.subtitle",
+                "autofarm.turn_time.danger.body1", "autofarm.turn_time.danger.body2"));
+        return true;
+    }
+
+    /** 输入框里的整数；空 / 非法返回 null */
+    private static Integer parseTurnTime(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(text.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** 点「完成」：先把转向时间定下来（可能要过一次确认屏），再回上层 */
+    private void onDone() {
+        if (commitTurnTime()) {
+            return; // 弹了确认屏，等玩家答复，先别走
+        }
+        backToParent();
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 在「转向时间」输入框里按 Enter = 点「确认」：危险值在这里弹风险提示
+        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
+                && turnTimeField != null && turnTimeField.isFocused()) {
+            commitTurnTime();
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private Text scheduleStartLabel() {
