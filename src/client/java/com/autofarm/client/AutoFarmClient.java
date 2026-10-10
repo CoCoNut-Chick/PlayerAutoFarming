@@ -2,6 +2,7 @@ package com.autofarm.client;
 
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.gui.AutoFarmScreen;
+import com.autofarm.client.gui.StatsScreen;
 import com.autofarm.client.keybind.AutoFarmKeybinds;
 import com.autofarm.client.net.ReconnectManager;
 import com.autofarm.client.render.AutoFarmHud;
@@ -50,6 +51,13 @@ public class AutoFarmClient implements ClientModInitializer {
             // 这样按下的同一个 tick 就能看到新的开关状态、立刻重新扫一遍。
             while (AutoFarmKeybinds.toggleEnabled.wasPressed()) {
                 FarmTaskManager.toggleEnabled(client);
+            }
+
+            // 打开统计面板（F 组）：纯查看，不开主面板也能看账本
+            while (AutoFarmKeybinds.openStats.wasPressed()) {
+                if (client.currentScreen == null) {
+                    client.setScreen(new StatsScreen(null));
+                }
             }
 
             // 任务大脑：只在自己操作游戏时运转，开着别的大界面时暂停

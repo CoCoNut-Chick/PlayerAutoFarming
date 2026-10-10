@@ -26,6 +26,14 @@ public final class AutoFarmKeybinds {
      */
     public static KeyBinding toggleEnabled;
 
+    /**
+     * 打开统计面板。
+     *
+     * <p>默认 H 键。统计面板是纯查看（本轮 / 累计的账本），
+     * 给它单开一个键，就不用为了看个数字先开主面板再点进去。
+     */
+    public static KeyBinding openStats;
+
     private AutoFarmKeybinds() {
     }
 
@@ -41,6 +49,13 @@ public final class AutoFarmKeybinds {
                 "key.autofarm.toggle_enabled",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_GRAVE_ACCENT,
+                CATEGORY
+        ));
+
+        openStats = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.autofarm.open_stats",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_H,
                 CATEGORY
         ));
     }

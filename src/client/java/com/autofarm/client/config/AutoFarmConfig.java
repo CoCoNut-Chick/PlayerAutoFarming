@@ -530,6 +530,33 @@ public class AutoFarmConfig {
      */
     public boolean autoFetchTool = false;
 
+    // ---- 交互便利（F 组：音效 / 桌面通知） ----
+    //
+    // 前面几组管的是「做什么、怎么做」，这一组管的是「怎么让人知道」。
+    // 默认全关：切走屏幕干别的、或者不想被音效打扰时，它们就不出声。
+
+    /**
+     * 音效通知：开始 / 停止 / 异常时播一个提示音（默认关闭）。
+     *
+     * <p>三件事各配一个音，一听就知道发生了什么：
+     * <ul>
+     *   <li><b>开始</b> —— 打开自动收割时；</li>
+     *   <li><b>停止</b> —— 因安全 / 满包 / 越界等原因停机，或关掉开关时；</li>
+     *   <li><b>异常</b> —— 收不动、补给失败这类「没干成」时。</li>
+     * </ul>
+     * 走的都是原版音效（{@code client.player.playSound}），不额外引入资源。
+     */
+    public boolean notifySounds = false;
+
+    /**
+     * 桌面通知：开始 / 停止 / 异常时在右上角弹一个原版 toast（默认关闭）。
+     *
+     * <p>和音效是两条独立的通道 —— 挂机时人可能不在电脑前，音效听不到，
+     * toast 会在右上角留几秒；音效则是「人在屏幕前」时更及时的那一个。
+     * 覆盖的事件和 {@link #notifySounds} 完全一样。
+     */
+    public boolean notifyToasts = false;
+
     /**
      * 防踢模式：把整套「机器味」一次性抹掉（默认关闭）。
      *
@@ -904,6 +931,8 @@ public class AutoFarmConfig {
         if (boneMealBoost) n++;
         if (autoFetchSupplies) n++;
         if (autoFetchTool) n++;
+        if (notifySounds) n++;
+        if (notifyToasts) n++;
         if (antiKickMode) n++;
         if (reactionDelay) n++;
         if (idleLookAround) n++;
@@ -975,6 +1004,8 @@ public class AutoFarmConfig {
         c.autoFetchSupplies = this.autoFetchSupplies;
         c.boneMealThreshold = this.boneMealThreshold;
         c.autoFetchTool = this.autoFetchTool;
+        c.notifySounds = this.notifySounds;
+        c.notifyToasts = this.notifyToasts;
         c.antiKickMode = this.antiKickMode;
         c.antiKickLevel = this.antiKickLevel;
         c.reactionDelay = this.reactionDelay;

@@ -23,12 +23,15 @@ import com.autofarm.client.scan.CropScanner;
 import com.autofarm.client.stats.StatsManager;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.toast.SystemToast;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.sound.SoundEvent;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
@@ -412,6 +415,16 @@ public final class FarmTaskManager {
     }
 
     /**
+     * 当前正在走向 / 正在处理的那一格（「下一个目标」可视化用）。
+     *
+     * <p>走路时是下一个落脚目标，到站后是正在挖 / 种 / 摘 / 撒骨粉的那一格；
+     * 没有路线时是 null。渲染层用它画一个白色的框，和其余描边区分开。
+     */
+    public static BlockPos getCurrentTarget() {
+        return PathWalker.getCurrentTarget();
+    }
+
+    /**
      * 当前这一段 A* 算出来的实际行走路径。
      *
      * <p>和 {@link #getRoute()} 的区别：route 是「依次要去哪些作物」的战略顺序，
@@ -589,6 +602,7 @@ public final class FarmTaskManager {
             StatsManager.get().addWorkSeconds(sessionTicks / 20);
             sessionTicks = 0;
             StatsManager.get().save();
+            notify(client, config, "stop");
         } else {
             // 打开 → 假装「刚进入这个世界」：清空记忆、下一 tick 立刻重扫
             handled.clear();
@@ -605,6 +619,7 @@ public final class FarmTaskManager {
             fatigueWorkTicks = 0;
             fatigueRestRemaining = 0;
             fatigueStopped = false;
+            notify(client, config, "start");
         }
         lastEnabled = config.enabled;
 
@@ -1396,6 +1411,7 @@ public final class FarmTaskManager {
             if (failed && held != null) {
                 StatsManager.get().logIssue("harvest failed (" + CropHarvester.getNotice()
                         + ") at " + held.getX() + "," + held.getY() + "," + held.getZ());
+                notify(client, config, "issue");
             }
             if (config.failureCooldown && failed && held != null) {
                 failedUntil.put(held.toImmutable(),
@@ -1587,6 +1603,7 @@ public final class FarmTaskManager {
         // 附加功能「异常日志 / 统计」：这一趟办成了记一笔补给；办砸了记一条异常
         if (result == ContainerTransfer.Result.FAILED && supplyNotice != null) {
             StatsManager.get().logIssue("supply failed: " + supplyNotice);
+            notify(client, config, "issue");
         } else if (ContainerTransfer.getTakenStacks() > 0
                 || ContainerTransfer.getDepositedStacks() > 0) {
             StatsManager.get().recordSupplyRun();
@@ -2087,6 +2104,8 @@ public final class FarmTaskManager {
         }
         lastPauseAnnounce = key;
         sendActionBar(client, key);
+        // F 组「音效 / 桌面通知」：第一次进入某种停机状态时提示一次（去重已由上面保证）
+        notify(client, ConfigManager.get(), "stop");
     }
 
     /** 事件播报：补给结果、种子用完这类「一个事件一次」的提示 */
@@ -2103,5 +2122,40 @@ public final class FarmTaskManager {
         if (client != null && client.player != null) {
             client.player.sendMessage(Text.translatable(translationKey), true);
         }
+    }
+
+    /**
+     * 音效 / 桌面通知（F 组，两个开关独立，默认全关）。
+     *
+     * <p>三档 {@code kind} 各配一个音和一个 toast 标题：
+     * <ul>
+     *   <li>{@code start} —— 打开自动收割；</li>
+     *   <li>{@code stop} —— 停机（安全 / 满包 / 越界 / 休息……）或关掉开关；</li>
+     *   <li>{@code issue} —— 收不动、补给失败这类「没干成」。</li>
+     * </ul>
+     * 音效走原版 {@code playSound}，toast 走原版 {@link SystemToast}，都不引入额外资源。
+     */
+    private static void notify(MinecraftClient client, AutoFarmConfig config, String kind) {
+        if (client == null || client.player == null || config == null
+                || (!config.notifySounds && !config.notifyToasts)) {
+            return;
+        }
+        if (config.notifySounds) {
+            client.player.playSound(soundFor(kind), 1.0f, 1.0f);
+        }
+        if (config.notifyToasts) {
+            SystemToast.show(client.getToastManager(), SystemToast.Type.TUTORIAL_HINT,
+                    Text.translatable("autofarm.notify." + kind), Text.empty());
+        }
+    }
+
+    /** 通知类别 → 原版音效 */
+    private static SoundEvent soundFor(String kind) {
+        return switch (kind) {
+            case "start" -> SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP;
+            case "issue" -> SoundEvents.ENTITY_VILLAGER_NO;
+            // 1.20.1 里音符盒这类音效是 RegistryEntry.Reference，要 .value() 取出 SoundEvent
+            default -> SoundEvents.BLOCK_NOTE_BLOCK_BASS.value();
+        };
     }
 }

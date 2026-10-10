@@ -191,7 +191,7 @@
   "autofarm.message.toggled": "自动收割：%s",
   "autofarm.section.extras": "附加功能",
   "autofarm.option.extras": "附加功能…",
-  "autofarm.extras.tip": "默认全部关闭的增强项：安全与隐蔽、防踢模式、行为真实感、工作范围、环境与作息、生存自保、工具维护、容错统计、掉落物拾取、瓜类与自定义作物、资源自给，以及分开放置的高风险战斗项。不打开就不改变原有行为。",
+  "autofarm.extras.tip": "默认全部关闭的增强项：安全与隐蔽、防踢模式、行为真实感、工作范围、环境与作息、生存自保、工具维护、容错统计、掉落物拾取、瓜类与自定义作物、资源自给、交互便利，以及分开放置的高风险战斗项。不打开就不改变原有行为。",
   "autofarm.extras.summary": "已启用 %s 项（默认全关）",
   "autofarm.extras.title": "附加功能",
   "autofarm.extras.section.combat": "战斗（高风险）",
@@ -411,5 +411,14 @@
   "autofarm.stats.issues": "异常次数",
   "autofarm.stats.clear": "清零累计",
   "autofarm.stats.clear_log": "清空日志",
-  "autofarm.stats.done": "完成"
+  "autofarm.stats.done": "完成",
+  "key.autofarm.open_stats": "打开统计面板",
+  "autofarm.extras.section.notify": "交互便利",
+  "autofarm.option.notify_sounds": "音效通知",
+  "autofarm.notify_sounds.tip": "开始、停止、异常时各播一个提示音。人不在屏幕前时听不到，切走前记得配一个桌面通知。",
+  "autofarm.option.notify_toasts": "桌面通知",
+  "autofarm.notify_toasts.tip": "开始、停止、异常时在右上角弹一个原版 toast，留几秒。挂机时比音效更靠得住。",
+  "autofarm.notify.start": "AutoFarm 已开始",
+  "autofarm.notify.stop": "AutoFarm 已停止",
+  "autofarm.notify.issue": "AutoFarm 出现异常"
 }

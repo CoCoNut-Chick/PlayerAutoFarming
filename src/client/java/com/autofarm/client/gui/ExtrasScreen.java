@@ -32,7 +32,7 @@ import java.util.List;
  * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
  * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
  *
- * <h2>十二段</h2>
+ * <h2>十三段</h2>
  * <ol>
  *   <li><b>战斗（高风险）</b> —— 自动打怪、目标范围、攻击间隔（输入框）、攻击距离、
  *       暴力模式与暴力程度。默认关闭、警示配色、开启与调高参数都要过风险确认屏，
@@ -49,7 +49,8 @@ import java.util.List;
  *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物；</li>
  *   <li><b>瓜类与自定义作物</b> —— 瓜茎识别（收割茎旁自然长出的瓜）+ 自定义方块名单
  *       （非矿透）。</li>
- *   <li><b>资源自给</b> —— 骨粉催熟，以及骨粉 / 备用工具从补给点自取。</li>
+ *   <li><b>资源自给</b> —— 骨粉催熟，以及骨粉 / 备用工具从补给点自取；</li>
+ *   <li><b>交互便利</b> —— 音效通知、桌面通知（开始 / 停止 / 异常）。</li>
  * </ol>
  * 每个「功能开关」下面跟着的参数行（半径、周期、阈值……）都用循环按钮调，
  * 点一下换一档，不用滑块 —— 和主面板的「默认种子槽位」一个习惯。
@@ -145,8 +146,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_SUPPLY_Y = SEC_GOURD_Y + SEC_GOURD_H + SECTION_GAP;
     private static final int SEC_SUPPLY_H = ROW_FIRST + SUPPLY_ROWS * ROW_GAP + 4;
 
+    /** 交互便利（F 组）：音效通知、桌面通知 —— 共 2 行 */
+    private static final int NOTIFY_ROWS = 2;
+    private static final int SEC_NOTIFY_Y = SEC_SUPPLY_Y + SEC_SUPPLY_H + SECTION_GAP;
+    private static final int SEC_NOTIFY_H = ROW_FIRST + NOTIFY_ROWS * ROW_GAP + 4;
+
     /** 最底下那句「默认全关」的总说明 */
-    private static final int NOTE_Y = SEC_SUPPLY_Y + SEC_SUPPLY_H + 8;
+    private static final int NOTE_Y = SEC_NOTIFY_Y + SEC_NOTIFY_H + 8;
     private static final int NOTE_H = 24;
 
     // ---------------- 循环档位（都含出厂默认值，见 AutoFarmConfig） ----------------
@@ -256,6 +262,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget autoSuppliesButton;
     private ButtonWidget boneMealThresholdButton;
     private ButtonWidget autoFetchToolButton;
+    private ButtonWidget notifySoundsButton;
+    private ButtonWidget notifyToastsButton;
 
     public ExtrasScreen(Screen parent, AutoFarmConfig sharedDraft) {
         super(parent, Text.translatable("autofarm.extras.title"));
@@ -645,6 +653,18 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.auto_fetch_tool.tip");
         layout(autoFetchToolButton, contentX, 0, fullW);
 
+        // ---- 交互便利（F 组）----
+
+        this.notifySoundsButton = toggle("autofarm.option.notify_sounds",
+                draft.notifySounds, value -> draft.notifySounds = value,
+                "autofarm.notify_sounds.tip");
+        layout(notifySoundsButton, contentX, 0, fullW);
+
+        this.notifyToastsButton = toggle("autofarm.option.notify_toasts",
+                draft.notifyToasts, value -> draft.notifyToasts = value,
+                "autofarm.notify_toasts.tip");
+        layout(notifyToastsButton, contentX, 0, fullW);
+
         // ---- 页脚 ----
         int btnW = (contentWidth - 8) / 3;
         addFooter(
@@ -876,6 +896,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.bone_meal" -> draft.boneMealBoost;
             case "autofarm.option.auto_supplies" -> draft.autoFetchSupplies;
             case "autofarm.option.auto_fetch_tool" -> draft.autoFetchTool;
+            case "autofarm.option.notify_sounds" -> draft.notifySounds;
+            case "autofarm.option.notify_toasts" -> draft.notifyToasts;
             default -> false;
         };
     }
@@ -1009,6 +1031,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(autoSuppliesButton, supply + ROW_FIRST + 2 * ROW_GAP);
         setRowY(boneMealThresholdButton, supply + ROW_FIRST + 3 * ROW_GAP);
         setRowY(autoFetchToolButton, supply + ROW_FIRST + 4 * ROW_GAP);
+
+        int notify = originY + SEC_NOTIFY_Y;
+        setRowY(notifySoundsButton, notify + ROW_FIRST);
+        setRowY(notifyToastsButton, notify + ROW_FIRST + ROW_GAP);
     }
 
     // ================= 自绘 =================
@@ -1059,6 +1085,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
         drawSection(context, originY, SEC_SUPPLY_Y, SEC_SUPPLY_H);
         drawHeader(context, originY, SEC_SUPPLY_Y, "autofarm.extras.section.supply");
+
+        drawSection(context, originY, SEC_NOTIFY_Y, SEC_NOTIFY_H);
+        drawHeader(context, originY, SEC_NOTIFY_Y, "autofarm.extras.section.notify");
 
         // 最底下那句总说明：强调「默认全关」，让第一次进来的人放心
         int shown = 0;
@@ -1129,6 +1158,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.autoFetchSupplies = false;
         draft.boneMealThreshold = 16;
         draft.autoFetchTool = false;
+        draft.notifySounds = false;
+        draft.notifyToasts = false;
         // 标签文字要跟着变，直接重建整页最省事
         rebuild();
     }
@@ -1193,6 +1224,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.autoFetchSupplies = old.autoFetchSupplies;
         draft.boneMealThreshold = old.boneMealThreshold;
         draft.autoFetchTool = old.autoFetchTool;
+        draft.notifySounds = old.notifySounds;
+        draft.notifyToasts = old.notifyToasts;
         backToParent();
     }
 

@@ -191,7 +191,7 @@
   "autofarm.message.toggled": "AutoFarm: %s",
   "autofarm.section.extras": "Extras",
   "autofarm.option.extras": "Extras…",
-  "autofarm.extras.tip": "Optional enhancements, all off by default: safety & stealth, anti-kick, behavior realism, work area, environment & rest, survival, tool upkeep, recovery & stats, dropped-item pickup, gourds & custom blocks, resource self-supply, plus a separate high-risk combat group. Nothing changes unless you turn it on.",
+  "autofarm.extras.tip": "Optional enhancements, all off by default: safety & stealth, anti-kick, behavior realism, work area, environment & rest, survival, tool upkeep, recovery & stats, dropped-item pickup, gourds & custom blocks, resource self-supply, convenience, plus a separate high-risk combat group. Nothing changes unless you turn it on.",
   "autofarm.extras.summary": "%s enabled (off by default)",
   "autofarm.extras.title": "Extras",
   "autofarm.extras.section.combat": "Combat (high risk)",
@@ -411,5 +411,14 @@
   "autofarm.stats.issues": "Issues",
   "autofarm.stats.clear": "Reset Totals",
   "autofarm.stats.clear_log": "Clear Log",
-  "autofarm.stats.done": "Done"
+  "autofarm.stats.done": "Done",
+  "key.autofarm.open_stats": "Open Statistics Panel",
+  "autofarm.extras.section.notify": "Convenience",
+  "autofarm.option.notify_sounds": "Sound Alerts",
+  "autofarm.notify_sounds.tip": "Play a sound on start, stop and errors. You won't hear it when away from the screen — pair it with a desktop toast.",
+  "autofarm.option.notify_toasts": "Desktop Toasts",
+  "autofarm.notify_toasts.tip": "Show a vanilla toast in the top-right on start, stop and errors. More reliable than sound when you're AFK.",
+  "autofarm.notify.start": "AutoFarm started",
+  "autofarm.notify.stop": "AutoFarm stopped",
+  "autofarm.notify.issue": "AutoFarm hit an error"
 }

@@ -135,9 +135,6 @@ public final class CropHarvester {
      */
     private static boolean extraBreak;
 
-    /** 这次目标是不是「对还没熟的作物撒骨粉」（附加功能，入口见 {@link #startBoneMeal}） */
-    private static boolean boneMeal;
-
     /** 这一株已经撒了几次骨粉 —— 受配置的 {@code boneMealLimit} 约束 */
     private static int boneMealUsed;
 
@@ -284,7 +281,6 @@ public final class CropHarvester {
         cropBlock = null;
         mode = CropRegistry.HarvestMode.SKIP;
         extraBreak = false;
-        boneMeal = false;
         boneMealUsed = 0;
         ticks = 0;
         nextActionAt = 0;
@@ -313,7 +309,6 @@ public final class CropHarvester {
             stage = Stage.DONE;
             return;
         }
-        boneMeal = true;
         boneMealUsed = 0;
         stage = CropRegistry.isGrowing(world.getBlockState(target))
                 ? Stage.BONE_MEAL
@@ -327,7 +322,6 @@ public final class CropHarvester {
         cropBlock = null;
         mode = CropRegistry.HarvestMode.SKIP;
         extraBreak = false;
-        boneMeal = false;
         boneMealUsed = 0;
         ticks = 0;
         nextActionAt = 0;
