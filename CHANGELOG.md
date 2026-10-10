@@ -6,6 +6,19 @@ AutoFarm 采用语义化版本：`主版本.次版本.修订号`。
 
 ---
 
+## 1.14.4
+
+**主题：细节调整 —— 转向瞬时连贯到位，取消每 tick 限速**
+
+- 之前所有转向都限速 18 度/tick（瞄准、走路、自救），匀速分段转反而机械。
+- 现在改为瞬时连贯到位（真人甩鼠标转视角就是连贯的）：
+  - `BlockInteractor.aimAt` / `turnTowards` 直接 setYaw/setPitch 到目标角度（保留防踢微颤）；
+  - `PathWalker` 走路转向直接朝落脚点；
+  - 删除 `Humanizer.turnLimit` 及其 `turnFactor/turnTarget/turnHold` 字段、`approach()` 方法，
+    和 `PathWalker` 里不再需要的 `MAX_TURN_PER_TICK / FORWARD_ANGLE / SPRINT_ALIGN_ANGLE` 常量。
+
+---
+
 ## 1.14.3
 
 **主题：细节调整 —— 落脚点按玩家来向选择，到站不再掉头**

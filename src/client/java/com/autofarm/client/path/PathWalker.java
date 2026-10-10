@@ -11,7 +11,6 @@ import net.minecraft.client.input.Input;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayDeque;
@@ -62,20 +61,6 @@ public final class PathWalker {
 
     /** 到达落脚点的竖直容差（格） */
     private static final double WAYPOINT_HEIGHT = 1.5;
-
-    /** 每 tick 最多转多少度 */
-    private static final float MAX_TURN_PER_TICK = 18.0f;
-
-    /** 朝向和目标方向差小于这个角度，才敢往前走 */
-    private static final float FORWARD_ANGLE = 50.0f;
-
-    /**
-     * 朝向和目标方向差小于这个角度，才敢开疾跑。
-     *
-     * <p>比 {@link #FORWARD_ANGLE} 严得多：疾跑带着惯性，大角度转弯时跑着会甩出去，
-     * 稳一点反而更快到。
-     */
-    private static final float SPRINT_ALIGN_ANGLE = 30.0f;
 
     /** 位置变化小于这个值就认为「这一 tick 没动」（格） */
     private static final double STUCK_EPSILON = 0.004;
@@ -372,17 +357,14 @@ public final class PathWalker {
         double dx = target.getX() + 0.5 - player.getX();
         double dz = target.getZ() + 0.5 - player.getZ();
 
-        // ---- 转向。Minecraft 的 yaw 0 度朝 +Z，顺时针增加，
-        //      所以朝向 (dx, dz) 需要的 yaw 是 atan2(-dx, dz) ----
-        float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-        float diff = MathHelper.wrapDegrees(desiredYaw - player.getYaw());
-        float turnLimit = Humanizer.turnLimit(MAX_TURN_PER_TICK);
-        player.setYaw(player.getYaw() + MathHelper.clamp(diff, -turnLimit, turnLimit));
+        // ---- 转向。瞬时连贯到位 —— 真人甩鼠标转视角就是连贯的，匀速分段转反而机械。
+        //      Minecraft 的 yaw 0 度朝 +Z，顺时针增加，所以朝向 (dx, dz) 需要的 yaw 是 atan2(-dx, dz) ----
+        player.setYaw((float) Math.toDegrees(Math.atan2(-dx, dz)));
 
         // ---- 卡住检测（只在「真的在往前走」时算，否则挖方块时会误判成卡住） ----
         Vec3d pos = player.getPos();
         double horizontal = Math.sqrt(dx * dx + dz * dz);
-        if (lastPos != null && Math.abs(diff) < FORWARD_ANGLE) {
+        if (lastPos != null) {
             double moved = Math.sqrt(Math.pow(pos.x - lastPos.x, 2) + Math.pow(pos.z - lastPos.z, 2));
             if (moved < STUCK_EPSILON && horizontal > 0.6) {
                 stuckTicks++;
@@ -397,14 +379,13 @@ public final class PathWalker {
             return;
         }
 
-        // ---- 输出意图：转得差不多了才往前走 ----
-        boolean facing = Math.abs(diff) < FORWARD_ANGLE;
+        // ---- 输出意图：转向已到位，往前走 ----
         boolean needJump = target.getY() > player.getY() + 0.4;
 
         // 防踢模式：偶尔「悬一下脚」，把前进和疾跑一起放下，让脚步声不再是等间距的。
         // 这一停是<b>我们自己</b>松的手，不是走不动，所以必须把卡住计数和上一帧位置清掉 ——
         // 否则下一 tick 它会把这次停顿当成「卡住了」，接着去跳、甚至放弃这个目标。
-        if (facing && Humanizer.stumble()) {
+        if (Humanizer.stumble()) {
             wantForward = false;
             wantJump = false;
             player.setSprinting(false);
@@ -413,14 +394,13 @@ public final class PathWalker {
             return;
         }
 
-        wantForward = facing;
+        wantForward = true;
         // 下一个落脚点比当前高，就是要上台阶 —— 得跳一下
-        wantJump = (facing && needJump) || stuckTicks >= STUCK_JUMP_TICKS;
+        wantJump = needJump || stuckTicks >= STUCK_JUMP_TICKS;
 
         // ---- 疾跑：赶路时替玩家按住 Ctrl ----
         // 防踢模式下再叠一层「疾跑间歇」：真人不会一路从头跑到尾，中间总要走两步喘口气
-        applySprint(player, facing && !needJump && Math.abs(diff) < SPRINT_ALIGN_ANGLE
-                && Humanizer.allowSprint());
+        applySprint(player, !needJump && Humanizer.allowSprint());
     }
 
     /**

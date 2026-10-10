@@ -43,9 +43,6 @@ import net.minecraft.util.math.Vec3d;
  */
 public final class BlockInteractor {
 
-    /** 每 tick 最多转多少度 */
-    private static final float MAX_TURN_PER_TICK = 18.0f;
-
     /**
      * 挖/放之前准星允许偏多少度。
      *
@@ -80,7 +77,7 @@ public final class BlockInteractor {
 
     // ================= 转向 / 瞄准 =================
 
-    /** 限速转向到某个水平坐标（每 tick 最多 {@value #MAX_TURN_PER_TICK} 度） */
+    /** 转向到某个水平坐标 —— 瞬时连贯到位，不再每 tick 限速 */
     public static void turnTowards(ClientPlayerEntity player, double targetX, double targetZ) {
         double dx = targetX - player.getX();
         double dz = targetZ - player.getZ();
@@ -89,7 +86,7 @@ public final class BlockInteractor {
         }
         // Minecraft 的 yaw 0 度朝 +Z，顺时针增加，所以朝向 (dx, dz) 需要的 yaw 是 atan2(-dx, dz)
         float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-        player.setYaw(approach(player.getYaw(), desiredYaw));
+        player.setYaw(desiredYaw);
     }
 
     /**
@@ -99,8 +96,8 @@ public final class BlockInteractor {
      * 但准星还停在水平线上 —— 挖方块时服务端看到的视角是「低头看着地面却报了个方块」，
      * 很扎眼。瞄准点取目标方块的<b>几何中心</b>，也就是真人会瞄的位置。
      *
-     * <p>同样是限速的（每 tick 最多 {@value #MAX_TURN_PER_TICK} 度），
-     * 所以视角是「转过去」的，不是瞬间甩过去的。
+     * <p>视角是<b>瞬时连贯</b>到位，不每 tick 限速 —— 真人甩鼠标转视角就是连贯的，
+     * 匀速分段转反而显得机械。
      */
     public static void aimAt(ClientPlayerEntity player, double x, double y, double z) {
         if (player == null) {
@@ -122,12 +119,8 @@ public final class BlockInteractor {
         // pitch 正值代表低头：目标在下方（dy < 0）时 -atan2 得到正值
         float desiredPitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal)) + Humanizer.aimPitchJitter();
 
-        float limit = Humanizer.turnLimit(MAX_TURN_PER_TICK);
-        player.setYaw(approach(player.getYaw(), desiredYaw));
-        player.setPitch(MathHelper.clamp(
-                player.getPitch() + MathHelper.clamp(
-                        desiredPitch - player.getPitch(), -limit, limit),
-                -90.0f, 90.0f));
+        player.setYaw(desiredYaw);
+        player.setPitch(MathHelper.clamp(desiredPitch, -90.0f, 90.0f));
     }
 
     /** 把准星对准某个方块的中心 */
@@ -172,19 +165,6 @@ public final class BlockInteractor {
     public static boolean isAimedAt(ClientPlayerEntity player, BlockPos pos, float tolerance) {
         return pos != null && isAimedAt(player, pos.getX() + 0.5, pos.getY() + 0.5,
                 pos.getZ() + 0.5, tolerance);
-    }
-
-    /**
-     * 从当前角度朝目标角度靠近一步。
-     *
-     * <p>步长是 {@value #MAX_TURN_PER_TICK} 度 —— 但防踢模式开着时，
-     * 这个上限本身会随时间小幅起伏（见 {@link Humanizer#turnLimit}），
-     * 于是转头速度不再是「每 tick 刚好 18 度」这种一眼假的匀速度。
-     */
-    private static float approach(float current, float desired) {
-        float diff = MathHelper.wrapDegrees(desired - current);
-        float limit = Humanizer.turnLimit(MAX_TURN_PER_TICK);
-        return current + MathHelper.clamp(diff, -limit, limit);
     }
 
     /** 玩家该朝向方块的哪一面（服务端要拿它校验，随便给一个会掉线） */

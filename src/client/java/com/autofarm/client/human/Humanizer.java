@@ -12,7 +12,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * <h2>它到底在防什么</h2>
  * 反作弊和服主判断「这是不是机器」，看的从来不是某一次操作，而是<b>模式</b>：
  * <ul>
- *   <li><b>转向是匀速的</b> —— 每 tick 都转满同一个角度，像云台；</li>
  *   <li><b>视角精确得像刻上去的</b> —— 准星永远停在方块正中心，一丝不差；</li>
  *   <li><b>节奏是节拍器</b> —— 每个动作之间的间隔完全一致，几十次都不差一 tick；</li>
  *   <li><b>脚步不会停</b> —— 从早跑到晚，从不走神、从不放慢；</li>
@@ -26,7 +25,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * 每一项措施都在「像人」和「有效率」之间做交换：顿一下脚、犹豫几 tick，
  * 换来的是更像人的节奏，代价是慢一点。所以做成四档，让玩家自己拿捏：
  * <ol>
- *   <li>{@link #LIGHT} 轻度 —— 只打散时序（转向速度、动作间隔）；</li>
+ *   <li>{@link #LIGHT} 轻度 —— 只打散时序（动作间隔）；</li>
  *   <li>{@link #MEDIUM} 中度 —— 再加上视角微颤、偶尔悬脚、疾跑间歇、动手前犹豫；</li>
  *   <li>{@link #HIGH} 强力 —— 再加上疲劳模型、落脚点偏移、偶尔不走最优路线。</li>
  * </ol>
@@ -34,7 +33,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * <h2>随机量为什么不能每 tick 现摇</h2>
  * 每 tick 独立摇一次随机数，得到的是一条「白噪声」：看起来跳来跳去，
  * 反而更像机械抖动。真人身上的随机量是<b>有惯性的</b> ——
- * 转速会缓慢地快一点、慢一点，手会朝一个方向偏一会儿再偏回来。
+ * 手会朝一个方向偏一会儿再偏回来。
  * 所以这里所有随机量都走「低频换目标 + 每 tick 朝目标平滑逼近」这套。
  */
 public final class Humanizer {
@@ -54,11 +53,6 @@ public final class Humanizer {
     private static final int FATIGUE_MAX = 6000;
 
     // ---- 每 tick 平滑推进的随机量（见类注释最后一段） ----
-
-    /** 当前的转向速度系数，1.0 = 不快不慢 */
-    private static float turnFactor = 1.0f;
-    private static float turnTarget = 1.0f;
-    private static int turnHold;
 
     /** 瞄准的微颤偏移（度）：yaw / pitch 各一份 */
     private static float aimYaw;
@@ -111,13 +105,6 @@ public final class Humanizer {
             return;
         }
 
-        // 转向速度：低频换一个目标值，再带惯性往过靠 —— 手转视角不是匀速的
-        if (--turnHold <= 0) {
-            turnTarget = 0.7f + rnd() * 0.6f; // 0.70 ~ 1.30 倍
-            turnHold = 8 + rndInt(28);
-        }
-        turnFactor += (turnTarget - turnFactor) * 0.3f;
-
         // 瞄准微颤：每 6~18 tick 换一次偏移方向，同样平滑逼近。
         // 幅度控制在 1.5 度以内 —— 交互容差是 8~12 度，抖不出界。
         if (--aimHold <= 0) {
@@ -156,9 +143,6 @@ public final class Humanizer {
 
     /** 退出世界 / 关掉开关时归零 */
     public static void reset() {
-        turnFactor = 1.0f;
-        turnTarget = 1.0f;
-        turnHold = 0;
         aimYaw = 0f;
         aimPitch = 0f;
         aimYawTarget = 0f;
@@ -170,11 +154,6 @@ public final class Humanizer {
     }
 
     // ================= 给各处调的钩子 =================
-
-    /** 转向速度上限（度/tick）。轻度及以上才打散 */
-    public static float turnLimit(float base) {
-        return atLeast(LIGHT) ? base * turnFactor : base;
-    }
 
     /** 该叠加到瞄准 yaw 上的轻微晃动（度） */
     public static float aimYawJitter() {
