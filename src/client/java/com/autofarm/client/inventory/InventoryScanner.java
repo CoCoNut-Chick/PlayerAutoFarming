@@ -441,7 +441,10 @@ public final class InventoryScanner {
         if (!(handler instanceof PlayerScreenHandler)) {
             return false;
         }
-        int source = playerSlotId(handler, hotbarIndex);
+        // SWAP 的语义是「把被点击的那一格和 button 指定的快捷栏格交换」，并把选中格切过去。
+        // 原版按数字键时，「被点击的那一格」就是当前 selectedSlot —— 所以 source 必须取
+        // 当前选中格，而不是目标格（取目标格就成了自己和自己交换，手持永远切不过去）。
+        int source = playerSlotId(handler, player.getInventory().selectedSlot);
         if (source < 0) {
             return false;
         }
