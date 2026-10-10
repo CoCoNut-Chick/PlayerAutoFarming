@@ -504,6 +504,66 @@ public class AutoFarmConfig {
     /** 工作时段终点（0~23 整点，不含这一小时）。默认 23 点 */
     public int scheduleEndHour = 23;
 
+    // ---- 战斗（高风险，默认关闭） ----
+    //
+    // 上面所有附加功能都在「不改变游戏规则」的框架里；这一组是唯一破例的：
+    // 它替玩家出手攻击生物，等于把常见的「杀戮光环（Kill Aura）」搬进模组。
+    // 所以它单独成组、默认关闭、面板上配警示色、打开前还要过一次风险确认屏。
+
+    /**
+     * 自动打怪（<b>高风险</b>，默认关闭）。
+     *
+     * <p>附近出现可攻击的生物时，模组会替玩家转向、出手。默认走
+     * <b>非暴力</b>路线（见 {@link #autoAttackViolent}）：先限速转头把准星压到目标身上，
+     * 转到位才挥手，而且两次出手之间留着随机间隔 —— 服务端看到的是一个
+     * 「会转头、会瞄准、节奏像人」的普通玩家。
+     *
+     * <p>打开它有几层代价，都在风险确认屏里写了：它属于作弊级功能，
+     * 在多人服务器使用可能被封；「非暴力」只是降低被识别的概率，
+     * 并不保证安全，而且因为出手慢，角色本身仍有被怪打死的风险。
+     */
+    public boolean autoAttack = false;
+
+    /**
+     * 暴力模式（默认关闭，<b>风险最高</b>）。
+     *
+     * <p>非暴力模式为了像人，每次出手前都要花几 tick 把头转过去，因此命中率与观感
+     * 都受转向速度限制。打开这一项之后，模组<b>不再转视角</b>：只要目标在攻击距离内，
+     * 保持当前视线直接出手 —— 服务端那一边看到的就是「玩家挥了下手，
+     * 某个并不在准星上的生物掉了血」。
+     *
+     * <p>这正是反作弊最敏感的模式，因此它是<b>二级开关</b>：
+     * 只有在 {@link #autoAttack} 打开之后才会出现，默认始终为关。
+     */
+    public boolean autoAttackViolent = false;
+
+    /**
+     * 两次出手之间的间隔（毫秒）。
+     *
+     * <p>无论哪种模式，实际间隔都会在这附近随机浮动（约 ±20%），
+     * 免得每一下都精确等时 —— 那是节拍器，不是人。
+     */
+    public int attackIntervalMs = 800;
+
+    /**
+     * 是否只打敌对生物（默认是）。
+     *
+     * <p>打开时只认原版那套「敌对生物」标记（僵尸、骷髅、苦力怕、蜘蛛……）；
+     * 关掉则会打所有生物（动物、村民这类也会算进去）。
+     * <b>玩家永远不在目标范围内</b> —— 打了玩家就是纯粹的 PVP 作弊，
+     * 和「保护自己收菜」是两回事，这条不开放。
+     */
+    public boolean attackHostileOnly = true;
+
+    /**
+     * 自动打怪的最大攻击距离（格）。
+     *
+     * <p>固定值、不开放给面板：原版实体交互距离就是 3.0 格，
+     * 超过这个数的攻击包服务端会直接拒收（等于白发一次），
+     * 还可能被记进「攻击距离异常」。这里再往内收一点留余量。
+     */
+    public static final double ATTACK_RANGE = 2.9;
+
     /** 当前启用了几个附加功能（主面板摘要行用） */
     public int extrasEnabledCount() {
         int n = 0;
@@ -518,6 +578,7 @@ public class AutoFarmConfig {
         if (reactionDelay) n++;
         if (idleLookAround) n++;
         if (scheduleEnabled) n++;
+        if (autoAttack) n++;
         return n;
     }
 
@@ -576,6 +637,10 @@ public class AutoFarmConfig {
         c.scheduleEnabled = this.scheduleEnabled;
         c.scheduleStartHour = this.scheduleStartHour;
         c.scheduleEndHour = this.scheduleEndHour;
+        c.autoAttack = this.autoAttack;
+        c.autoAttackViolent = this.autoAttackViolent;
+        c.attackIntervalMs = this.attackIntervalMs;
+        c.attackHostileOnly = this.attackHostileOnly;
         // 数组 / 列表都要深拷贝：不然「取消」时把草稿改回去，会把原配置一起改掉
         c.storageKeep = this.storageKeep == null ? null : this.storageKeep.clone();
         c.cropFilter = this.cropFilter == null ? new ArrayList<>() : new ArrayList<>(this.cropFilter);
@@ -668,6 +733,15 @@ public class AutoFarmConfig {
         if (scheduleStartHour > 23) scheduleStartHour = 23;
         if (scheduleEndHour < 0) scheduleEndHour = 0;
         if (scheduleEndHour > 23) scheduleEndHour = 23;
+
+        // 战斗：间隔拉回合理区间（比这更快就是在刷 CPS，比这更慢等于站着挨打）
+        if (attackIntervalMs < 300) attackIntervalMs = 300;
+        if (attackIntervalMs > 3000) attackIntervalMs = 3000;
+        // 暴力模式是「自动打怪」的子开关：主子项关着时它没有意义，一并收掉，
+        // 免得出现「自动打怪关着、暴力标记却留着」这种会让面板显示错乱的状态
+        if (!autoAttack) {
+            autoAttackViolent = false;
+        }
     }
 
     // ---- 描边外观的派生值 ----

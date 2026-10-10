@@ -1,5 +1,6 @@
 package com.autofarm.client.task;
 
+import com.autofarm.client.combat.KillAura;
 import com.autofarm.client.compat.CameraCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
@@ -407,6 +408,7 @@ public final class FarmTaskManager {
         safetySeenTicks = 0;
         Humanizer.reset();
         IdleLook.reset();
+        KillAura.reset();
     }
 
     /**
@@ -454,6 +456,7 @@ public final class FarmTaskManager {
             safetySeenTicks = 0;
             Humanizer.reset();
             IdleLook.reset();
+            KillAura.reset();
             state = FarmState.IDLE;
         } else {
             // 打开 → 假装「刚进入这个世界」：清空记忆、下一 tick 立刻重扫
@@ -520,6 +523,7 @@ public final class FarmTaskManager {
                 hesitatedAt = null;
                 pendingSafety = null;
                 safetySeenTicks = 0;
+                KillAura.reset();
             }
             lastEnabled = config.enabled;
         }
@@ -613,12 +617,28 @@ public final class FarmTaskManager {
         // （渲染本来就是按摄像机算的，所以画面不会错位）。
         boolean freecamPaused = config.pauseOnFreecam && CameraCompat.isCameraDetached();
 
+        // ================================================================
+        // 附加功能「自动打怪」（高风险，默认关闭）
+        // 排在「吃」和「安全停机」之后、「收割」之前：
+        //   - 已经因低血量 / 玩家靠近 / 背包满而停手时，paused 为真，这里自然不接管，
+        //     不会出现「说停手了却还在打怪」的矛盾；
+        //   - 它一旦接管，这一 tick 的寻路与收割都让路（见下面的 walkPaused 与优先级 2），
+        //     但<b>不丢弃</b>手上的路线 —— 目标清掉之后自动接着收。
+        // ================================================================
+        boolean fightingActive = config.enabled
+                && config.autoAttack
+                && !paused
+                && client.currentScreen == null
+                && !CameraCompat.isCameraDetached()
+                && KillAura.tick(client, config);
+
         // 玩家打开任意界面（背包、聊天、ESC……）、或者已经躺下了的时候立刻挂起，
-        // 否则角色会在你翻背包的时候自顾自走开。危险和背包满也走同一条「暂停」通道。
+        // 否则角色会在你翻背包的时候自顾自走开。危险、背包满、战斗也走同一条「暂停」通道。
         boolean walkPaused = client.currentScreen != null
                 || !client.player.isAlive()
                 || freecamPaused
-                || paused;
+                || paused
+                || fightingActive;
         PathWalker.setPaused(walkPaused);
 
         // 附加功能「空闲时环顾四周」：只有在「没在动、没在收、没在补给、也没因危险停机」时，
@@ -629,14 +649,16 @@ public final class FarmTaskManager {
                 && !stopForFull
                 && safety == null
                 && !offSchedule
+                && !fightingActive
                 && client.currentScreen == null
                 && !CameraCompat.isCameraDetached()
                 && !viewBusy);
 
         // ================================================================
         // 优先级 2 —— 补给 / 走 / 收
+        // 战斗接管时不走这一段：手在挥刀，走路和收割都让路
         // ================================================================
-        if (!paused) {
+        if (!paused && !fightingActive) {
             if (supplyPhase != SupplyPhase.NONE) {
                 if (!freecamPaused) {
                     runSupply(client, config);
@@ -709,6 +731,13 @@ public final class FarmTaskManager {
             // 背包满 / 安全保护：这一 tick 只扫描、不动角色。
             // 状态已经在上面设成「已暂停」了，别被后面的规划覆盖掉。
             state = FarmState.PAUSED;
+            return;
+        }
+
+        if (fightingActive) {
+            // 附加功能「自动打怪」：这一 tick 手在挥刀，不规划新路线、也不推进收割。
+            // 手上那条路线没有丢 —— 只是被 PathWalker 挂着，目标清掉后自动接着走。
+            state = FarmState.ATTACKING;
             return;
         }
 
@@ -1216,7 +1245,9 @@ public final class FarmTaskManager {
             }
         }
 
-        if (config.pauseWhenMobsNear) {
+        // 附加功能「自动打怪」开着时，这一条让位 —— 怪由 KillAura 处理。
+        // 不让位的话会出现自相矛盾的状态：它一边挥刀打怪、一边因为「附近有怪」而停手。
+        if (config.pauseWhenMobsNear && !config.autoAttack) {
             Box box = client.player.getBoundingBox().expand(AutoFarmConfig.MOB_ALERT_RADIUS);
             List<MobEntity> threats = client.world.getEntitiesByClass(MobEntity.class, box,
                     mob -> mob.isAlive() && mob instanceof Monster);
