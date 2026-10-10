@@ -100,8 +100,13 @@ public final class BlockInteractor {
         int ms = config == null ? 600 : config.turnDurationMs;
         if (ms != turnEaseForMs) {
             turnEaseForMs = ms;
-            double ticks = Math.max(1.0, ms / 50.0); // 一个 tick 50ms
-            turnEaseCache = (float) (1.0 - Math.pow(0.02, 1.0 / ticks));
+            if (ms <= 0) {
+                // 0 = 不缓动：系数 1.0，一步到位（等于关掉「平滑转向」这项真实感措施）
+                turnEaseCache = 1.0f;
+            } else {
+                double ticks = Math.max(1.0, ms / 50.0); // 一个 tick 50ms
+                turnEaseCache = (float) (1.0 - Math.pow(0.02, 1.0 / ticks));
+            }
         }
         return turnEaseCache;
     }

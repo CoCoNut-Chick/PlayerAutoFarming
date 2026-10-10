@@ -445,5 +445,7 @@
   "autofarm.notice.bone_meal_from_backpack": "骨粉催熟：骨粉已从背包换到快捷栏",
   "autofarm.option.turn_time": "转向时间",
   "autofarm.turn_time.tip": "视角转过去大约用多久：数值越小转得越干脆，越大越平滑。只影响观感，不影响能不能挖到东西。",
-  "autofarm.notice.out_of_bone_meal": "骨粉催熟：没有骨粉了，先去补给点取一趟"
+  "autofarm.notice.out_of_bone_meal": "骨粉催熟：没有骨粉了，先去补给点取一趟",
+  "autofarm.turn_time.hint": "范围 %s ~ %s 毫秒（0 = 不缓动，瞬间转向）",
+  "autofarm.turn_time.warn": "转向时间小于 %s 毫秒：转身太突兀，容易被看出是机器在操作"
 }

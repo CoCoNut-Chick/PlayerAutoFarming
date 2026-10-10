@@ -60,13 +60,19 @@ public class AutoFarmConfig {
      * 调小 → 转得又快又干脆；调大 → 转得慢而平滑。默认 600 毫秒左右，
      * 相当于「一次大角度转身用半秒多」。
      *
+     * <p><b>0 = 不缓动</b>：视角瞬间转到目标角度（等于取消「平滑转向」这项真实感措施）。
+     * 填得越小、转身越突兀，越容易被看出是机器在操作。
+     *
      * <p>它只影响转向的观感，不影响能不能挖到 —— 该命中的照样命中。
      */
     public int turnDurationMs = 600;
 
-    /** 转向时间的合法区间（毫秒） */
-    public static final int TURN_DURATION_MIN = 150;
+    /** 转向时间的合法区间（毫秒）。下限 0 = 不缓动 */
+    public static final int TURN_DURATION_MIN = 0;
     public static final int TURN_DURATION_MAX = 2000;
+
+    /** 转向时间低于这个值（且不为 0）就提示「转得太快、不够自然」 */
+    public static final int TURN_DURATION_SAFE_MS = 200;
 
     /** 种子不够时是否自动前往补给点取种子 */
     public boolean refillSeeds = true;

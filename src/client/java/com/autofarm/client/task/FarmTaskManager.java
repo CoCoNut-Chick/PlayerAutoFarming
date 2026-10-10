@@ -92,6 +92,20 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li><b>补种空耕地</b>：优先级最低，有富余才做。</li>
  * </ol>
  * 一句话：<b>保命 &gt; 战斗 &gt; 补给 &gt; 催熟 &gt; 收集 &gt; 补种</b>。
+ *
+ * <h2>「执行完上一步再进行下一步」是怎么保证的</h2>
+ * <p>上表是<b>每一 tick 重新从高到低判断</b>：谁先成立就做谁、其余让路。所以
+ * <b>高优先级随时能插入、打断低优先级</b>（interrupt）。
+ *
+ * <p>反过来，<b>低优先级不会打断正在进行的那一步</b>：
+ * <ul>
+ *   <li>走到半路时，只要当前目标还有效，扫描就<b>不重新排路线</b>
+ *       （见 {@code pending} 前的「严格按步执行」判断）—— 不会「走到一半改道」；</li>
+ *   <li>已经站到目标跟前、正握着它收割 / 种植时，任何重新规划都先让开
+ *       （{@link PathWalker#isHolding()}）；</li>
+ *   <li>连「骨粉告罄去补给」这种中断，也要求手上没在干半步活才触发。</li>
+ * </ul>
+ * 于是整体节奏是：<b>走一格 → 处理掉 → 再走一格</b>，只有更高优先级的突发事件会插进来。
  */
 public final class FarmTaskManager {
 
@@ -1134,7 +1148,12 @@ public final class FarmTaskManager {
                     && supplyCooldown == 0
                     && !boneMealTargets.isEmpty()
                     && InventoryScanner.findBoneMealSlotDeep(client.player) < 0;
-            if (boneMealRunDry && containerFor(config, SupplyPurpose.FETCH_TOOL) != null) {
+            // 还要「手上没在干半步活」才动手 —— 正握着某棵在收割 / 种植（或半途移动）时
+            // 先把它做完，再中断去补给（执行完上一步再进行下一步）。
+            if (boneMealRunDry
+                    && !PathWalker.isHolding()
+                    && !CropHarvester.isBusy()
+                    && containerFor(config, SupplyPurpose.FETCH_TOOL) != null) {
                 PathWalker.stop();
                 CropHarvester.reset();
                 // 这一趟就是去取骨粉：把补给需求点上，别让搬运层以为「什么都不用取」。
@@ -1358,6 +1377,23 @@ public final class FarmTaskManager {
         // 再把还在冷却里的目标跳过。全关时 failedUntil 恒为空，这两步都是空转。
         if (!failedUntil.isEmpty()) {
             failedUntil.entrySet().removeIf(entry -> entry.getValue() <= now);
+        }
+
+        // 严格按步执行：如果角色正沿路线走向某个目标，而那个目标<b>仍然有效</b>，
+        // 就不要用新路线打断它 —— 走完这一步、把它处理掉，再规划下一步。
+        // 这样角色不会「走到一半又改道」，全程是「走一格 → 处理 → 再走一格」。
+        // 上面所有更高优先级（吃 / 自救 / 危险 / 战斗 / 补给 / 骨粉告罄）都已提前 return，
+        // 所以这里只保护「低优先级不互相打断」；高优先级照样能插入。
+        if (PathWalker.isActive()) {
+            BlockPos walking = PathWalker.getCurrentTarget();
+            boolean stillValid = walking != null
+                    && (matureCrops.contains(walking) || emptyFarmland.contains(walking)
+                    || extraTargets.contains(walking) || boneMealTargets.contains(walking)
+                    || pickupTargets.contains(walking));
+            if (stillValid) {
+                state = FarmState.MOVING; // 状态照旧
+                return;
+            }
         }
 
         List<BlockPos> pending = new ArrayList<>();

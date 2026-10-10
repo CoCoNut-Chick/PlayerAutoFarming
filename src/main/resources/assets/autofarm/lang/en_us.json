@@ -445,5 +445,7 @@
   "autofarm.notice.bone_meal_from_backpack": "Bone meal moved from backpack to hotbar",
   "autofarm.option.turn_time": "Turn Time",
   "autofarm.turn_time.tip": "Roughly how long a view turn takes: smaller is snappier, larger is smoother. It only affects the feel, not whether you can actually mine.",
-  "autofarm.notice.out_of_bone_meal": "Bone meal: out of stock — heading to the supply point"
+  "autofarm.notice.out_of_bone_meal": "Bone meal: out of stock — heading to the supply point",
+  "autofarm.turn_time.hint": "Range %s–%s ms (0 = no easing, instant turn)",
+  "autofarm.turn_time.warn": "Turn time below %s ms: too abrupt — likely to look robotic"
 }

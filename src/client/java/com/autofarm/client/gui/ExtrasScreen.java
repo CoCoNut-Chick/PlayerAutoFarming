@@ -82,7 +82,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_ANTIKICK_H = ROW_FIRST + ANTIKICK_ROWS * ROW_GAP + 4;
     private static final int BEHAVIOR_ROWS = 7;
     private static final int SEC_BEHAVIOR_Y = SEC_ANTIKICK_Y + SEC_ANTIKICK_H + SECTION_GAP;
-    private static final int SEC_BEHAVIOR_H = ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 4;
+    /** 底部留一点给「转向时间过小」的警告行 */
+    private static final int SEC_BEHAVIOR_H = ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 16;
 
     // ---- 范围（tab 2）----
     private static final int WORKAREA_ROWS = 5;
@@ -128,8 +129,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] VIOLENCE_CHOICES = {0, 1, 2};
     private static final int[] ANTIKICK_LEVEL_CHOICES = {0, 1, 2, 3};
     private static final int[] REACTION_CHOICES = {4, 10, 20, 30};
-    /** 「丝滑转向时间」档位（毫秒）：越小转得越干脆，越大越平滑 */
-    private static final int[] TURN_DURATION_CHOICES = {200, 350, 600, 900, 1400, 2000};
     private static final int[] HOUR_CHOICES = buildHours();
     private static final int[] AREA_MODE_CHOICES = {0, 1};
     private static final int[] WORK_AREA_RADIUS_CHOICES = {8, 12, 16, 24, 32, 48};
@@ -182,7 +181,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget reactionDelayButton;
     private ButtonWidget reactionTimeButton;
     private ButtonWidget idleLookButton;
-    private ButtonWidget turnTimeButton;
+    private TextFieldWidget turnTimeField;
     private ButtonWidget scheduleButton;
     private ButtonWidget scheduleStartButton;
     private ButtonWidget scheduleEndButton;
@@ -403,12 +402,24 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.idle_look.tip");
         layout(idleLookButton, contentX, 0, fullW);
 
-        this.turnTimeButton = ButtonWidget.builder(turnTimeLabel(), b -> {
-            draft.turnDurationMs = nextChoice(TURN_DURATION_CHOICES, draft.turnDurationMs);
-            b.setMessage(turnTimeLabel());
-        }).dimensions(subX, 0, subW, ROW_H).build();
-        turnTimeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.turn_time.tip")));
-        addScrolling(turnTimeButton);
+        // 「丝滑转向时间」：填空，只收数字（毫秒）。0 = 不缓动。越界由 clamp() 兜底。
+        this.turnTimeField = new TextFieldWidget(this.textRenderer,
+                subX + INTERVAL_LABEL_W, 0, INTERVAL_FIELD_W, ROW_H, Text.empty());
+        turnTimeField.setMaxLength(4);
+        turnTimeField.setTextPredicate(s -> s.isEmpty() || s.matches("\\d{1,4}"));
+        turnTimeField.setText(Integer.toString(draft.turnDurationMs));
+        turnTimeField.setChangedListener(text -> {
+            if (text == null || text.isEmpty()) {
+                return;
+            }
+            try {
+                draft.turnDurationMs = Integer.parseInt(text);
+            } catch (NumberFormatException ignored) {
+                // 只收数字，理论上进不来
+            }
+        });
+        turnTimeField.setTooltip(Tooltip.of(Text.translatable("autofarm.turn_time.tip")));
+        addScrolling(turnTimeField);
 
         this.scheduleButton = toggle("autofarm.option.schedule",
                 draft.scheduleEnabled, value -> draft.scheduleEnabled = value,
@@ -958,7 +969,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(reactionDelayButton, behavior + ROW_FIRST);
         setRowY(reactionTimeButton, behavior + ROW_FIRST + ROW_GAP);
         setRowY(idleLookButton, behavior + ROW_FIRST + 2 * ROW_GAP);
-        setRowY(turnTimeButton, behavior + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(turnTimeField, behavior + ROW_FIRST + 3 * ROW_GAP);
         setRowY(scheduleButton, behavior + ROW_FIRST + 4 * ROW_GAP);
         setRowY(scheduleStartButton, behavior + ROW_FIRST + 5 * ROW_GAP);
         setRowY(scheduleEndButton, behavior + ROW_FIRST + 6 * ROW_GAP);
@@ -1054,6 +1065,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 drawHeader(context, originY, SEC_ANTIKICK_Y, "autofarm.extras.section.antikick");
                 drawSection(context, originY, SEC_BEHAVIOR_Y, SEC_BEHAVIOR_H);
                 drawHeader(context, originY, SEC_BEHAVIOR_Y, "autofarm.extras.section.behavior");
+                drawBehaviorExtras(context, originY);
             }
             case TAB_AREA -> {
                 drawSection(context, originY, SEC_WORKAREA_Y, SEC_WORKAREA_H);
@@ -1305,9 +1317,24 @@ public class ExtrasScreen extends ScrollPanelScreen {
                         String.format("%.1f", draft.reactionDelayTicks / 20.0)));
     }
 
-    private Text turnTimeLabel() {
-        return optionLabel("autofarm.option.turn_time",
-                Text.translatable("autofarm.value.millis", draft.turnDurationMs));
+    /** 「行为真实感」分区的自绘部分：转向时间的标签、范围提示、过小警告 */
+    private void drawBehaviorExtras(DrawContext context, int originY) {
+        int behavior = originY + SEC_BEHAVIOR_Y;
+        int row = behavior + ROW_FIRST + 3 * ROW_GAP;
+        context.drawTextWithShadow(this.textRenderer,
+                Text.translatable("autofarm.option.turn_time"),
+                contentX + 4, row + 5, 0xFFFFFFFF);
+        context.drawTextWithShadow(this.textRenderer,
+                Text.translatable("autofarm.turn_time.hint",
+                        AutoFarmConfig.TURN_DURATION_MIN, AutoFarmConfig.TURN_DURATION_MAX),
+                contentX + INTERVAL_LABEL_W + INTERVAL_FIELD_W + 8, row + 5, COLOR_HINT);
+        // 0 是「不缓动」，不提示（那是玩家主动去掉真实感）；但 1 ~ 阈值 之间属于
+        // 「又快又突兀」，提示一句：这样转很容易被看出是机器在动视角。
+        if (draft.turnDurationMs > 0 && draft.turnDurationMs < AutoFarmConfig.TURN_DURATION_SAFE_MS) {
+            context.drawTextWithShadow(this.textRenderer,
+                    Text.translatable("autofarm.turn_time.warn", AutoFarmConfig.TURN_DURATION_SAFE_MS),
+                    contentX + 4, behavior + ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 2, COLOR_DANGER);
+        }
     }
 
     private Text scheduleStartLabel() {
