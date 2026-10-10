@@ -504,6 +504,105 @@ public class AutoFarmConfig {
     /** 工作时段终点（0~23 整点，不含这一小时）。默认 23 点 */
     public int scheduleEndHour = 23;
 
+    // ---- 工作范围（B 组①：圈定自己的地） ----
+
+    /**
+     * 圈定工作区域：只在划定的范围里干活（默认关闭）。
+     *
+     * <p>上面那些措施管的是「像不像人」，这一项管的是两件更朴素的事 ——
+     * <b>别跑丢、也别踩到别人的田</b>。打开之后，模组只认落在工作区域里的目标：
+     * 圈外的成熟作物不去收，圈外的掉落物也不去捡。人一旦自己走出这个圈，
+     * 模组会先停手，再沿一条回程路线把人带回区域中心附近。
+     *
+     * <p>区域有两种圈法（{@link #workAreaMode}）：
+     * <ul>
+     *   <li><b>圆形</b>（{@link #AREA_MODE_RADIUS}）—— 记一个中心点，配一个半径，
+     *       适合「以我家这口箱子为中心的一片地」；判定只看水平距离（X/Z），上下坡不影响；</li>
+     *   <li><b>两点矩形</b>（{@link #AREA_MODE_BOX}）—— 在一头记角点 A、另一头记角点 B，
+     *       两点拉出一个长方体，适合「我那几垄是规规矩矩的长条」；判定含高度（Y）。</li>
+     * </ul>
+     * 两种模式共用 {@link #workAreaX}/{@link #workAreaY}/{@link #workAreaZ} 这组坐标：
+     * 圆形模式里它是中心，矩形模式里它是角点 A（角点 B 另有三个字段）。
+     * 坐标没记全时功能一律不生效（免得「开了功能却满世界跑」）。
+     */
+    public boolean workAreaEnabled = false;
+
+    /** 圆形：以「中心 + 半径」圈定 */
+    public static final int AREA_MODE_RADIUS = 0;
+    /** 矩形：以「角点 A + 角点 B」圈定 */
+    public static final int AREA_MODE_BOX = 1;
+    /** 模式档数（面板上的循环按钮用） */
+    public static final int AREA_MODE_COUNT = 2;
+
+    /** 范围方式，取值是上面两个 {@code AREA_MODE_*} 常量 */
+    public int workAreaMode = AREA_MODE_RADIUS;
+
+    /**
+     * 工作区域的第一个坐标点。
+     * 圆形模式 = 中心点；矩形模式 = 角点 A。null = 未设置。
+     */
+    public Integer workAreaX = null;
+    /** 第一个坐标点的 Y */
+    public Integer workAreaY = null;
+    /** 第一个坐标点的 Z */
+    public Integer workAreaZ = null;
+
+    /** 圆形模式的半径（格）。默认 24 —— 一般一块田足够，又不至于把邻居的地也圈进来 */
+    public int workAreaRadius = 24;
+
+    /** 矩形模式的角点 B（角点 A 见 {@link #workAreaX} 等）。null = 未设置 */
+    public Integer workAreaX2 = null;
+    /** 角点 B 的 Y */
+    public Integer workAreaY2 = null;
+    /** 角点 B 的 Z */
+    public Integer workAreaZ2 = null;
+
+    /** 工作区域半径的合法区间（格） */
+    public static final int WORK_AREA_RADIUS_MIN = 4;
+    public static final int WORK_AREA_RADIUS_MAX = 96;
+
+    // ---- 环境与作息（B 组②③：看天干活 + 干够就收工） ----
+
+    /**
+     * 仅在白天工作（默认关闭）。
+     *
+     * <p>夜里怪物多，而且「一个每天凌晨都在线劳作的角色」本身就是破绽。
+     * 打开后只在白天收割，日落即停手、天亮自动继续。用的是世界时间
+     * （{@code world.isDay()}），不是本机时间 —— 你调过世界时间也没用。
+     */
+    public boolean workDaylightOnly = false;
+
+    /**
+     * 仅在晴天工作（默认关闭）。
+     *
+     * <p>下雨天本来就少见有人在外面割麦子，而且雨天视野差、容易漏看怪。
+     * 打开后下雨（含雷暴）时停手，放晴自动继续。
+     */
+    public boolean workClearWeatherOnly = false;
+
+    /**
+     * 疲劳收工：连续工作太久就整场停下来（默认关闭）。
+     *
+     * <p>它和上面的 {@link #randomRest}（定时随机休息）不是一个尺度：
+     * 定时休息是干 {@link #restIntervalMinutes} 分钟就歇 {@link #restDurationSeconds} 秒，
+     * 属于「中途喝口水」；疲劳收工管的是<b>整场作业</b> —— 连续干
+     * {@link #fatigueWorkMinutes} 分钟之后彻底收工，休息 {@link #fatigueRestMinutes}
+     * 分钟（设为 0 则是「等你自己来开」）才重新上工。
+     *
+     * <p>它同时是省心和安全阀：一场下来连着干四五个小时、人却不吃不喝不挪窝，
+     * 既容易被看出不对，也容易在你没盯屏幕的时候出事。
+     */
+    public boolean fatigueStop = false;
+
+    /** 连续工作多少分钟后收工（分钟）。默认 60 */
+    public int fatigueWorkMinutes = 60;
+
+    /**
+     * 收工后休息多久自动上工（分钟）。<b>0 = 手动</b>：一直停着，直到你把它
+     * （或总开关）关掉再打开。
+     */
+    public int fatigueRestMinutes = 15;
+
     // ---- 战斗（高风险，默认关闭） ----
     //
     // 上面所有附加功能都在「不改变游戏规则」的框架里；这一组是唯一破例的：
@@ -628,6 +727,10 @@ public class AutoFarmConfig {
         if (reactionDelay) n++;
         if (idleLookAround) n++;
         if (scheduleEnabled) n++;
+        if (workAreaEnabled) n++;
+        if (workDaylightOnly) n++;
+        if (workClearWeatherOnly) n++;
+        if (fatigueStop) n++;
         if (autoAttack) n++;
         return n;
     }
@@ -687,6 +790,20 @@ public class AutoFarmConfig {
         c.scheduleEnabled = this.scheduleEnabled;
         c.scheduleStartHour = this.scheduleStartHour;
         c.scheduleEndHour = this.scheduleEndHour;
+        c.workAreaEnabled = this.workAreaEnabled;
+        c.workAreaMode = this.workAreaMode;
+        c.workAreaX = this.workAreaX;
+        c.workAreaY = this.workAreaY;
+        c.workAreaZ = this.workAreaZ;
+        c.workAreaRadius = this.workAreaRadius;
+        c.workAreaX2 = this.workAreaX2;
+        c.workAreaY2 = this.workAreaY2;
+        c.workAreaZ2 = this.workAreaZ2;
+        c.workDaylightOnly = this.workDaylightOnly;
+        c.workClearWeatherOnly = this.workClearWeatherOnly;
+        c.fatigueStop = this.fatigueStop;
+        c.fatigueWorkMinutes = this.fatigueWorkMinutes;
+        c.fatigueRestMinutes = this.fatigueRestMinutes;
         c.autoAttack = this.autoAttack;
         c.autoAttackViolent = this.autoAttackViolent;
         c.attackIntervalMs = this.attackIntervalMs;
@@ -786,6 +903,31 @@ public class AutoFarmConfig {
         if (scheduleEndHour < 0) scheduleEndHour = 0;
         if (scheduleEndHour > 23) scheduleEndHour = 23;
 
+        // 工作区域：半径拉回合法区间；模式认不出来的退回圆形
+        if (workAreaRadius < WORK_AREA_RADIUS_MIN) workAreaRadius = WORK_AREA_RADIUS_MIN;
+        if (workAreaRadius > WORK_AREA_RADIUS_MAX) workAreaRadius = WORK_AREA_RADIUS_MAX;
+        if (workAreaMode < 0 || workAreaMode >= AREA_MODE_COUNT) {
+            workAreaMode = AREA_MODE_RADIUS;
+        }
+        // 坐标点「要么三个都有、要么三个都没有」——只设了一半的算作没设，
+        // 免得 hasWorkArea() 半真半假。中心/角点 A 与角点 B 各查一遍。
+        if (!complete(workAreaX, workAreaY, workAreaZ)) {
+            workAreaX = null;
+            workAreaY = null;
+            workAreaZ = null;
+        }
+        if (!complete(workAreaX2, workAreaY2, workAreaZ2)) {
+            workAreaX2 = null;
+            workAreaY2 = null;
+            workAreaZ2 = null;
+        }
+
+        // 疲劳收工：连干多久、歇多久，都拉回合理区间（0 分钟休息 = 手动，是合法值）
+        if (fatigueWorkMinutes < 5) fatigueWorkMinutes = 5;
+        if (fatigueWorkMinutes > 480) fatigueWorkMinutes = 480;
+        if (fatigueRestMinutes < 0) fatigueRestMinutes = 0;
+        if (fatigueRestMinutes > 480) fatigueRestMinutes = 480;
+
         // 战斗：间隔 / 距离都拉回合法区间。注意下界放得很低（50ms）——
         // 「保命」档本来就要尽量快，所以这里只做「能不能填」的兜底，
         // 「该不该这么快」交给面板上的红色警示和风险确认屏去提醒。
@@ -846,5 +988,92 @@ public class AutoFarmConfig {
     public String supplyPointText() {
         if (!hasSupplyPoint()) return null;
         return supplyX + ", " + supplyY + ", " + supplyZ;
+    }
+
+    // ---- 工作区域（B 组①） ----
+
+    /**
+     * 工作区域是否已经设置完整。
+     *
+     * <p>按当前模式判：圆形要一个中心点（三个坐标都在），矩形要两个角点（六个都在）。
+     * 任何一处缺失都算「没设」，这时功能不生效。
+     */
+    public boolean hasWorkArea() {
+        if (!complete(workAreaX, workAreaY, workAreaZ)) {
+            return false;
+        }
+        return workAreaMode != AREA_MODE_BOX || complete(workAreaX2, workAreaY2, workAreaZ2);
+    }
+
+    /** 三个坐标是不是「要么都有、要么都没有」 */
+    private static boolean complete(Integer x, Integer y, Integer z) {
+        return (x != null && y != null && z != null) || (x == null && y == null && z == null);
+    }
+
+    /** 记下第一个坐标点（圆形 = 中心、矩形 = 角点 A） */
+    public void setWorkArea(int x, int y, int z) {
+        workAreaX = x;
+        workAreaY = y;
+        workAreaZ = z;
+    }
+
+    /** 记下矩形模式的角点 B */
+    public void setWorkAreaSecond(int x, int y, int z) {
+        workAreaX2 = x;
+        workAreaY2 = y;
+        workAreaZ2 = z;
+    }
+
+    /** 清掉工作区域的坐标（两个角点一起清） */
+    public void clearWorkArea() {
+        workAreaX = null;
+        workAreaY = null;
+        workAreaZ = null;
+        workAreaX2 = null;
+        workAreaY2 = null;
+        workAreaZ2 = null;
+    }
+
+    /** 第一个坐标点的可读文本，未设置时返回 null */
+    public String workAreaText() {
+        if (!complete(workAreaX, workAreaY, workAreaZ) || workAreaX == null) {
+            return null;
+        }
+        return workAreaX + ", " + workAreaY + ", " + workAreaZ;
+    }
+
+    /** 矩形模式角点 B 的可读文本，未设置时返回 null */
+    public String workAreaSecondText() {
+        if (!complete(workAreaX2, workAreaY2, workAreaZ2) || workAreaX2 == null) {
+            return null;
+        }
+        return workAreaX2 + ", " + workAreaY2 + ", " + workAreaZ2;
+    }
+
+    /**
+     * 这个世界坐标在不在工作区域里。
+     *
+     * <p>没开这个功能、或者坐标还没记全，一律算「在里面」——
+     * 功能关着的时候不能影响任何既有行为。
+     *
+     * <p>圆形模式只看水平（X/Z），竖直方向不限：地块通常是平的，
+     * 把高度也算进去只会让上下坡误判。矩形模式是完整的长方体，三个轴都算。
+     */
+    public boolean insideWorkArea(double x, double y, double z) {
+        if (!workAreaEnabled || !hasWorkArea()) {
+            return true;
+        }
+        if (workAreaMode == AREA_MODE_BOX) {
+            int bx = (int) Math.floor(x);
+            int by = (int) Math.floor(y);
+            int bz = (int) Math.floor(z);
+            return bx >= Math.min(workAreaX, workAreaX2) && bx <= Math.max(workAreaX, workAreaX2)
+                    && by >= Math.min(workAreaY, workAreaY2) && by <= Math.max(workAreaY, workAreaY2)
+                    && bz >= Math.min(workAreaZ, workAreaZ2) && bz <= Math.max(workAreaZ, workAreaZ2);
+        }
+        double dx = x - (workAreaX + 0.5);
+        double dz = z - (workAreaZ + 0.5);
+        double r = workAreaRadius;
+        return dx * dx + dz * dz <= r * r;
     }
 }

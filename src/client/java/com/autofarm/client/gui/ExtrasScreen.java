@@ -9,6 +9,7 @@ import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.math.BlockPos;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +26,7 @@ import java.util.List;
  * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
  * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
  *
- * <h2>七段</h2>
+ * <h2>九段</h2>
  * <ol>
  *   <li><b>战斗（高风险）</b> —— 自动打怪、目标范围、攻击间隔（输入框）、攻击距离、
  *       暴力模式与暴力程度。默认关闭、警示配色、开启与调高参数都要过风险确认屏，
@@ -33,6 +34,9 @@ import java.util.List;
  *   <li><b>安全与隐蔽</b> —— 玩家接近停机、拟人化节奏、定时随机休息；</li>
  *   <li><b>防踢模式</b> —— 一整套「把机器味抹掉」的措施，带四档强度；</li>
  *   <li><b>行为真实感</b> —— 危险反应延迟、空闲时环顾四周、仅在指定时段工作；</li>
+ *   <li><b>工作范围</b> —— 圈定自己那块地（圆形或两点矩形），区域外的目标不碰，
+ *       人走出区域会自动走回来；</li>
+ *   <li><b>环境与作息</b> —— 仅白天 / 仅晴天，以及「连续工作到上限就收工」的疲劳档；</li>
  *   <li><b>工具维护</b> —— 工具耐久自动换新；</li>
  *   <li><b>容错与统计</b> —— 失败目标暂时拉黑、HUD 详细统计；</li>
  *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物。</li>
@@ -81,8 +85,21 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_BEHAVIOR_Y = SEC_ANTIKICK_Y + SEC_ANTIKICK_H + SECTION_GAP;
     private static final int SEC_BEHAVIOR_H = ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 4;
 
+    /**
+     * 工作范围：开关、方式、参数（圆形 = 半径 + 记录中心；矩形 = 记录 A + 记录 B），
+     * 最后一行留给一句自绘说明。两种方式的参数行共占同样两行，用显隐切换。
+     */
+    private static final int WORKAREA_ROWS = 5;
+    private static final int SEC_WORKAREA_Y = SEC_BEHAVIOR_Y + SEC_BEHAVIOR_H + SECTION_GAP;
+    private static final int SEC_WORKAREA_H = ROW_FIRST + WORKAREA_ROWS * ROW_GAP + 4;
+
+    /** 环境与作息：仅白天、仅晴天、疲劳收工 + 两个参数行 */
+    private static final int ENV_ROWS = 5;
+    private static final int SEC_ENV_Y = SEC_WORKAREA_Y + SEC_WORKAREA_H + SECTION_GAP;
+    private static final int SEC_ENV_H = ROW_FIRST + ENV_ROWS * ROW_GAP + 4;
+
     private static final int TOOL_ROWS = 2;
-    private static final int SEC_TOOL_Y = SEC_BEHAVIOR_Y + SEC_BEHAVIOR_H + SECTION_GAP;
+    private static final int SEC_TOOL_Y = SEC_ENV_Y + SEC_ENV_H + SECTION_GAP;
     private static final int SEC_TOOL_H = ROW_FIRST + TOOL_ROWS * ROW_GAP + 4;
 
     private static final int MISC_ROWS = 3;
@@ -114,6 +131,14 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] REACTION_CHOICES = {4, 10, 20, 30};
     /** 工作时段：0~23 整点（循环按钮在这 24 档之间轮换） */
     private static final int[] HOUR_CHOICES = buildHours();
+    /** 工作范围：范围方式的档位（0 = 圆形、1 = 两点矩形，和 AutoFarmConfig 的常量一致） */
+    private static final int[] AREA_MODE_CHOICES = {0, 1};
+    /** 工作范围：半径档位（格） */
+    private static final int[] WORK_AREA_RADIUS_CHOICES = {8, 12, 16, 24, 32, 48};
+    /** 疲劳收工：连续工作上限的档位（分钟） */
+    private static final int[] FATIGUE_WORK_CHOICES = {15, 30, 60, 120, 240};
+    /** 疲劳收工：休息时长的档位（分钟）；0 = 手动恢复 */
+    private static final int[] FATIGUE_REST_CHOICES = {0, 5, 10, 15, 30, 60};
 
     private static int[] buildHours() {
         int[] hours = new int[24];
@@ -154,6 +179,17 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget scheduleButton;
     private ButtonWidget scheduleStartButton;
     private ButtonWidget scheduleEndButton;
+    private ButtonWidget workAreaButton;
+    private ButtonWidget workAreaModeButton;
+    private ButtonWidget workAreaRadiusButton;
+    private ButtonWidget workAreaCenterButton;
+    private ButtonWidget workAreaCornerAButton;
+    private ButtonWidget workAreaCornerBButton;
+    private ButtonWidget daylightButton;
+    private ButtonWidget weatherButton;
+    private ButtonWidget fatigueButton;
+    private ButtonWidget fatigueWorkButton;
+    private ButtonWidget fatigueRestButton;
 
     public ExtrasScreen(Screen parent, AutoFarmConfig sharedDraft) {
         super(parent, Text.translatable("autofarm.extras.title"));
@@ -302,6 +338,86 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         scheduleEndButton.setTooltip(Tooltip.of(Text.translatable("autofarm.schedule_end.tip")));
         addScrolling(scheduleEndButton);
+
+        // ---- 工作范围 ----
+        // 两种圈法：圆形（中心 + 半径）和两点矩形（角点 A + 角点 B）。
+        // 两种方式的参数行共用同样两行，靠 relayout() 里的 visible 切换 ——
+        // 这样分区的行数不随方式变，滚动手感稳定。
+
+        this.workAreaButton = toggle("autofarm.option.work_area",
+                draft.workAreaEnabled, value -> draft.workAreaEnabled = value,
+                "autofarm.work_area.tip");
+        layout(workAreaButton, contentX, 0, fullW);
+
+        this.workAreaModeButton = ButtonWidget.builder(workAreaModeLabel(), b -> {
+            draft.workAreaMode = nextChoice(AREA_MODE_CHOICES, draft.workAreaMode);
+            // 换方式要重建整页：半径行和角点行的显隐跟着变，标签也得重算
+            rebuild();
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        workAreaModeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.work_area_mode.tip")));
+        addScrolling(workAreaModeButton);
+
+        this.workAreaRadiusButton = ButtonWidget.builder(workAreaRadiusLabel(), b -> {
+            draft.workAreaRadius = nextChoice(WORK_AREA_RADIUS_CHOICES, draft.workAreaRadius);
+            b.setMessage(workAreaRadiusLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        workAreaRadiusButton.setTooltip(Tooltip.of(Text.translatable("autofarm.work_area_radius.tip")));
+        addScrolling(workAreaRadiusButton);
+
+        this.workAreaCenterButton = ButtonWidget.builder(workAreaCenterLabel(), b -> {
+            recordCurrentPos(false);
+            b.setMessage(workAreaCenterLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        workAreaCenterButton.setTooltip(Tooltip.of(Text.translatable("autofarm.work_area.record.tip")));
+        addScrolling(workAreaCenterButton);
+
+        this.workAreaCornerAButton = ButtonWidget.builder(workAreaCornerALabel(), b -> {
+            recordCurrentPos(false);
+            b.setMessage(workAreaCornerALabel());
+            if (workAreaCornerBButton != null) {
+                workAreaCornerBButton.setMessage(workAreaCornerBLabel());
+            }
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        workAreaCornerAButton.setTooltip(Tooltip.of(Text.translatable("autofarm.work_area.corner_a.tip")));
+        addScrolling(workAreaCornerAButton);
+
+        this.workAreaCornerBButton = ButtonWidget.builder(workAreaCornerBLabel(), b -> {
+            recordCurrentPos(true);
+            b.setMessage(workAreaCornerBLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        workAreaCornerBButton.setTooltip(Tooltip.of(Text.translatable("autofarm.work_area.corner_b.tip")));
+        addScrolling(workAreaCornerBButton);
+
+        // ---- 环境与作息 ----
+
+        this.daylightButton = toggle("autofarm.option.daylight",
+                draft.workDaylightOnly, value -> draft.workDaylightOnly = value,
+                "autofarm.daylight.tip");
+        layout(daylightButton, contentX, 0, fullW);
+
+        this.weatherButton = toggle("autofarm.option.clear_weather",
+                draft.workClearWeatherOnly, value -> draft.workClearWeatherOnly = value,
+                "autofarm.clear_weather.tip");
+        layout(weatherButton, contentX, 0, fullW);
+
+        this.fatigueButton = toggle("autofarm.option.fatigue",
+                draft.fatigueStop, value -> draft.fatigueStop = value,
+                "autofarm.fatigue.tip");
+        layout(fatigueButton, contentX, 0, fullW);
+
+        this.fatigueWorkButton = ButtonWidget.builder(fatigueWorkLabel(), b -> {
+            draft.fatigueWorkMinutes = nextChoice(FATIGUE_WORK_CHOICES, draft.fatigueWorkMinutes);
+            b.setMessage(fatigueWorkLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        fatigueWorkButton.setTooltip(Tooltip.of(Text.translatable("autofarm.fatigue_work.tip")));
+        addScrolling(fatigueWorkButton);
+
+        this.fatigueRestButton = ButtonWidget.builder(fatigueRestLabel(), b -> {
+            draft.fatigueRestMinutes = nextChoice(FATIGUE_REST_CHOICES, draft.fatigueRestMinutes);
+            b.setMessage(fatigueRestLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        fatigueRestButton.setTooltip(Tooltip.of(Text.translatable("autofarm.fatigue_rest.tip")));
+        addScrolling(fatigueRestButton);
 
         // ---- 工具维护 ----
 
@@ -569,6 +685,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.reaction_delay" -> draft.reactionDelay;
             case "autofarm.option.idle_look" -> draft.idleLookAround;
             case "autofarm.option.schedule" -> draft.scheduleEnabled;
+            case "autofarm.option.work_area" -> draft.workAreaEnabled;
+            case "autofarm.option.daylight" -> draft.workDaylightOnly;
+            case "autofarm.option.clear_weather" -> draft.workClearWeatherOnly;
+            case "autofarm.option.fatigue" -> draft.fatigueStop;
             default -> false;
         };
     }
@@ -594,6 +714,21 @@ public class ExtrasScreen extends ScrollPanelScreen {
         if (violenceLevelButton != null) {
             violenceLevelButton.visible = violenceLevelButton.visible
                     && draft.autoAttack && draft.autoAttackViolent;
+        }
+        // 工作范围的两种圈法共用同样两行：圆形显示「半径 / 记录中心」，
+        // 矩形显示「记录角点 A / 记录角点 B」，同一时刻只让一套露出来
+        boolean box = draft.workAreaMode == AutoFarmConfig.AREA_MODE_BOX;
+        if (workAreaRadiusButton != null) {
+            workAreaRadiusButton.visible = workAreaRadiusButton.visible && !box;
+        }
+        if (workAreaCenterButton != null) {
+            workAreaCenterButton.visible = workAreaCenterButton.visible && !box;
+        }
+        if (workAreaCornerAButton != null) {
+            workAreaCornerAButton.visible = workAreaCornerAButton.visible && box;
+        }
+        if (workAreaCornerBButton != null) {
+            workAreaCornerBButton.visible = workAreaCornerBButton.visible && box;
         }
     }
 
@@ -627,6 +762,23 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(scheduleStartButton, behavior + ROW_FIRST + 4 * ROW_GAP);
         setRowY(scheduleEndButton, behavior + ROW_FIRST + 5 * ROW_GAP);
 
+        int work = originY + SEC_WORKAREA_Y;
+        setRowY(workAreaButton, work + ROW_FIRST);
+        setRowY(workAreaModeButton, work + ROW_FIRST + ROW_GAP);
+        // 第 3 行：圆形 = 半径，矩形 = 角点 A（同一行，用 visible 二选一）
+        setRowY(workAreaRadiusButton, work + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(workAreaCornerAButton, work + ROW_FIRST + 2 * ROW_GAP);
+        // 第 4 行：圆形 = 记录中心，矩形 = 角点 B
+        setRowY(workAreaCenterButton, work + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(workAreaCornerBButton, work + ROW_FIRST + 3 * ROW_GAP);
+
+        int env = originY + SEC_ENV_Y;
+        setRowY(daylightButton, env + ROW_FIRST);
+        setRowY(weatherButton, env + ROW_FIRST + ROW_GAP);
+        setRowY(fatigueButton, env + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(fatigueWorkButton, env + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(fatigueRestButton, env + ROW_FIRST + 4 * ROW_GAP);
+
         int tool = originY + SEC_TOOL_Y;
         setRowY(replaceToolButton, tool + ROW_FIRST);
         setRowY(durabilityButton, tool + ROW_FIRST + ROW_GAP);
@@ -657,6 +809,16 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
         drawSection(context, originY, SEC_BEHAVIOR_Y, SEC_BEHAVIOR_H);
         drawHeader(context, originY, SEC_BEHAVIOR_Y, "autofarm.extras.section.behavior");
+
+        drawSection(context, originY, SEC_WORKAREA_Y, SEC_WORKAREA_H);
+        drawHeader(context, originY, SEC_WORKAREA_Y, "autofarm.extras.section.workarea");
+        // 最后一行自绘一句说明：区域外的目标不收、人走出去会自动返回
+        context.drawTextWithShadow(this.textRenderer,
+                Text.translatable("autofarm.work_area.hint"),
+                contentX + INDENT + 4, originY + SEC_WORKAREA_Y + ROW_FIRST + 4 * ROW_GAP + 5, COLOR_HINT);
+
+        drawSection(context, originY, SEC_ENV_Y, SEC_ENV_H);
+        drawHeader(context, originY, SEC_ENV_Y, "autofarm.extras.section.environment");
 
         drawSection(context, originY, SEC_TOOL_Y, SEC_TOOL_H);
         drawHeader(context, originY, SEC_TOOL_Y, "autofarm.extras.section.tool");
@@ -700,6 +862,15 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.scheduleEnabled = false;
         draft.scheduleStartHour = 8;
         draft.scheduleEndHour = 23;
+        // 工作范围：只把开关和参数复原，坐标留着 —— 那是玩家亲手记的，不该被「全部关闭」抹掉
+        draft.workAreaEnabled = false;
+        draft.workAreaMode = AutoFarmConfig.AREA_MODE_RADIUS;
+        draft.workAreaRadius = 24;
+        draft.workDaylightOnly = false;
+        draft.workClearWeatherOnly = false;
+        draft.fatigueStop = false;
+        draft.fatigueWorkMinutes = 60;
+        draft.fatigueRestMinutes = 15;
         draft.humanizeTiming = false;
         draft.randomRest = false;
         draft.restIntervalMinutes = 10;
@@ -734,6 +905,20 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.scheduleEnabled = old.scheduleEnabled;
         draft.scheduleStartHour = old.scheduleStartHour;
         draft.scheduleEndHour = old.scheduleEndHour;
+        draft.workAreaEnabled = old.workAreaEnabled;
+        draft.workAreaMode = old.workAreaMode;
+        draft.workAreaX = old.workAreaX;
+        draft.workAreaY = old.workAreaY;
+        draft.workAreaZ = old.workAreaZ;
+        draft.workAreaRadius = old.workAreaRadius;
+        draft.workAreaX2 = old.workAreaX2;
+        draft.workAreaY2 = old.workAreaY2;
+        draft.workAreaZ2 = old.workAreaZ2;
+        draft.workDaylightOnly = old.workDaylightOnly;
+        draft.workClearWeatherOnly = old.workClearWeatherOnly;
+        draft.fatigueStop = old.fatigueStop;
+        draft.fatigueWorkMinutes = old.fatigueWorkMinutes;
+        draft.fatigueRestMinutes = old.fatigueRestMinutes;
         draft.humanizeTiming = old.humanizeTiming;
         draft.randomRest = old.randomRest;
         draft.restIntervalMinutes = old.restIntervalMinutes;
@@ -851,6 +1036,60 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
     private static Text hourText(int hour) {
         return Text.translatable("autofarm.value.hour", String.format("%02d", hour));
+    }
+
+    private Text workAreaModeLabel() {
+        return optionLabel("autofarm.option.work_area_mode",
+                Text.translatable(draft.workAreaMode == AutoFarmConfig.AREA_MODE_BOX
+                        ? "autofarm.area_mode.box"
+                        : "autofarm.area_mode.radius"));
+    }
+
+    private Text workAreaRadiusLabel() {
+        return optionLabel("autofarm.option.work_area_radius",
+                Text.translatable("autofarm.value.blocks", draft.workAreaRadius));
+    }
+
+    private Text workAreaCenterLabel() {
+        return Text.translatable("autofarm.work_area.record_center", coordText(draft.workAreaText()));
+    }
+
+    private Text workAreaCornerALabel() {
+        return Text.translatable("autofarm.work_area.record_a", coordText(draft.workAreaText()));
+    }
+
+    private Text workAreaCornerBLabel() {
+        return Text.translatable("autofarm.work_area.record_b", coordText(draft.workAreaSecondText()));
+    }
+
+    /** 坐标文本：没记过就显示「未设置」 */
+    private static Text coordText(String text) {
+        return text == null ? Text.translatable("autofarm.work_area.none") : Text.literal(text);
+    }
+
+    private Text fatigueWorkLabel() {
+        return optionLabel("autofarm.option.fatigue_work",
+                Text.translatable("autofarm.value.minutes", draft.fatigueWorkMinutes));
+    }
+
+    private Text fatigueRestLabel() {
+        return optionLabel("autofarm.option.fatigue_rest",
+                draft.fatigueRestMinutes <= 0
+                        ? Text.translatable("autofarm.fatigue_rest.manual")
+                        : Text.translatable("autofarm.value.minutes", draft.fatigueRestMinutes));
+    }
+
+    /** 把玩家当前所在的那一格记成工作区域的一个点（圆形 = 中心，矩形 = 角点） */
+    private void recordCurrentPos(boolean second) {
+        if (this.client == null || this.client.player == null) {
+            return;
+        }
+        BlockPos pos = this.client.player.getBlockPos();
+        if (second) {
+            draft.setWorkAreaSecond(pos.getX(), pos.getY(), pos.getZ());
+        } else {
+            draft.setWorkArea(pos.getX(), pos.getY(), pos.getZ());
+        }
     }
 
     /** 档位数字 → 语言键后缀。认不出来的档位一律当「关闭」显示 */

@@ -251,6 +251,31 @@ public final class FarmTaskManager {
     private static String pendingSafety;
     private static int safetySeenTicks;
 
+    // ================= 工作范围与作息（B 组）=================
+
+    /**
+     * 圈定工作区域：本轮回程路线的目标格。
+     *
+     * <p>回程走的是 {@link PathWalker} 的同一条通道，但它不是「作物目标」——
+     * 走到之后不该挖也不该种，所以单独记一笔，用来在到站时把人放行。
+     */
+    private static BlockPos areaReturnTarget;
+
+    /** 这一轮越界之后是否已经排过一次回程路线（排过还回不去就不再反复重排） */
+    private static boolean areaReturnTried;
+
+    /** 当前是否处在「越界返回」模式（用来抓进出边沿、复位上面两项） */
+    private static boolean areaReturning;
+
+    /** 疲劳收工：连续干活累计了多少 tick */
+    private static int fatigueWorkTicks;
+
+    /** 疲劳收工后的休息倒计时（tick）；>0 表示还在休息 */
+    private static int fatigueRestRemaining;
+
+    /** 疲劳「手动恢复」模式下已经收工、正等着玩家自己重开 */
+    private static boolean fatigueStopped;
+
     private FarmTaskManager() {
     }
 
@@ -406,6 +431,12 @@ public final class FarmTaskManager {
         hesitatedAt = null;
         pendingSafety = null;
         safetySeenTicks = 0;
+        areaReturnTarget = null;
+        areaReturnTried = false;
+        areaReturning = false;
+        fatigueWorkTicks = 0;
+        fatigueRestRemaining = 0;
+        fatigueStopped = false;
         Humanizer.reset();
         IdleLook.reset();
         KillAura.reset();
@@ -470,6 +501,10 @@ public final class FarmTaskManager {
             sessionTicks = 0;
             pendingSafety = null;
             safetySeenTicks = 0;
+            // 重新开工 = 人也歇够了：疲劳计时从零开始（这也是「手动恢复」档的复位方式）
+            fatigueWorkTicks = 0;
+            fatigueRestRemaining = 0;
+            fatigueStopped = false;
         }
         lastEnabled = config.enabled;
 
@@ -523,6 +558,12 @@ public final class FarmTaskManager {
                 hesitatedAt = null;
                 pendingSafety = null;
                 safetySeenTicks = 0;
+                areaReturnTarget = null;
+                areaReturnTried = false;
+                areaReturning = false;
+                fatigueWorkTicks = 0;
+                fatigueRestRemaining = 0;
+                fatigueStopped = false;
                 KillAura.reset();
             }
             lastEnabled = config.enabled;
@@ -579,16 +620,23 @@ public final class FarmTaskManager {
             supplyNotice = null;
         }
 
-        // 这一 tick 要不要整个人停手（背包满、安全保护、外加两个附加功能）
+        // 这一 tick 要不要整个人停手（背包满、安全保护、外加几个附加功能）
         boolean resting = config.enabled && updateRest(config);
         // 附加功能「仅在指定时段工作」：不在工作时段就停手（账号仍然在线，只是不干活）
         boolean offSchedule = config.enabled && config.scheduleEnabled && !insideSchedule(config);
-        boolean paused = stopForFull || safety != null || resting || offSchedule;
+        // 附加功能「仅白天 / 仅晴天」：环境不合适就停手，条件一恢复自动继续
+        String environment = config.enabled ? environmentNotice(client, config) : null;
+        // 上面这些都成立 = 「已经在停手」。疲劳计时要用到它 ——
+        // 只有真正在干活的那些 tick 才该被算进「连续工作」。
+        boolean alreadyPaused = stopForFull || safety != null || resting || offSchedule || environment != null;
+        // 附加功能「疲劳收工」：连续干到上限就整场停下来
+        boolean fatigued = config.enabled && updateFatigue(config, alreadyPaused);
+        boolean paused = alreadyPaused || fatigued;
 
         // 一停机就播报一次（actionbar），免得你以为是模组卡了 ——
         // 同一个原因只说一次，危险过去后自动允许下次再说。
-        // 休息 / 工作时段在 supplyNotice 里没有位置（那栏留给「缺种子」「箱子满了」这类事），
-        // 所以它们各用自己的键，同样走「只说一次」这套。
+        // 休息 / 工作时段 / 环境 / 疲劳在 supplyNotice 里没有位置（那栏留给
+        // 「缺种子」「箱子满了」这类事），所以它们各用自己的键，同样走「只说一次」这套。
         String pauseKey;
         if (stopForFull || safety != null) {
             pauseKey = supplyNotice;
@@ -596,6 +644,10 @@ public final class FarmTaskManager {
             pauseKey = "autofarm.notice.paused_resting";
         } else if (offSchedule) {
             pauseKey = "autofarm.notice.paused_schedule";
+        } else if (environment != null) {
+            pauseKey = environment;
+        } else if (fatigued) {
+            pauseKey = "autofarm.notice.paused_fatigue";
         } else {
             pauseKey = null;
         }
@@ -616,6 +668,48 @@ public final class FarmTaskManager {
         // 打开这个开关就先停手，只保留描边和路线；关掉开关则照常干活
         // （渲染本来就是按摄像机算的，所以画面不会错位）。
         boolean freecamPaused = config.pauseOnFreecam && CameraCompat.isCameraDetached();
+
+        // ================================================================
+        // 附加功能「圈定工作区域」：人跑出圈了就停手、走回来
+        // 排在战斗之前 —— 已经越界了，就别再追着怪往别人地里跑。
+        // 判据只看「人在不在区域里」，和「目标在不在区域里」是两件事：
+        // 后者在扫描那一步就把圈外的目标滤掉了（见下面 matureCrops 的过滤）。
+        // ================================================================
+        boolean outsideArea = config.enabled
+                && config.workAreaEnabled
+                && !config.insideWorkArea(client.player.getX(), client.player.getY(), client.player.getZ());
+
+        // 回到圈里了：把返回状态复位，恢复正常作业
+        if (!outsideArea && areaReturning) {
+            areaReturning = false;
+            areaReturnTried = false;
+            areaReturnTarget = null;
+            lastScanTick = Long.MIN_VALUE; // 立刻重扫一遍，好接着干活
+        }
+
+        if (outsideArea
+                && !paused
+                && client.currentScreen == null
+                && !CameraCompat.isCameraDetached()) {
+            if (!areaReturning) {
+                // 刚出界：把手上的活全放下（这条路线本来就通不到圈外去），准备回程
+                areaReturning = true;
+                areaReturnTried = false;
+                cancelSupply(null);
+                PathWalker.stop();
+                CropHarvester.reset();
+                handled.clear();
+                matureCrops = Collections.emptyList();
+                emptyFarmland = Collections.emptyList();
+                pickupTargets.clear();
+            }
+            runAreaReturn(client, config);
+            PathWalker.setPaused(false);
+            state = FarmState.RETURNING;
+            announcePause(client, "autofarm.notice.out_of_area");
+            IdleLook.tick(client, config, false);
+            return;
+        }
 
         // ================================================================
         // 附加功能「自动打怪」（高风险，默认关闭）
@@ -698,8 +792,22 @@ public final class FarmTaskManager {
                 state -> CropFilter.allowsHarvest(state.getBlock(), config, client.player),
                 wantFarmland
         );
-        matureCrops = scanned.mature();
-        emptyFarmland = wantFarmland ? scanned.emptyFarmland() : Collections.emptyList();
+        matureCrops = new ArrayList<>(scanned.mature());
+        emptyFarmland = wantFarmland
+                ? new ArrayList<>(scanned.emptyFarmland())
+                : Collections.emptyList();
+
+        // 附加功能「圈定工作区域」：圈外的目标一律不要 —— 既防跑丢，也防踩到别人的田。
+        // 过滤放在扫描之后、规划之前，而不是塞进扫描器：扫描器只管「什么值得动」，
+        // 「这块地是不是我的」是工作范围的事。顺带一个好处是圈外的作物不会被画上描边。
+        if (config.workAreaEnabled && config.hasWorkArea()) {
+            matureCrops.removeIf(pos -> !config.insideWorkArea(
+                    pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
+            if (!emptyFarmland.isEmpty()) {
+                emptyFarmland.removeIf(pos -> !config.insideWorkArea(
+                        pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
+            }
+        }
 
         // 附加功能「优先拾取掉落物」：顺手看看田里有没有掉在外面、还没进包的作物掉落物。
         // 得到的是「在哪一格」，下一步会排进路线最前面。
@@ -842,7 +950,8 @@ public final class FarmTaskManager {
                 e -> e.isAlive()
                         && e.getItemAge() >= minAge
                         && e.squaredDistanceTo(client.player) > ignoreSq
-                        && CropRegistry.isCropDrop(e.getStack()))) {
+                        && CropRegistry.isCropDrop(e.getStack())
+                        && config.insideWorkArea(e.getX(), e.getY(), e.getZ()))) {
             out.add(item.getBlockPos().toImmutable());
         }
     }
@@ -1338,6 +1447,138 @@ public final class FarmTaskManager {
         }
         int hour = java.time.LocalTime.now().getHour();
         return start < end ? (hour >= start && hour < end) : (hour >= start || hour < end);
+    }
+
+    /**
+     * 环境偏好：现在适不适合干活（附加功能，默认关闭）。
+     *
+     * <p>两条独立的规矩，任意一条不满足就返回对应的提示键：
+     * <ul>
+     *   <li>{@link AutoFarmConfig#workDaylightOnly} —— 只白天干。判定用
+     *       {@code world.isDay()}（世界时间，不是本机时间）；</li>
+     *   <li>{@link AutoFarmConfig#workClearWeatherOnly} —— 只晴天干。下雨、雷暴都算「不是晴天」。</li>
+     * </ul>
+     * 两条都只是停手，条件一恢复自动继续，不需要你重新开开关。
+     *
+     * @return 该停手的原因（翻译键）；环境合适返回 {@code null}
+     */
+    private static String environmentNotice(MinecraftClient client, AutoFarmConfig config) {
+        if (client == null || client.world == null) {
+            return null;
+        }
+        if (config.workDaylightOnly && !client.world.isDay()) {
+            return "autofarm.notice.paused_night";
+        }
+        if (config.workClearWeatherOnly && client.world.isRaining()) {
+            return "autofarm.notice.paused_weather";
+        }
+        return null;
+    }
+
+    /**
+     * 推进「疲劳收工」（附加功能，默认关闭）。
+     *
+     * <p>和 {@link #updateRest} 的区别是<b>尺度</b>：定时休息是「中途喝口水」，
+     * 这个管的是整场作业 —— 连续干够 {@link AutoFarmConfig#fatigueWorkMinutes} 分钟就彻底收工，
+     * 休息 {@link AutoFarmConfig#fatigueRestMinutes} 分钟再上工
+     * （那一项设 0 就是「手动」：一直停着，直到你把开关关掉再打开）。
+     *
+     * <p>只在「这一 tick 本来就在干活」时累计：{@code alreadyPaused} 为真说明已经因为
+     * 别的原因（满包、危险、定时休息、工作时段、环境）停下了，这些时间不该算进连续工作时长。
+     *
+     * @return 这一 tick 是不是在收工/休息
+     */
+    private static boolean updateFatigue(AutoFarmConfig config, boolean alreadyPaused) {
+        if (!config.fatigueStop) {
+            // 关掉这个功能 = 人歇够了，计时全部归零
+            fatigueWorkTicks = 0;
+            fatigueRestRemaining = 0;
+            fatigueStopped = false;
+            return false;
+        }
+        if (fatigueStopped) {
+            return true; // 「手动恢复」档：一直停着，等玩家把开关（或总开关）关掉再打开
+        }
+        if (fatigueRestRemaining > 0) {
+            fatigueRestRemaining--;
+            if (fatigueRestRemaining == 0) {
+                fatigueWorkTicks = 0; // 歇够了，重新开始计时
+            }
+            return true;
+        }
+        if (alreadyPaused) {
+            return false;
+        }
+        fatigueWorkTicks++;
+        int limit = Math.max(5, config.fatigueWorkMinutes) * 20 * 60; // 分钟 → tick
+        if (fatigueWorkTicks < limit) {
+            return false;
+        }
+        fatigueWorkTicks = 0;
+        if (config.fatigueRestMinutes > 0) {
+            fatigueRestRemaining = config.fatigueRestMinutes * 20 * 60;
+        } else {
+            fatigueStopped = true; // 手动：一直停到玩家重开
+        }
+        return true;
+    }
+
+    /**
+     * 越界返回：把人带回工作区域（附加功能，默认关闭）。
+     *
+     * <p>回程走的还是 {@link PathWalker} 那条通道，但目标不是作物，所以用
+     * {@link PathWalker#setExactTargets} 声明「要站到它本身那一格」，
+     * 并在到站时手动放行（见 {@link #areaReturnTarget}）。
+     *
+     * <p>只尝试一次：路线排不出来、或者走完人还在圈外（被水冲走、被怪推出去……），
+     * 就原地待命、不再反复重排 —— 否则会变成每 tick 重算一次 A* 的空转，多半还是走不通。
+     * 这时候玩家自己走回去，或者关掉这个功能就行。
+     */
+    private static void runAreaReturn(MinecraftClient client, AutoFarmConfig config) {
+        // 正在走「回程」这条路 → 推进一步
+        if (PathWalker.isActive() && areaReturnTarget != null
+                && areaReturnTarget.equals(PathWalker.getCurrentTarget())) {
+            PathWalker.tick(client);
+            drainResolved();
+            BlockPos held = PathWalker.getHeldTarget();
+            if (held != null && held.equals(areaReturnTarget)) {
+                PathWalker.releaseTarget();
+                drainResolved();
+                areaReturnTarget = null;
+            }
+            return;
+        }
+        // 手上是别的路线（越界时开着界面，被正常流程插了一条收割路线）→ 扔掉，改成回程
+        if (PathWalker.isActive()) {
+            PathWalker.stop();
+        }
+        if (areaReturnTried) {
+            return;
+        }
+        areaReturnTried = true;
+
+        BlockPos goal;
+        if (config.workAreaMode == AutoFarmConfig.AREA_MODE_BOX) {
+            // 矩形模式往两个角点的正中走 —— 那是这片区域的正中心，最稳
+            goal = new BlockPos(
+                    (config.workAreaX + config.workAreaX2) / 2,
+                    (config.workAreaY + config.workAreaY2) / 2,
+                    (config.workAreaZ + config.workAreaZ2) / 2);
+        } else {
+            goal = new BlockPos(config.workAreaX, config.workAreaY, config.workAreaZ);
+        }
+        // 目标那一格可能站不住人（被填了方块），退而求其次找个能看见它的落脚点
+        if (!BlockNavigator.canStand(client.world, goal)) {
+            BlockPos spot = BlockNavigator.findViewSpot(client.world, goal);
+            if (spot == null) {
+                return;
+            }
+            goal = spot;
+        }
+
+        PathWalker.setExactTargets(List.of(goal));
+        PathWalker.start(PathPlanner.plan(client.player.getBlockPos(), List.of(goal), false));
+        areaReturnTarget = PathWalker.isActive() ? goal : null;
     }
 
     /** 这句话是不是「停机原因」——停机解除时要记得把它撤掉 */

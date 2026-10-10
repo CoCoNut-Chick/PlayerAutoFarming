@@ -11,6 +11,7 @@ public enum FarmState {
     MOVING("autofarm.state.moving"),
     PICKUP("autofarm.state.pickup"),
     ATTACKING("autofarm.state.attacking"),
+    RETURNING("autofarm.state.returning"),
     HARVESTING("autofarm.state.harvesting"),
     REPLANTING("autofarm.state.replanting"),
     TO_SUPPLY("autofarm.state.supply"),
