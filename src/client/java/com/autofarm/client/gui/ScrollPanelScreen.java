@@ -2,8 +2,11 @@ package com.autofarm.client.gui;
 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.ClickableWidget;
+import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,10 +39,14 @@ public abstract class ScrollPanelScreen extends Screen {
     protected static final int PAD = 12;
     /** 标准行高 */
     protected static final int ROW_H = 18;
+    /** 顶部 tab 栏高度（相对内容区顶部）。两个面板共用同一套排版 */
+    protected static final int TAB_BAR_H = 24;
 
     private static final int MIN_PANEL_H = 96;
     /** 一格滚轮滚多少像素 */
     private static final int SCROLL_STEP = 18;
+    /** 滚动条的可抓取宽度（画出来只有一半宽，但点得中） */
+    private static final int SCROLLBAR_GRAB_W = 8;
 
     // ---------------- 配色 ----------------
     protected static final int COLOR_PANEL = 0xC8101010;
@@ -50,6 +57,10 @@ public abstract class ScrollPanelScreen extends Screen {
     protected static final int COLOR_HINT = 0xFF909090;
     /** 提示/警告用的暖色（比如「没种子，跳过了补种」） */
     protected static final int COLOR_NOTICE = 0xFFFFB020;
+    /** 开关「已开启」用的绿 */
+    protected static final int COLOR_ON = 0xFF55FF55;
+    /** 高风险开关用的红 */
+    protected static final int COLOR_DANGER = 0xFFFF5555;
 
     private static final int COLOR_DIVIDER = 0x30FFFFFF;
     private static final int COLOR_FADE = 0x50000000;
@@ -79,6 +90,16 @@ public abstract class ScrollPanelScreen extends Screen {
 
     protected int scroll;
     protected int maxScroll;
+
+    // ---------------- 滚动条运行时几何（每帧算一次，拖拽时复用） ----------------
+    private int sbTrackTop;
+    private int sbTrackH;
+    private int sbThumbTop;
+    private int sbThumbH;
+    /** 正按着滑块拖 */
+    private boolean draggingScrollbar;
+    /** 按下时鼠标相对滑块顶端的偏移，拖的时候保持不变 */
+    private int dragGrabOffset;
 
     protected ScrollPanelScreen(Screen parent, Text title) {
         super(title);
@@ -208,7 +229,7 @@ public abstract class ScrollPanelScreen extends Screen {
             context.fill(left + 1, contentBottom - 3, left + panelW - 1, contentBottom, COLOR_FADE);
         }
 
-        renderScrollbar(context);
+        renderScrollbar(context, overScrollbar(mouseX, mouseY) || draggingScrollbar);
     }
 
     /** 画一块分区底板。relY / relH 都是「相对内容区顶部」的坐标 */
@@ -230,20 +251,57 @@ public abstract class ScrollPanelScreen extends Screen {
         context.fill(x2 - 1, y1 + 1, x2, y2 - 1, color);
     }
 
-    private void renderScrollbar(DrawContext context) {
+    /**
+     * 滚动条：轨道 + 滑块。滑块可以<b>用鼠标按住拖</b>，也可以点轨道直接跳。
+     *
+     * <p>几何量顺便存进字段，鼠标事件里直接复用（不用再算一遍，也不会和画出来的位置错开）。
+     */
+    private void renderScrollbar(DrawContext context, boolean hovered) {
         if (maxScroll <= 0) {
+            sbThumbH = 0;
+            sbThumbTop = 0;
+            sbTrackH = 0;
+            sbTrackTop = 0;
             return;
         }
         int viewH = contentBottom - contentTop;
-        int trackTop = contentTop + 2;
-        int trackH = viewH - 4;
+        sbTrackTop = contentTop + 2;
+        sbTrackH = viewH - 4;
+        sbThumbH = Math.max(18, (int) ((long) sbTrackH * viewH / contentHeight()));
+        sbThumbTop = sbTrackTop + (int) ((long) (sbTrackH - sbThumbH) * scroll / maxScroll);
+
         int barX = left + panelW - 5;
+        context.fill(barX, sbTrackTop, barX + 3, sbTrackTop + sbTrackH, COLOR_BAR_BG);
+        // 悬停或拖拽时滑块加宽、变亮 —— 一眼看出「这东西能拖」
+        boolean active = hovered || draggingScrollbar;
+        int thumbColor = active ? 0xE0FFFFFF : COLOR_BAR;
+        int thumbLeft = active ? barX - 1 : barX;
+        int thumbRight = active ? barX + 5 : barX + 3;
+        context.fill(thumbLeft, sbThumbTop, thumbRight, sbThumbTop + sbThumbH, thumbColor);
+    }
 
-        int thumbH = Math.max(18, (int) ((long) trackH * viewH / contentHeight()));
-        int thumbY = trackTop + (int) ((long) (trackH - thumbH) * scroll / maxScroll);
+    /** 鼠标是不是落在滚动条那条竖带上（放宽到 {@value #SCROLLBAR_GRAB_W} 像素，好抓） */
+    private boolean overScrollbar(double mouseX, double mouseY) {
+        return maxScroll > 0
+                && mouseX >= left + panelW - SCROLLBAR_GRAB_W
+                && mouseX <= left + panelW
+                && mouseY >= sbTrackTop
+                && mouseY <= sbTrackTop + sbTrackH;
+    }
 
-        context.fill(barX, trackTop, barX + 3, trackTop + trackH, COLOR_BAR_BG);
-        context.fill(barX, thumbY, barX + 3, thumbY + thumbH, COLOR_BAR);
+    /** 把滑块挪到某个 y（把「抓取点」对齐鼠标），并据此换算滚动量 */
+    private void dragScrollbarTo(double mouseY) {
+        int span = sbTrackH - sbThumbH;
+        if (span <= 0) {
+            return;
+        }
+        int thumbTop = clampInt((int) mouseY - dragGrabOffset, sbTrackTop, sbTrackTop + span);
+        int next = clampInt((int) Math.round((double) (thumbTop - sbTrackTop) * maxScroll / span),
+                0, maxScroll);
+        if (next != scroll) {
+            scroll = next;
+            relayout();
+        }
     }
 
     // ================= 输入 =================
@@ -265,11 +323,42 @@ public abstract class ScrollPanelScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // 先看是不是按住滚动条拖
+        if (button == 0 && overScrollbar(mouseX, mouseY)) {
+            if (mouseY >= sbThumbTop && mouseY < sbThumbTop + sbThumbH) {
+                // 按在滑块上：记住抓取点，拖的时候保持这个相对位置
+                dragGrabOffset = (int) mouseY - sbThumbTop;
+            } else {
+                // 点轨道空白：滑块中心跳过来，然后接着拖
+                dragGrabOffset = sbThumbH / 2;
+                dragScrollbarTo(mouseY);
+            }
+            draggingScrollbar = true;
+            return true;
+        }
         // 标题条那条带子上可能压着「只露出一半」的控件，直接不让点，免得误触
         if (mouseY < contentTop) {
             return false;
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        if (draggingScrollbar) {
+            dragScrollbarTo(mouseY);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (draggingScrollbar && button == 0) {
+            draggingScrollbar = false;
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     // ================= 行为 =================
@@ -300,10 +389,46 @@ public abstract class ScrollPanelScreen extends Screen {
         }
     }
 
+    /**
+     * 开关按钮的文案：<b>开着 → 绿色</b>，关着 → 保持默认色。
+     *
+     * <p>整块面板里一眼扫过去，绿色的就是「已经开了」的项 —— 不必逐个去读「开 / 关」两个字。
+     */
     protected static Text toggleLabel(String optionKey, boolean value) {
-        return Text.translatable("autofarm.toggle",
-                Text.translatable(optionKey),
+        MutableText key = Text.translatable(optionKey);
+        if (value) {
+            key = key.formatted(Formatting.GREEN);
+        }
+        return Text.translatable("autofarm.toggle", key,
                 Text.translatable(value ? "autofarm.on" : "autofarm.off"));
+    }
+
+    /**
+     * 高风险开关的文案：<b>开着 → 绿色</b>（和其他开关一致，方便一眼看「开了没」），
+     * <b>关着 → 红色</b> —— 红色在这里是个「别随手打开」的记号：
+     * 这类开关（自动打怪、暴力模式…）出厂就<i>不推荐开启</i>，红色提醒你它是危险功能。
+     */
+    protected static Text dangerToggleLabel(String optionKey, boolean value) {
+        MutableText key = Text.translatable(optionKey)
+                .formatted(value ? Formatting.GREEN : Formatting.RED);
+        return Text.translatable("autofarm.toggle", key,
+                Text.translatable(value ? "autofarm.on" : "autofarm.off"));
+    }
+
+    /**
+     * 画顶部 tab 栏的「选中」标记：底下一条高亮横线。
+     *
+     * <p>两个面板共用同一套观感 —— 当前所在的大类下面画一条金线，其余保持素净。
+     */
+    protected void drawTabMarker(DrawContext context, ButtonWidget[] buttons, int currentTab) {
+        for (int i = 0; i < buttons.length; i++) {
+            ButtonWidget btn = buttons[i];
+            if (btn == null || i != currentTab) {
+                continue;
+            }
+            context.fill(btn.getX(), btn.getY() + btn.getHeight() - 1,
+                    btn.getX() + btn.getWidth(), btn.getY() + btn.getHeight(), COLOR_HEADER);
+        }
     }
 
     protected static int clampInt(int v, int lo, int hi) {

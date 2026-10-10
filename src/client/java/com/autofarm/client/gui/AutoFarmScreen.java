@@ -11,74 +11,83 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.Locale;
 
 /**
- * AutoFarm 的主控制面板。
+ * AutoFarm 的主控制面板 —— 和「附加功能」一样，用<b>顶部大类 tab</b>分页。
  *
- * <p>版面三段式（由 {@link ScrollPanelScreen} 提供）：固定标题 / 可滚动内容 / 固定页脚。
+ * <h2>为什么也改成分页</h2>
+ * 主面板原本是一张越接越长的滚动页（收割 / 路径 / 可视化 / 补给 / 安全 / 作物 / 附加…），
+ * 选项一多，想改某一项就得上下拖半天。改成分页之后每一页只放同一类东西：
+ * <ol>
+ *   <li><b>收割</b> —— 总开关、扫描范围与频率、补种、取种子、满包即存、瞄准模式；</li>
+ *   <li><b>移动</b> —— 路径优化与显示、疾跑、进食、挖 / 垫；</li>
+ *   <li><b>显示</b> —— 可视化、穿透、自由视角停机，以及安全停机两项；</li>
+ *   <li><b>补给</b> —— 默认种子槽、存放策略、四个专用容器、补给点坐标；</li>
+ *   <li><b>更多</b> —— 作物筛选、附加功能、统计。</li>
+ * </ol>
+ *
+ * <p>「运行状态」那一块固定显示在每一页最上方 —— 不管你在哪一页，都能看到它此刻在干嘛。
  *
  * <p>所有改动先落在 draft（草稿）上，点「保存并关闭」才写回配置文件，
- * 点「取消」或按 Esc 直接丢弃。右侧那个小调色板图标会进一个次级面板去改高亮外观，
- * 它编辑的是同一个 draft，所以回到本界面时不会互相覆盖。
+ * 点「取消」或按 Esc 直接丢弃。切页时草稿原样带过去，也不会把输入框里的坐标弄丢。
  */
 public class AutoFarmScreen extends ScrollPanelScreen {
 
+    // ---------------- tab 定义 ----------------
+    private static final int TAB_HARVEST = 0;
+    private static final int TAB_MOVE = 1;
+    private static final int TAB_DISPLAY = 2;
+    private static final int TAB_SUPPLY = 3;
+    private static final int TAB_MORE = 4;
+    private static final int TAB_COUNT = 5;
+
     // ---------------- 内容区布局（相对内容区顶部） ----------------
-    private static final int SEC_STATUS_Y = 0, SEC_STATUS_H = 62;
-    private static final int SEC_HARVEST_Y = 66, SEC_HARVEST_H = 156;
-    private static final int SEC_PATH_Y = 226, SEC_PATH_H = 180;
-    private static final int SEC_DISPLAY_Y = 410, SEC_DISPLAY_H = 76;
-    private static final int SEC_SUPPLY_Y = 490, SEC_SUPPLY_H = 138;
-    /** 安全与提示：HUD、低血量停机、敌对生物停机 —— 三项都追加在最后，前面的分区不用挪 */
-    private static final int SEC_SAFETY_Y = 632, SEC_SAFETY_H = 76;
-    /** 作物与筛选：补种空耕地 + 进次级面板挑作物。同样追加在最后 */
-    private static final int SEC_CROP_Y = 714, SEC_CROP_H = 64;
-    /** 附加功能：默认全关的增强项，单独一页。统计面板也放这里，追加在最后 */
-    private static final int SEC_EXTRAS_Y = 782, SEC_EXTRAS_H = 64;
+    private static final int ROW_FIRST = 18;
+    private static final int ROW_GAP = 20;
+    private static final int SECTION_GAP = 6;
 
-    private static final int ROW_ENABLED = 82;
-    private static final int ROW_RADIUS = 102;
-    private static final int ROW_SCAN_INTERVAL = 122;
-    private static final int ROW_REPLANT = 142;
-    private static final int ROW_REFILL = 162;
-    private static final int ROW_DEPOSIT = 182;
-    private static final int ROW_EFFICIENCY = 202;
-    private static final int ROW_OPTIMIZE = 242;
-    private static final int ROW_SHOW_PATH = 262;
-    private static final int ROW_LOCK_SPRINT = 282;
-    private static final int ROW_AUTO_EAT = 302;
-    private static final int ROW_EAT_FULL = 322;
-    private static final int ROW_ALLOW_MINE = 342;
-    private static final int ROW_AUTO_TOOL = 362;
-    private static final int ROW_ALLOW_PLACE = 382;
-    private static final int ROW_VISUAL = 426;
-    private static final int ROW_THROUGH_WALLS = 446;
-    private static final int ROW_FREECAM = 466;
-    /** 补给点分区：先一行状态提示，再两个选项，最后坐标输入和按钮 */
-    private static final int ROW_SUPPLY_HINT = 506;
-    private static final int ROW_DEFAULT_SEED = 522;
-    private static final int ROW_STORAGE_POLICY = 542;
-    /** 扩展存储与补给：进专用容器配置菜单 */
-    private static final int ROW_CONTAINERS = 562;
-    private static final int ROW_FIELDS = 582;
-    private static final int ROW_SUPPLY_BTN = 604;
+    /** 运行状态：每一页顶部都显示的一份只读快照 */
+    private static final int SEC_STATUS_Y = TAB_BAR_H;
+    private static final int SEC_STATUS_H = 58;
+    /** 下面所有分区的起始位置都从它开始 */
+    private static final int BODY_Y = SEC_STATUS_Y + SEC_STATUS_H + SECTION_GAP;
 
-    /** 安全与提示分区的三行 */
-    private static final int ROW_SHOW_HUD = 648;
-    private static final int ROW_LOW_HEALTH = 668;
-    private static final int ROW_MOBS_NEAR = 688;
+    // ---- 收割（tab 0）----
+    private static final int HARVEST_ROWS = 8;
+    private static final int SEC_HARVEST_Y = BODY_Y;
+    private static final int SEC_HARVEST_H = ROW_FIRST + HARVEST_ROWS * ROW_GAP + 4;
 
-    /** 作物与筛选分区的两行 */
-    private static final int ROW_FILL_EMPTY = 730;
-    private static final int ROW_CROP_FILTER = 750;
+    // ---- 移动（tab 1）----
+    private static final int MOVE_ROWS = 8;
+    private static final int SEC_MOVE_Y = BODY_Y;
+    private static final int SEC_MOVE_H = ROW_FIRST + MOVE_ROWS * ROW_GAP + 4;
 
-    /** 附加功能分区的两行：附加功能、统计 */
-    private static final int ROW_EXTRAS = 798;
-    private static final int ROW_STATS = 818;
+    // ---- 显示（tab 2）----
+    private static final int DISPLAY_ROWS = 3;
+    private static final int SEC_DISPLAY_Y = BODY_Y;
+    private static final int SEC_DISPLAY_H = ROW_FIRST + DISPLAY_ROWS * ROW_GAP + 4;
+    private static final int SAFETY_ROWS = 3;
+    private static final int SEC_SAFETY_Y = SEC_DISPLAY_Y + SEC_DISPLAY_H + SECTION_GAP;
+    private static final int SEC_SAFETY_H = ROW_FIRST + SAFETY_ROWS * ROW_GAP + 4;
+
+    // ---- 补给（tab 3）----
+    private static final int SUPPLY_ROWS = 5;
+    private static final int SEC_SUPPLY_Y = BODY_Y;
+    private static final int SEC_SUPPLY_H = ROW_FIRST + SUPPLY_ROWS * ROW_GAP + 4;
+
+    // ---- 更多（tab 4）----
+    private static final int CROP_ROWS = 1;
+    private static final int SEC_CROP_Y = BODY_Y;
+    private static final int SEC_CROP_H = ROW_FIRST + CROP_ROWS * ROW_GAP + 4;
+    private static final int MORE_ROWS = 2;
+    private static final int SEC_MORE_Y = SEC_CROP_Y + SEC_CROP_H + SECTION_GAP;
+    private static final int SEC_MORE_H = ROW_FIRST + MORE_ROWS * ROW_GAP + 4;
 
     private static final int AXIS_LABEL_W = 14;
     private static final int ICON_SIZE = ROW_H;
@@ -86,6 +95,9 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private static final int DISPLAY_HINT_X = 62;
 
     private final AutoFarmConfig draft;
+
+    private int currentTab = TAB_HARVEST;
+    private final ButtonWidget[] tabButtons = new ButtonWidget[TAB_COUNT];
 
     private ButtonWidget enabledButton;
     private LabeledIntSlider radiusSlider;
@@ -105,9 +117,6 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private ButtonWidget visualizeButton;
     private ButtonWidget throughWallsButton;
     private ButtonWidget freecamButton;
-    private ButtonWidget defaultSeedButton;
-    private ButtonWidget storagePolicyButton;
-    private ButtonWidget containersButton;
     private ButtonWidget showHudButton;
     private ButtonWidget lowHealthButton;
     private ButtonWidget mobsNearButton;
@@ -115,6 +124,9 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private ButtonWidget cropFilterButton;
     private ButtonWidget extrasButton;
     private ButtonWidget statsButton;
+    private ButtonWidget defaultSeedButton;
+    private ButtonWidget storagePolicyButton;
+    private ButtonWidget containersButton;
     private PaletteIconButton paletteButton;
 
     private TextFieldWidget fieldX;
@@ -127,30 +139,92 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private final int[] axisLabelX = new int[3];
 
     public AutoFarmScreen(Screen parent) {
+        this(parent, ConfigManager.get().copy());
+    }
+
+    /** 换页时用的构造：把同一份草稿带过去，未保存的改动不会丢 */
+    private AutoFarmScreen(Screen parent, AutoFarmConfig draft) {
         super(parent, Text.translatable("autofarm.title"));
-        this.draft = ConfigManager.get().copy();
+        this.draft = draft;
     }
 
     @Override
     protected int contentHeight() {
-        return SEC_EXTRAS_Y + SEC_EXTRAS_H + 4;
+        return switch (currentTab) {
+            case TAB_MOVE -> SEC_MOVE_Y + SEC_MOVE_H + 8;
+            case TAB_DISPLAY -> SEC_SAFETY_Y + SEC_SAFETY_H + 8;
+            case TAB_SUPPLY -> SEC_SUPPLY_Y + SEC_SUPPLY_H + 8;
+            case TAB_MORE -> SEC_MORE_Y + SEC_MORE_H + 8;
+            default -> SEC_HARVEST_Y + SEC_HARVEST_H + 8;
+        };
     }
 
     // ================= 建控件 =================
 
     @Override
     protected void buildContent() {
+        buildTabBar();
+        switch (currentTab) {
+            case TAB_MOVE -> buildMoveTab();
+            case TAB_DISPLAY -> buildDisplayTab();
+            case TAB_SUPPLY -> buildSupplyTab();
+            case TAB_MORE -> buildMoreTab();
+            default -> buildHarvestTab();
+        }
+
         int fullW = contentWidth;
         int halfW = (fullW - 4) / 2;
         int halfRightX = contentX + halfW + 4;
+        addFooter(
+                ButtonWidget.builder(Text.translatable("autofarm.button.save"), b -> onSave())
+                        .dimensions(contentX, 0, halfW, ROW_H).build(),
+                ButtonWidget.builder(Text.translatable("autofarm.button.cancel"), b -> onCancel())
+                        .dimensions(halfRightX, 0, halfW, ROW_H).build()
+        );
+    }
 
-        // ---- 收割设置 ----
-        this.enabledButton = ButtonWidget.builder(toggleLabel("autofarm.option.enabled", draft.enabled), b -> {
-            draft.enabled = !draft.enabled;
-            b.setMessage(toggleLabel("autofarm.option.enabled", draft.enabled));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        enabledButton.setTooltip(Tooltip.of(Text.translatable("autofarm.enabled.tip")));
-        addScrolling(enabledButton);
+    /** 顶部那条大类 tab 栏 */
+    private void buildTabBar() {
+        int tabW = (contentWidth - (TAB_COUNT - 1) * 2) / TAB_COUNT;
+        for (int i = 0; i < TAB_COUNT; i++) {
+            final int tab = i;
+            ButtonWidget btn = ButtonWidget.builder(tabLabel(tab), b -> switchTab(tab))
+                    .dimensions(contentX + i * (tabW + 2), 0, tabW, ROW_H).build();
+            addScrolling(btn);
+            tabButtons[i] = btn;
+        }
+    }
+
+    /** 换一页。草稿原样带过去（先把输入框里的坐标收回草稿，免得切页丢掉） */
+    private void switchTab(int tab) {
+        if (tab == currentTab) {
+            return;
+        }
+        captureFields();
+        if (this.client != null) {
+            AutoFarmScreen next = new AutoFarmScreen(this.parent, draft);
+            next.currentTab = tab;
+            this.client.setScreen(next);
+        }
+    }
+
+    private static Text tabLabel(int tab) {
+        return Text.translatable("autofarm.tab." + switch (tab) {
+            case TAB_MOVE -> "move";
+            case TAB_DISPLAY -> "display";
+            case TAB_SUPPLY -> "supply";
+            case TAB_MORE -> "more";
+            default -> "harvest";
+        });
+    }
+
+    // ---- 各 tab 的控件创建 ----
+
+    private void buildHarvestTab() {
+        int fullW = contentWidth;
+
+        this.enabledButton = toggle("autofarm.option.enabled", draft.enabled,
+                v -> draft.enabled = v, "autofarm.enabled.tip");
 
         this.radiusSlider = new LabeledIntSlider(contentX, 0, fullW, ROW_H,
                 "autofarm.option.radius", 4, 48, draft.scanRadius,
@@ -164,104 +238,64 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         scanIntervalSlider.setTooltip(Tooltip.of(Text.translatable("autofarm.scan_interval.tip")));
         addScrolling(scanIntervalSlider);
 
-        this.replantButton = ButtonWidget.builder(toggleLabel("autofarm.option.replant", draft.replant), b -> {
-            draft.replant = !draft.replant;
-            b.setMessage(toggleLabel("autofarm.option.replant", draft.replant));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        addScrolling(replantButton);
+        this.replantButton = toggle("autofarm.option.replant", draft.replant,
+                v -> draft.replant = v, null);
 
-        this.refillButton = ButtonWidget.builder(toggleLabel("autofarm.option.refill", draft.refillSeeds), b -> {
-            draft.refillSeeds = !draft.refillSeeds;
-            b.setMessage(toggleLabel("autofarm.option.refill", draft.refillSeeds));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        refillButton.setTooltip(Tooltip.of(Text.translatable("autofarm.refill.tip")));
-        addScrolling(refillButton);
+        // 补种空耕地：除了「刚收掉的那一格」，把附近空着的耕地也种上。会消耗种子
+        this.fillEmptyButton = toggle("autofarm.option.fill_empty", draft.fillEmptyFarmland,
+                v -> draft.fillEmptyFarmland = v, "autofarm.fill_empty.tip");
 
-        this.depositButton = ButtonWidget.builder(toggleLabel("autofarm.option.deposit", draft.depositWhenFull), b -> {
-            draft.depositWhenFull = !draft.depositWhenFull;
-            b.setMessage(toggleLabel("autofarm.option.deposit", draft.depositWhenFull));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        depositButton.setTooltip(Tooltip.of(Text.translatable("autofarm.deposit.tip")));
-        addScrolling(depositButton);
+        this.refillButton = toggle("autofarm.option.refill", draft.refillSeeds,
+                v -> draft.refillSeeds = v, "autofarm.refill.tip");
+
+        this.depositButton = toggle("autofarm.option.deposit", draft.depositWhenFull,
+                v -> draft.depositWhenFull = v, "autofarm.deposit.tip");
 
         // 瞄准模式：精准 / 效率 / 极效率 三档循环。切到「极效率」要先过风险确认屏。
         this.aimModeButton = ButtonWidget.builder(aimModeLabel(), b -> onAimModeClicked())
                 .dimensions(contentX, 0, fullW, ROW_H).build();
         aimModeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.aim_mode.tip")));
         addScrolling(aimModeButton);
+    }
 
-        // ---- 路径规划 ----
-        this.optimizeButton = ButtonWidget.builder(toggleLabel("autofarm.option.optimize", draft.optimizePath), b -> {
-            draft.optimizePath = !draft.optimizePath;
-            b.setMessage(toggleLabel("autofarm.option.optimize", draft.optimizePath));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        optimizeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.optimize.tip")));
-        addScrolling(optimizeButton);
+    private void buildMoveTab() {
+        int fullW = contentWidth;
 
-        this.showPathButton = ButtonWidget.builder(toggleLabel("autofarm.option.show_path", draft.showPath), b -> {
-            draft.showPath = !draft.showPath;
-            b.setMessage(toggleLabel("autofarm.option.show_path", draft.showPath));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        showPathButton.setTooltip(Tooltip.of(Text.translatable("autofarm.show_path.tip")));
-        addScrolling(showPathButton);
+        this.optimizeButton = toggle("autofarm.option.optimize", draft.optimizePath,
+                v -> draft.optimizePath = v, "autofarm.optimize.tip");
+
+        this.showPathButton = toggle("autofarm.option.show_path", draft.showPath,
+                v -> draft.showPath = v, "autofarm.show_path.tip");
 
         // 锁定疾跑：赶路时替玩家按住 Ctrl。只加快移动，不改挖掘速度，代价是饿得快。
-        this.lockSprintButton = ButtonWidget.builder(toggleLabel("autofarm.option.lock_sprint", draft.lockSprint), b -> {
-            draft.lockSprint = !draft.lockSprint;
-            b.setMessage(toggleLabel("autofarm.option.lock_sprint", draft.lockSprint));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        lockSprintButton.setTooltip(Tooltip.of(Text.translatable("autofarm.lock_sprint.tip")));
-        addScrolling(lockSprintButton);
+        this.lockSprintButton = toggle("autofarm.option.lock_sprint", draft.lockSprint,
+                v -> draft.lockSprint = v, "autofarm.lock_sprint.tip");
 
-        // 自动进食：饿了（跑不动了）就吃快捷栏里回饱食度最多的那个
-        this.autoEatButton = ButtonWidget.builder(toggleLabel("autofarm.option.auto_eat", draft.autoEat), b -> {
-            draft.autoEat = !draft.autoEat;
-            b.setMessage(toggleLabel("autofarm.option.auto_eat", draft.autoEat));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        autoEatButton.setTooltip(Tooltip.of(Text.translatable("autofarm.auto_eat.tip")));
-        addScrolling(autoEatButton);
+        this.autoEatButton = toggle("autofarm.option.auto_eat", draft.autoEat,
+                v -> draft.autoEat = v, "autofarm.auto_eat.tip");
 
-        // 一次吃到饱：饿到停不下来的时候，干脆坐下来吃满再走，省得每半分钟被打断一次
-        this.eatFullButton = ButtonWidget.builder(toggleLabel("autofarm.option.eat_full", draft.eatUntilFull), b -> {
-            draft.eatUntilFull = !draft.eatUntilFull;
-            b.setMessage(toggleLabel("autofarm.option.eat_full", draft.eatUntilFull));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        eatFullButton.setTooltip(Tooltip.of(Text.translatable("autofarm.eat_full.tip")));
-        addScrolling(eatFullButton);
+        this.eatFullButton = toggle("autofarm.option.eat_full", draft.eatUntilFull,
+                v -> draft.eatUntilFull = v, "autofarm.eat_full.tip");
 
-        // 挖 / 垫：打开后寻路可以把挡路的方块挖穿、在脚下垫方块铺路。
-        // 默认都是关的 —— 它们会改变世界和消耗材料，得玩家自己点头。
-        this.allowMineButton = ButtonWidget.builder(toggleLabel("autofarm.option.allow_mine", draft.allowMining), b -> {
-            draft.allowMining = !draft.allowMining;
-            b.setMessage(toggleLabel("autofarm.option.allow_mine", draft.allowMining));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        allowMineButton.setTooltip(Tooltip.of(Text.translatable("autofarm.allow_mine.tip")));
-        addScrolling(allowMineButton);
+        // 挖 / 垫：打开后寻路可以把挡路的方块挖穿、在脚下垫方块铺路。默认都是关的
+        this.allowMineButton = toggle("autofarm.option.allow_mine", draft.allowMining,
+                v -> draft.allowMining = v, "autofarm.allow_mine.tip");
 
-        // 自动换最佳工具：挖之前先在快捷栏里挑一把最合适的，挑不到更好的就保持原样。
-        // 它不改地形也不消耗东西，所以默认是开的。
-        this.autoToolButton = ButtonWidget.builder(toggleLabel("autofarm.option.auto_tool", draft.autoSelectTool), b -> {
-            draft.autoSelectTool = !draft.autoSelectTool;
-            b.setMessage(toggleLabel("autofarm.option.auto_tool", draft.autoSelectTool));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        autoToolButton.setTooltip(Tooltip.of(Text.translatable("autofarm.auto_tool.tip")));
-        addScrolling(autoToolButton);
+        this.autoToolButton = toggle("autofarm.option.auto_tool", draft.autoSelectTool,
+                v -> draft.autoSelectTool = v, "autofarm.auto_tool.tip");
 
-        this.allowPlaceButton = ButtonWidget.builder(toggleLabel("autofarm.option.allow_place", draft.allowPlacing), b -> {
-            draft.allowPlacing = !draft.allowPlacing;
-            b.setMessage(toggleLabel("autofarm.option.allow_place", draft.allowPlacing));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        allowPlaceButton.setTooltip(Tooltip.of(Text.translatable("autofarm.allow_place.tip")));
-        addScrolling(allowPlaceButton);
+        this.allowPlaceButton = toggle("autofarm.option.allow_place", draft.allowPlacing,
+                v -> draft.allowPlacing = v, "autofarm.allow_place.tip");
+    }
 
-        // ---- 可视化：左边开关，右边留一个调色板图标进次级面板 ----
-        int visW = fullW - ICON_SIZE - 4;
-        this.visualizeButton = ButtonWidget.builder(toggleLabel("autofarm.option.visualize", draft.visualize), b -> {
-            draft.visualize = !draft.visualize;
-            b.setMessage(toggleLabel("autofarm.option.visualize", draft.visualize));
-        }).dimensions(contentX, 0, visW, ROW_H).build();
-        visualizeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.display.hint")));
-        addScrolling(visualizeButton);
+    private void buildDisplayTab() {
+        int fullW = contentWidth;
+        int subW = fullW - ICON_SIZE - 4;
+
+        // 可视化：左边开关，右边留一个调色板图标进次级面板
+        this.visualizeButton = toggle("autofarm.option.visualize", draft.visualize,
+                v -> draft.visualize = v, "autofarm.display.hint");
+        visualizeButton.setWidth(subW);
 
         // 颜色是现取 draft 的，所以在次级面板里改完回来，图标颜色立刻就变了
         this.paletteButton = new PaletteIconButton(
@@ -270,29 +304,37 @@ public class AutoFarmScreen extends ScrollPanelScreen {
                 b -> openHighlightStyle());
         addScrolling(paletteButton);
 
-        // 穿透显示：描边无视方块遮挡，隔着墙也能看见成熟作物。
-        // 开启时 FarmTaskManager 会自动把扫描间隔放宽，抵掉多出来的绘制开销。
-        this.throughWallsButton = ButtonWidget.builder(
-                toggleLabel("autofarm.option.through_walls", draft.highlightThroughWalls), b -> {
-                    draft.highlightThroughWalls = !draft.highlightThroughWalls;
-                    b.setMessage(toggleLabel("autofarm.option.through_walls", draft.highlightThroughWalls));
-                }).dimensions(contentX, 0, fullW, ROW_H).build();
-        throughWallsButton.setTooltip(Tooltip.of(Text.translatable("autofarm.through_walls.tip")));
-        addScrolling(throughWallsButton);
+        // 穿透显示：描边无视方块遮挡，隔着墙也能看见成熟作物
+        this.throughWallsButton = toggle("autofarm.option.through_walls",
+                draft.highlightThroughWalls, v -> draft.highlightThroughWalls = v,
+                "autofarm.through_walls.tip");
 
-        // 自由视角（masa 全家桶的「灵魂出窍」）兼容：开着的时候先停手，
-        // 免得屏幕里人不动、方块却在碎
-        this.freecamButton = ButtonWidget.builder(
-                toggleLabel("autofarm.option.freecam_pause", draft.pauseOnFreecam), b -> {
-                    draft.pauseOnFreecam = !draft.pauseOnFreecam;
-                    b.setMessage(toggleLabel("autofarm.option.freecam_pause", draft.pauseOnFreecam));
-                }).dimensions(contentX, 0, fullW, ROW_H).build();
-        freecamButton.setTooltip(Tooltip.of(Text.translatable("autofarm.freecam_pause.tip")));
-        addScrolling(freecamButton);
+        // 自由视角（masa 全家桶的「灵魂出窍」）兼容：开着的时候先停手
+        this.freecamButton = toggle("autofarm.option.freecam_pause", draft.pauseOnFreecam,
+                v -> draft.pauseOnFreecam = v, "autofarm.freecam_pause.tip");
 
-        // 默认种子槽位：补种时优先用这一格；从箱子里取种子而背包又没空格时，
-        // 也是往这一格塞。是个 1~9 的循环按钮 —— 用滑块调「第几格」太别扭，
-        // 点一下换一格反而更好按。
+        // 游戏内 HUD：不开面板也能知道它在干嘛
+        this.showHudButton = toggle("autofarm.option.show_hud", draft.showHud,
+                v -> draft.showHud = v, "autofarm.show_hud.tip");
+
+        // 低血量停机：0 = 关，其余是「心」数。循环按钮，不用滑块
+        this.lowHealthButton = ButtonWidget.builder(healthLabel(draft.lowHealthStopHearts), b -> {
+            draft.lowHealthStopHearts = nextHealthStop(draft.lowHealthStopHearts);
+            b.setMessage(healthLabel(draft.lowHealthStopHearts));
+        }).dimensions(contentX, 0, fullW, ROW_H).build();
+        lowHealthButton.setTooltip(Tooltip.of(Text.translatable("autofarm.low_health.tip")));
+        addScrolling(lowHealthButton);
+
+        this.mobsNearButton = toggle("autofarm.option.mobs_near", draft.pauseWhenMobsNear,
+                v -> draft.pauseWhenMobsNear = v, "autofarm.mobs_near.tip");
+    }
+
+    private void buildSupplyTab() {
+        int fullW = contentWidth;
+        int halfW = (fullW - 4) / 2;
+        int halfRightX = contentX + halfW + 4;
+
+        // 默认种子槽位：补种时优先用这一格
         this.defaultSeedButton = ButtonWidget.builder(slotLabel(draft.defaultSeedSlot), b -> {
             draft.defaultSeedSlot = draft.defaultSeedSlot >= 9 ? 1 : draft.defaultSeedSlot + 1;
             b.setMessage(slotLabel(draft.defaultSeedSlot));
@@ -300,9 +342,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         defaultSeedButton.setTooltip(Tooltip.of(Text.translatable("autofarm.default_seed.tip")));
         addScrolling(defaultSeedButton);
 
-        // 存放策略：进一个次级面板，逐类设置「不存储 / 完全存储 / 保留 n 组」。
-        // 以前这里是个「备用保留组数」循环按钮，但能调的只有胡萝卜土豆那一类；
-        // 想要「甜菜根也全存掉」就没辙了，所以改成一张能逐类下手的表。
+        // 存放策略：进次级面板逐类设置「不存储 / 完全存储 / 保留 n 组」
         this.storagePolicyButton = ButtonWidget.builder(
                 Text.translatable("autofarm.option.storage_policy"), b -> openStoragePolicy())
                 .dimensions(contentX, 0, fullW, ROW_H).build();
@@ -316,7 +356,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         containersButton.setTooltip(Tooltip.of(Text.translatable("autofarm.container.tip")));
         addScrolling(containersButton);
 
-        // ---- 补给点坐标 ----
+        // 补给点坐标：X / Y / Z 三格 + 记录 / 清除
         int colW = Math.max(56, (fullW - 12) / 3);
         for (int i = 0; i < 3; i++) {
             axisLabelX[i] = contentX + i * (colW + 6);
@@ -345,43 +385,10 @@ public class AutoFarmScreen extends ScrollPanelScreen {
             fieldZ.setText("");
         }).dimensions(halfRightX, 0, halfW, ROW_H).build();
         addScrolling(clearButton);
+    }
 
-        // ---- 安全与提示 ----
-        // 游戏内状态显示：不开面板也能知道它在干嘛
-        this.showHudButton = ButtonWidget.builder(
-                toggleLabel("autofarm.option.show_hud", draft.showHud), b -> {
-                    draft.showHud = !draft.showHud;
-                    b.setMessage(toggleLabel("autofarm.option.show_hud", draft.showHud));
-                }).dimensions(contentX, 0, fullW, ROW_H).build();
-        showHudButton.setTooltip(Tooltip.of(Text.translatable("autofarm.show_hud.tip")));
-        addScrolling(showHudButton);
-
-        // 低血量停机：0 = 关，其余是「心」数。同样是循环按钮，不用滑块
-        this.lowHealthButton = ButtonWidget.builder(healthLabel(draft.lowHealthStopHearts), b -> {
-            draft.lowHealthStopHearts = nextHealthStop(draft.lowHealthStopHearts);
-            b.setMessage(healthLabel(draft.lowHealthStopHearts));
-        }).dimensions(contentX, 0, fullW, ROW_H).build();
-        lowHealthButton.setTooltip(Tooltip.of(Text.translatable("autofarm.low_health.tip")));
-        addScrolling(lowHealthButton);
-
-        this.mobsNearButton = ButtonWidget.builder(
-                toggleLabel("autofarm.option.mobs_near", draft.pauseWhenMobsNear), b -> {
-                    draft.pauseWhenMobsNear = !draft.pauseWhenMobsNear;
-                    b.setMessage(toggleLabel("autofarm.option.mobs_near", draft.pauseWhenMobsNear));
-                }).dimensions(contentX, 0, fullW, ROW_H).build();
-        mobsNearButton.setTooltip(Tooltip.of(Text.translatable("autofarm.mobs_near.tip")));
-        addScrolling(mobsNearButton);
-
-        // ---- 作物与筛选 ----
-        // 补种空耕地：除了「刚收掉的那一格」，把附近空着的耕地也种上。
-        // 它会消耗种子，所以和垫方块一样默认关着。
-        this.fillEmptyButton = ButtonWidget.builder(
-                toggleLabel("autofarm.option.fill_empty", draft.fillEmptyFarmland), b -> {
-                    draft.fillEmptyFarmland = !draft.fillEmptyFarmland;
-                    b.setMessage(toggleLabel("autofarm.option.fill_empty", draft.fillEmptyFarmland));
-                }).dimensions(contentX, 0, fullW, ROW_H).build();
-        fillEmptyButton.setTooltip(Tooltip.of(Text.translatable("autofarm.fill_empty.tip")));
-        addScrolling(fillEmptyButton);
+    private void buildMoreTab() {
+        int fullW = contentWidth;
 
         // 作物筛选：进次级面板挑「哪些作物要收」以及「空地补种哪一种」
         this.cropFilterButton = ButtonWidget.builder(
@@ -390,68 +397,109 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         cropFilterButton.setTooltip(Tooltip.of(Text.translatable("autofarm.crop.tip")));
         addScrolling(cropFilterButton);
 
-        // ---- 附加功能 ----
-        // 默认全部关闭的增强项，单独一页。放在最后，是因为它们不是「收割必需」，
-        // 而是可选的锦上添花 —— 打开面板第一眼看到的仍然该是主流程那几项。
+        // 附加功能：默认全关的增强项，单独一页
         this.extrasButton = ButtonWidget.builder(
                 Text.translatable("autofarm.option.extras"), b -> openExtras())
                 .dimensions(contentX, 0, fullW, ROW_H).build();
         extrasButton.setTooltip(Tooltip.of(Text.translatable("autofarm.extras.tip")));
         addScrolling(extrasButton);
 
-        // 统计面板（E 组）：不是改配置，只是看一轮「收了多少、干了多久、出过几次岔子」，
-        // 以及累计到现在的账本。和附加功能并排放在最后。
+        // 统计面板（E 组）：不是改配置，只是看本轮和累计的账本
         this.statsButton = ButtonWidget.builder(
                 Text.translatable("autofarm.option.stats"), b -> openStats())
                 .dimensions(contentX, 0, fullW, ROW_H).build();
         statsButton.setTooltip(Tooltip.of(Text.translatable("autofarm.stats.tip")));
         addScrolling(statsButton);
+    }
 
-        // ---- 页脚（固定在面板底部，不参与滚动） ----
-        addFooter(
-                ButtonWidget.builder(Text.translatable("autofarm.button.save"), b -> onSave())
-                        .dimensions(contentX, 0, halfW, ROW_H).build(),
-                ButtonWidget.builder(Text.translatable("autofarm.button.cancel"), b -> onCancel())
-                        .dimensions(halfRightX, 0, halfW, ROW_H).build()
-        );
+    /** 一个开关按钮的样板：点一下翻转，标签跟着变（开着显示绿色） */
+    private ButtonWidget toggle(String optionKey, boolean value,
+                                java.util.function.Consumer<Boolean> setter, String tipKey) {
+        boolean[] state = {value};
+        ButtonWidget button = ButtonWidget.builder(toggleLabel(optionKey, state[0]), b -> {
+            state[0] = !state[0];
+            setter.accept(state[0]);
+            b.setMessage(toggleLabel(optionKey, state[0]));
+        }).dimensions(contentX, 0, contentWidth, ROW_H).build();
+        if (tipKey != null) {
+            button.setTooltip(Tooltip.of(Text.translatable(tipKey)));
+        }
+        addScrolling(button);
+        return button;
     }
 
     @Override
     protected void positionContent(int originY) {
-        setRowY(enabledButton, originY + ROW_ENABLED);
-        setRowY(radiusSlider, originY + ROW_RADIUS);
-        setRowY(scanIntervalSlider, originY + ROW_SCAN_INTERVAL);
-        setRowY(replantButton, originY + ROW_REPLANT);
-        setRowY(refillButton, originY + ROW_REFILL);
-        setRowY(depositButton, originY + ROW_DEPOSIT);
-        setRowY(aimModeButton, originY + ROW_EFFICIENCY);
-        setRowY(optimizeButton, originY + ROW_OPTIMIZE);
-        setRowY(showPathButton, originY + ROW_SHOW_PATH);
-        setRowY(lockSprintButton, originY + ROW_LOCK_SPRINT);
-        setRowY(autoEatButton, originY + ROW_AUTO_EAT);
-        setRowY(eatFullButton, originY + ROW_EAT_FULL);
-        setRowY(allowMineButton, originY + ROW_ALLOW_MINE);
-        setRowY(autoToolButton, originY + ROW_AUTO_TOOL);
-        setRowY(allowPlaceButton, originY + ROW_ALLOW_PLACE);
-        setRowY(visualizeButton, originY + ROW_VISUAL);
-        setRowY(paletteButton, originY + ROW_VISUAL);
-        setRowY(throughWallsButton, originY + ROW_THROUGH_WALLS);
-        setRowY(freecamButton, originY + ROW_FREECAM);
-        setRowY(defaultSeedButton, originY + ROW_DEFAULT_SEED);
-        setRowY(storagePolicyButton, originY + ROW_STORAGE_POLICY);
-        setRowY(containersButton, originY + ROW_CONTAINERS);
-        setRowY(fieldX, originY + ROW_FIELDS);
-        setRowY(fieldY, originY + ROW_FIELDS);
-        setRowY(fieldZ, originY + ROW_FIELDS);
-        setRowY(recordButton, originY + ROW_SUPPLY_BTN);
-        setRowY(clearButton, originY + ROW_SUPPLY_BTN);
-        setRowY(showHudButton, originY + ROW_SHOW_HUD);
-        setRowY(lowHealthButton, originY + ROW_LOW_HEALTH);
-        setRowY(mobsNearButton, originY + ROW_MOBS_NEAR);
-        setRowY(fillEmptyButton, originY + ROW_FILL_EMPTY);
-        setRowY(cropFilterButton, originY + ROW_CROP_FILTER);
-        setRowY(extrasButton, originY + ROW_EXTRAS);
-        setRowY(statsButton, originY + ROW_STATS);
+        // tab 栏
+        for (int i = 0; i < TAB_COUNT; i++) {
+            setRowY(tabButtons[i], originY + 2);
+        }
+
+        switch (currentTab) {
+            case TAB_MOVE -> positionMove(originY);
+            case TAB_DISPLAY -> positionDisplay(originY);
+            case TAB_SUPPLY -> positionSupply(originY);
+            case TAB_MORE -> positionMore(originY);
+            default -> positionHarvest(originY);
+        }
+    }
+
+    private void positionHarvest(int originY) {
+        int y = originY + SEC_HARVEST_Y;
+        setRowY(enabledButton, y + ROW_FIRST);
+        setRowY(radiusSlider, y + ROW_FIRST + ROW_GAP);
+        setRowY(scanIntervalSlider, y + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(replantButton, y + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(fillEmptyButton, y + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(refillButton, y + ROW_FIRST + 5 * ROW_GAP);
+        setRowY(depositButton, y + ROW_FIRST + 6 * ROW_GAP);
+        setRowY(aimModeButton, y + ROW_FIRST + 7 * ROW_GAP);
+    }
+
+    private void positionMove(int originY) {
+        int y = originY + SEC_MOVE_Y;
+        setRowY(optimizeButton, y + ROW_FIRST);
+        setRowY(showPathButton, y + ROW_FIRST + ROW_GAP);
+        setRowY(lockSprintButton, y + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(autoEatButton, y + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(eatFullButton, y + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(allowMineButton, y + ROW_FIRST + 5 * ROW_GAP);
+        setRowY(autoToolButton, y + ROW_FIRST + 6 * ROW_GAP);
+        setRowY(allowPlaceButton, y + ROW_FIRST + 7 * ROW_GAP);
+    }
+
+    private void positionDisplay(int originY) {
+        int d = originY + SEC_DISPLAY_Y;
+        setRowY(visualizeButton, d + ROW_FIRST);
+        setRowY(paletteButton, d + ROW_FIRST);
+        setRowY(throughWallsButton, d + ROW_FIRST + ROW_GAP);
+        setRowY(freecamButton, d + ROW_FIRST + 2 * ROW_GAP);
+
+        int s = originY + SEC_SAFETY_Y;
+        setRowY(showHudButton, s + ROW_FIRST);
+        setRowY(lowHealthButton, s + ROW_FIRST + ROW_GAP);
+        setRowY(mobsNearButton, s + ROW_FIRST + 2 * ROW_GAP);
+    }
+
+    private void positionSupply(int originY) {
+        int y = originY + SEC_SUPPLY_Y;
+        setRowY(defaultSeedButton, y + ROW_FIRST);
+        setRowY(storagePolicyButton, y + ROW_FIRST + ROW_GAP);
+        setRowY(containersButton, y + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(fieldX, y + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(fieldY, y + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(fieldZ, y + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(recordButton, y + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(clearButton, y + ROW_FIRST + 4 * ROW_GAP);
+    }
+
+    private void positionMore(int originY) {
+        int c = originY + SEC_CROP_Y;
+        setRowY(cropFilterButton, c + ROW_FIRST);
+
+        int m = originY + SEC_MORE_Y;
+        setRowY(extrasButton, m + ROW_FIRST);
+        setRowY(statsButton, m + ROW_FIRST + ROW_GAP);
     }
 
     private TextFieldWidget coordField(int x, int width, Integer value) {
@@ -465,7 +513,64 @@ public class AutoFarmScreen extends ScrollPanelScreen {
 
     @Override
     protected void renderContent(DrawContext context, int originY, int mouseX, int mouseY, float delta) {
-        // ---- 运行状态 ----
+        // tab 栏底下的分隔线 + 当前 tab 高亮
+        context.fill(contentX, originY + TAB_BAR_H, contentX + contentWidth, originY + TAB_BAR_H + 1, 0x30FFFFFF);
+        drawTabMarker(context, tabButtons, currentTab);
+
+        drawStatus(context, originY);
+
+        switch (currentTab) {
+            case TAB_MOVE -> {
+                drawSection(context, originY, SEC_MOVE_Y, SEC_MOVE_H);
+                drawHeader(context, originY, SEC_MOVE_Y, "autofarm.section.path");
+                context.drawTextWithShadow(this.textRenderer,
+                        Text.translatable("autofarm.path.hotbar", FarmTaskManager.getHotbarBlockCount()),
+                        contentX + 78, originY + SEC_MOVE_Y + 4, COLOR_HINT);
+            }
+            case TAB_DISPLAY -> {
+                drawSection(context, originY, SEC_DISPLAY_Y, SEC_DISPLAY_H);
+                drawHeader(context, originY, SEC_DISPLAY_Y, "autofarm.section.display");
+                context.drawTextWithShadow(this.textRenderer,
+                        Text.translatable("autofarm.section.display.hint"),
+                        contentX + DISPLAY_HINT_X, originY + SEC_DISPLAY_Y + 4, COLOR_HINT);
+
+                drawSection(context, originY, SEC_SAFETY_Y, SEC_SAFETY_H);
+                drawHeader(context, originY, SEC_SAFETY_Y, "autofarm.section.safety");
+                context.drawTextWithShadow(this.textRenderer,
+                        Text.translatable("autofarm.section.safety.hint"),
+                        contentX + 62, originY + SEC_SAFETY_Y + 4, COLOR_HINT);
+            }
+            case TAB_SUPPLY -> drawSupply(context, originY);
+            case TAB_MORE -> {
+                drawSection(context, originY, SEC_CROP_Y, SEC_CROP_H);
+                drawHeader(context, originY, SEC_CROP_Y, "autofarm.section.crop");
+                // 一行摘要：现在是哪种筛选、附近有几格空地
+                Text summary = Text.translatable("autofarm.crop.summary",
+                        Text.translatable(cropModeKey(draft.cropFilterMode)),
+                        Text.translatable(draft.fillEmptyFarmland ? "autofarm.on" : "autofarm.off"),
+                        FarmTaskManager.getFarmlandCount());
+                context.drawTextWithShadow(this.textRenderer, summary,
+                        contentX + 62, originY + SEC_CROP_Y + 4,
+                        draft.fillEmptyFarmland ? COLOR_TEXT : COLOR_HINT);
+
+                drawSection(context, originY, SEC_MORE_Y, SEC_MORE_H);
+                drawHeader(context, originY, SEC_MORE_Y, "autofarm.section.extras");
+                // 一行摘要：现在开了几项附加功能
+                int enabledExtras = draft.extrasEnabledCount();
+                context.drawTextWithShadow(this.textRenderer,
+                        Text.translatable("autofarm.extras.summary", enabledExtras),
+                        contentX + 62, originY + SEC_MORE_Y + 4,
+                        enabledExtras > 0 ? COLOR_NOTICE : COLOR_HINT);
+            }
+            default -> {
+                drawSection(context, originY, SEC_HARVEST_Y, SEC_HARVEST_H);
+                drawHeader(context, originY, SEC_HARVEST_Y, "autofarm.section.harvest");
+            }
+        }
+    }
+
+    /** 每一页顶部那份「此刻在干嘛」的快照 */
+    private void drawStatus(DrawContext context, int originY) {
         drawSection(context, originY, SEC_STATUS_Y, SEC_STATUS_H);
         drawHeader(context, originY, SEC_STATUS_Y, "autofarm.section.status");
         context.drawTextWithShadow(this.textRenderer,
@@ -478,32 +583,13 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         context.drawTextWithShadow(this.textRenderer, routeText(),
                 contentX + 6, originY + SEC_STATUS_Y + 37,
                 FarmTaskManager.isWalking() ? COLOR_TEXT : COLOR_HINT);
-
-        // 第四行：上一棵作物收得怎么样。「没种子」「挖不动」这类跳过原因都写在这里，
-        // 不然你只会看到它绕开某一棵却不知道为什么。
         context.drawTextWithShadow(this.textRenderer, harvestText(),
                 contentX + 6, originY + SEC_STATUS_Y + 48,
                 FarmTaskManager.getHarvestNotice() != null ? COLOR_NOTICE : COLOR_HINT);
+    }
 
-        // ---- 收割设置 ----
-        drawSection(context, originY, SEC_HARVEST_Y, SEC_HARVEST_H);
-        drawHeader(context, originY, SEC_HARVEST_Y, "autofarm.section.harvest");
-
-        // ---- 路径规划 ----
-        drawSection(context, originY, SEC_PATH_Y, SEC_PATH_H);
-        drawHeader(context, originY, SEC_PATH_Y, "autofarm.section.path");
-        context.drawTextWithShadow(this.textRenderer,
-                Text.translatable("autofarm.path.hotbar", FarmTaskManager.getHotbarBlockCount()),
-                contentX + 78, originY + SEC_PATH_Y + 4, COLOR_HINT);
-
-        // ---- 可视化 ----
-        drawSection(context, originY, SEC_DISPLAY_Y, SEC_DISPLAY_H);
-        drawHeader(context, originY, SEC_DISPLAY_Y, "autofarm.section.display");
-        context.drawTextWithShadow(this.textRenderer,
-                Text.translatable("autofarm.section.display.hint"),
-                contentX + DISPLAY_HINT_X, originY + SEC_DISPLAY_Y + 4, COLOR_HINT);
-
-        // ---- 补给点 ----
+    /** 「补给」页那段自绘：背包空格数 + 识别到的容器 + 三个坐标轴标签 */
+    private void drawSupply(DrawContext context, int originY) {
         drawSection(context, originY, SEC_SUPPLY_Y, SEC_SUPPLY_H);
         drawHeader(context, originY, SEC_SUPPLY_Y, "autofarm.section.supply");
 
@@ -514,9 +600,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
                 contentX + 62, originY + SEC_SUPPLY_Y + 4,
                 free <= 1 ? COLOR_NOTICE : COLOR_HINT);
 
-        // 识别到的存储方块。判定是「附近有没有挂 Inventory 的方块实体」，
-        // 所以箱子、木桶、别的存储模组在这里都会显示成「已识别」；
-        // 没设、或者那一格真不是容器，就用暖色把话说清楚。
+        // 识别到的存储方块（判定是「附近有没有挂 Inventory 的方块实体」）
         AutoFarmConfig preview = previewSupply();
         BlockPos found = findSupplyContainer(preview);
         Text supplyText;
@@ -532,44 +616,14 @@ public class AutoFarmScreen extends ScrollPanelScreen {
                     found.getX() + ", " + found.getY() + ", " + found.getZ());
             supplyColor = COLOR_TEXT;
         }
-        context.drawTextWithShadow(this.textRenderer, supplyText,
-                contentX + 6, originY + ROW_SUPPLY_HINT + 5, supplyColor);
+        int fieldRow = originY + SEC_SUPPLY_Y + ROW_FIRST + 3 * ROW_GAP;
+        context.drawTextWithShadow(this.textRenderer, supplyText, contentX + 6, fieldRow - 13, supplyColor);
 
         String[] axes = {"X", "Y", "Z"};
         for (int i = 0; i < axes.length; i++) {
             context.drawTextWithShadow(this.textRenderer, axes[i],
-                    axisLabelX[i], originY + ROW_FIELDS + 5, COLOR_HINT);
+                    axisLabelX[i], fieldRow + 5, COLOR_HINT);
         }
-
-        // ---- 安全与提示 ----
-        drawSection(context, originY, SEC_SAFETY_Y, SEC_SAFETY_H);
-        drawHeader(context, originY, SEC_SAFETY_Y, "autofarm.section.safety");
-        context.drawTextWithShadow(this.textRenderer,
-                Text.translatable("autofarm.section.safety.hint"),
-                contentX + 62, originY + SEC_SAFETY_Y + 4, COLOR_HINT);
-
-        // ---- 作物与筛选 ----
-        drawSection(context, originY, SEC_CROP_Y, SEC_CROP_H);
-        drawHeader(context, originY, SEC_CROP_Y, "autofarm.section.crop");
-        // 一行摘要：现在是哪种筛选、附近有几格空地 —— 不必进次级面板也能看个大概。
-        // 空地的数目是活的（来自上一轮扫描），所以它同时也是「它到底扫到没有」的凭据。
-        Text summary = Text.translatable("autofarm.crop.summary",
-                Text.translatable(cropModeKey(draft.cropFilterMode)),
-                Text.translatable(draft.fillEmptyFarmland ? "autofarm.on" : "autofarm.off"),
-                FarmTaskManager.getFarmlandCount());
-        context.drawTextWithShadow(this.textRenderer, summary,
-                contentX + 62, originY + SEC_CROP_Y + 4,
-                draft.fillEmptyFarmland ? COLOR_TEXT : COLOR_HINT);
-
-        // ---- 附加功能 ----
-        drawSection(context, originY, SEC_EXTRAS_Y, SEC_EXTRAS_H);
-        drawHeader(context, originY, SEC_EXTRAS_Y, "autofarm.section.extras");
-        // 一行摘要：现在开了几项。全关时压暗，开了就换成暖色，一眼能看出「有没有动过」
-        int enabledExtras = draft.extrasEnabledCount();
-        context.drawTextWithShadow(this.textRenderer,
-                Text.translatable("autofarm.extras.summary", enabledExtras),
-                contentX + 62, originY + SEC_EXTRAS_Y + 4,
-                enabledExtras > 0 ? COLOR_NOTICE : COLOR_HINT);
     }
 
     /** 筛选模式的显示名（和「作物」次级面板用同一套键） */
@@ -599,7 +653,8 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     }
 
     /** 状态区第三行：当前这条路线还剩多少活要干 */
-    private static Text routeText() {        if (!FarmTaskManager.isWalking()) {
+    private static Text routeText() {
+        if (!FarmTaskManager.isWalking()) {
             return Text.translatable("autofarm.status.route.none");
         }
         return Text.translatable("autofarm.status.route",
@@ -613,11 +668,9 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         if (notice != null) {
             return Text.translatable(notice);
         }
-        // 甜浆果、发光浆果这类是「摘」的：植株留着，所以没有补种那回事
         if (CropHarvester.wasPicked()) {
             return Text.translatable("autofarm.status.picked");
         }
-        // 空地补种：没收到任何东西，但确实干了一件活
         if (CropHarvester.wasPlanted()) {
             return Text.translatable("autofarm.status.planted");
         }
@@ -630,7 +683,8 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     }
 
     /** 面板上方那行补给点状态，跟着输入框实时变，不必等保存 */
-    private AutoFarmConfig previewSupply() {        AutoFarmConfig preview = new AutoFarmConfig();
+    private AutoFarmConfig previewSupply() {
+        AutoFarmConfig preview = new AutoFarmConfig();
         preview.supplyX = parseOrNull(fieldX);
         preview.supplyY = parseOrNull(fieldY);
         preview.supplyZ = parseOrNull(fieldZ);
@@ -639,12 +693,19 @@ public class AutoFarmScreen extends ScrollPanelScreen {
 
     // ================= 行为 =================
 
-    /** 进「存放策略」次级面板。它编辑的是同一个 draft，所以回来时这里不用再同步 */
-    private void openStoragePolicy() {
-        // 先把输入框里的内容收进草稿，回来重建界面时才不会丢
+    /** 把三个坐标输入框的内容收回草稿。不在「补给」页时输入框不存在，此时什么都不做 */
+    private void captureFields() {
+        if (fieldX == null) {
+            return;
+        }
         draft.supplyX = parseOrNull(fieldX);
         draft.supplyY = parseOrNull(fieldY);
         draft.supplyZ = parseOrNull(fieldZ);
+    }
+
+    /** 进「存放策略」次级面板。它编辑的是同一个 draft，所以回来时这里不用再同步 */
+    private void openStoragePolicy() {
+        captureFields();
         if (this.client != null) {
             this.client.setScreen(new StoragePolicyScreen(this, draft));
         }
@@ -652,9 +713,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
 
     /** 进「扩展存储与补给」次级面板：四个专用容器的坐标与开关 */
     private void openContainers() {
-        draft.supplyX = parseOrNull(fieldX);
-        draft.supplyY = parseOrNull(fieldY);
-        draft.supplyZ = parseOrNull(fieldZ);
+        captureFields();
         if (this.client != null) {
             this.client.setScreen(new ContainerConfigScreen(this, draft));
         }
@@ -662,10 +721,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
 
     /** 进「作物」次级面板。它编辑的是同一个 draft，所以回来时这里不用再同步 */
     private void openCropFilter() {
-        // 先把输入框里的内容收进草稿，回来重建界面时才不会丢
-        draft.supplyX = parseOrNull(fieldX);
-        draft.supplyY = parseOrNull(fieldY);
-        draft.supplyZ = parseOrNull(fieldZ);
+        captureFields();
         if (this.client != null) {
             this.client.setScreen(new CropFilterScreen(this, draft));
         }
@@ -673,10 +729,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
 
     /** 进「高亮样式」次级面板。它编辑的是同一个 draft，所以回来时这里不用再同步 */
     private void openHighlightStyle() {
-        // 先把输入框里的内容收进草稿，回来重建界面时才不会丢
-        draft.supplyX = parseOrNull(fieldX);
-        draft.supplyY = parseOrNull(fieldY);
-        draft.supplyZ = parseOrNull(fieldZ);
+        captureFields();
         if (this.client != null) {
             this.client.setScreen(new HighlightStyleScreen(this, draft));
         }
@@ -684,9 +737,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
 
     /** 进「附加功能」次级面板。它编辑的是同一个 draft，回来时这里不用再同步 */
     private void openExtras() {
-        draft.supplyX = parseOrNull(fieldX);
-        draft.supplyY = parseOrNull(fieldY);
-        draft.supplyZ = parseOrNull(fieldZ);
+        captureFields();
         if (this.client != null) {
             this.client.setScreen(new ExtrasScreen(this, draft));
         }
@@ -727,9 +778,13 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     }
 
     private Text aimModeLabel() {
+        // 极效率是风险档：文字标红，和非风险的两档区分开
+        MutableText value = Text.translatable("autofarm.aim_mode." + aimModeKey(draft.aimMode));
+        if (draft.aimMode == AutoFarmConfig.AIM_EXTREME) {
+            value = value.formatted(Formatting.RED);
+        }
         return Text.translatable("autofarm.toggle",
-                Text.translatable("autofarm.option.aim_mode"),
-                Text.translatable("autofarm.aim_mode." + aimModeKey(draft.aimMode)));
+                Text.translatable("autofarm.option.aim_mode"), value);
     }
 
     private static String aimModeKey(int mode) {
@@ -741,9 +796,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     }
 
     private void onSave() {
-        draft.supplyX = parseOrNull(fieldX);
-        draft.supplyY = parseOrNull(fieldY);
-        draft.supplyZ = parseOrNull(fieldZ);
+        captureFields();
         ConfigManager.save(draft);
         toast("autofarm.message.saved");
         backToParent();
@@ -797,7 +850,6 @@ public class AutoFarmScreen extends ScrollPanelScreen {
      * 低血量门槛的下一个档位：关闭 → 3 心 → 4 心 → 5 心 → 6 心 → 关闭。
      *
      * <p>从「关闭」一步就是 3 心（最灵敏），然后往上走；到头再回到关闭。
-     * 没有 1 心、2 心这两档 —— 那两档被打一下就停，实际用起来只剩烦躁。
      */
     private static int nextHealthStop(int current) {
         return switch (current) {

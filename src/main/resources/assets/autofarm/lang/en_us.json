@@ -449,5 +449,10 @@
   "autofarm.turn_time.hint": "Range %s–%s ms (0 = no easing, instant turn)",
   "autofarm.turn_time.warn": "Turn time below %s ms: too abrupt — likely to look robotic",
   "autofarm.option.instant_actions": "No-Delay Actions",
-  "autofarm.instant_actions.tip": "No pause between bone-mealing / planting / picking / harvesting — they run back-to-back like holding right-click (and eating no longer pauses after a full meal). Faster, but very regular — do not combine with anti-kick / humanized timing."
+  "autofarm.instant_actions.tip": "No pause between bone-mealing / planting / picking / harvesting — they run back-to-back like holding right-click (and eating no longer pauses after a full meal). Faster, but very regular — do not combine with anti-kick / humanized timing.",
+  "autofarm.tab.harvest": "Harvest",
+  "autofarm.tab.move": "Move",
+  "autofarm.tab.display": "Display",
+  "autofarm.tab.supply": "Supply",
+  "autofarm.tab.more": "More"
 }

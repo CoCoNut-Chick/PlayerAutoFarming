@@ -11,7 +11,6 @@ import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
@@ -49,8 +48,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int TAB_SURVIVAL = 3;
     private static final int TAB_RESOURCE = 4;
     private static final int TAB_COUNT = 5;
-    /** 顶部 tab 栏的高度（相对内容区顶部） */
-    private static final int TAB_BAR_H = 24;
 
     // ---------------- 内容区布局（相对内容区顶部） ----------------
     /** 分区内第一行相对分区顶部的 y（让开标题那一行） */
@@ -61,8 +58,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SECTION_GAP = 6;
     /** 参数行的左缩进，视觉上表示「从属于上一行」 */
     private static final int INDENT = 8;
-    /** 高风险分区专用的警示色：标题与开关文字都用它 */
-    private static final int COLOR_DANGER = 0xFFFF5555;
     /** 攻击间隔行的左侧标签宽度 / 输入框宽度 */
     private static final int INTERVAL_LABEL_W = 60;
     private static final int INTERVAL_FIELD_W = 56;
@@ -852,9 +847,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     }
 
     private static Text dangerLabel(String optionKey, boolean value) {
-        return Text.translatable("autofarm.toggle",
-                Text.translatable(optionKey).formatted(Formatting.RED),
-                Text.translatable(value ? "autofarm.on" : "autofarm.off"));
+        return dangerToggleLabel(optionKey, value);
     }
 
     private boolean currentToggle(String optionKey) {
@@ -1048,17 +1041,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
     @Override
     protected void renderContent(DrawContext context, int originY, int mouseX, int mouseY, float delta) {
-        // tab 栏底下的分隔线 + 当前 tab 高亮
+        // tab 栏底下的分隔线 + 当前 tab 高亮（高亮那一套和主面板共用）
         context.fill(contentX, originY + TAB_BAR_H, contentX + contentWidth, originY + TAB_BAR_H + 1, 0x30FFFFFF);
-        for (int i = 0; i < TAB_COUNT; i++) {
-            if (i == currentTab) {
-                ButtonWidget btn = tabButtons[i];
-                if (btn != null) {
-                    context.fill(btn.getX(), btn.getY() + btn.getHeight() - 1,
-                            btn.getX() + btn.getWidth(), btn.getY() + btn.getHeight(), COLOR_HEADER);
-                }
-            }
-        }
+        drawTabMarker(context, tabButtons, currentTab);
 
         switch (currentTab) {
             case TAB_COMBAT -> {

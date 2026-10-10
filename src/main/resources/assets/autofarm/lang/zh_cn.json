@@ -449,5 +449,10 @@
   "autofarm.turn_time.hint": "范围 %s ~ %s 毫秒（0 = 不缓动，瞬间转向）",
   "autofarm.turn_time.warn": "转向时间小于 %s 毫秒：转身太突兀，容易被看出是机器在操作",
   "autofarm.option.instant_actions": "无间隔连发",
-  "autofarm.instant_actions.tip": "撒骨粉 / 种植 / 采摘 / 采集之间不再插入停顿，像长按右键那样一步接一步连续执行（吃到饱时也不再歇）。更快，但动作节奏很规律 —— 别和防踢模式 / 拟人化节奏一起用。"
+  "autofarm.instant_actions.tip": "撒骨粉 / 种植 / 采摘 / 采集之间不再插入停顿，像长按右键那样一步接一步连续执行（吃到饱时也不再歇）。更快，但动作节奏很规律 —— 别和防踢模式 / 拟人化节奏一起用。",
+  "autofarm.tab.harvest": "收割",
+  "autofarm.tab.move": "移动",
+  "autofarm.tab.display": "显示",
+  "autofarm.tab.supply": "补给",
+  "autofarm.tab.more": "更多"
 }
