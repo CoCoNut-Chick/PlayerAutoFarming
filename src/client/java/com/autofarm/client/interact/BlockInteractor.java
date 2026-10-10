@@ -77,18 +77,34 @@ public final class BlockInteractor {
 
     // ================= 转向 / 瞄准 =================
 
-    /**
-     * 每 tick 消掉「剩余角度」的比例。
-     *
-     * <p>转向做成<b>缓动</b>而不是匀速：每 tick 的步长 = 当前剩余角度 × 这个系数。
-     * 于是角度大时步子大（转得快）、越接近目标步子越小（转得慢），最后轻轻贴合上去，
-     * 既没有「每 tick 固定 18 度」那种一卡一卡的机械感，也没有「瞬间甩到位」的突兀感。
-     * 0.28 大约对应 0.3~0.5 秒转完一个大角度。
-     */
-    private static final float TURN_EASE = 0.28f;
-
     /** 剩余角度小到这个值就直接贴合 —— 省掉「指数逼近永远差一点点」的尾巴 */
     private static final float TURN_SNAP = 0.4f;
+
+    /** 缓动系数缓存（由「转向时间」换算而来；配置没变就不重算） */
+    private static float turnEaseCache = 0.30f;
+    private static int turnEaseForMs = Integer.MIN_VALUE;
+
+    /**
+     * 每 tick 消掉「剩余角度」的比例 —— 由配置的「丝滑转向时间」换算。
+     *
+     * <p>转向做成<b>缓动</b>而不是匀速：每 tick 的步长 = 当前剩余角度 × 这个系数。
+     * 角度大时步子大（转得快）、越接近目标步子越小（转得慢），既没有「每 tick 固定角度」
+     * 那种一卡一卡的机械感，也没有「瞬间甩到位」的突兀感。
+     *
+     * <p>想让整段转向用 {@code ms} 毫秒完成，每 tick（50ms）该消掉的比例就是
+     * {@code 1 - 0.02^(1 / ticks)}（剩 2% 尾巴留给 {@link #TURN_SNAP} 一次咬合）。
+     * 结果按 ms 缓存，配置没改就复用。
+     */
+    private static float turnEase() {
+        AutoFarmConfig config = ConfigManager.get();
+        int ms = config == null ? 600 : config.turnDurationMs;
+        if (ms != turnEaseForMs) {
+            turnEaseForMs = ms;
+            double ticks = Math.max(1.0, ms / 50.0); // 一个 tick 50ms
+            turnEaseCache = (float) (1.0 - Math.pow(0.02, 1.0 / ticks));
+        }
+        return turnEaseCache;
+    }
 
     /**
      * 缓动一步：从 {@code current} 朝 {@code desired} 走一小段，返回新的角度。
@@ -101,7 +117,7 @@ public final class BlockInteractor {
         if (Math.abs(diff) <= TURN_SNAP) {
             return desired;
         }
-        return current + diff * TURN_EASE;
+        return current + diff * turnEase();
     }
 
     /** 缓动一步（yaw，按 ±180 环绕取最短方向 —— 分毫不差地走最短那条路） */
@@ -110,7 +126,7 @@ public final class BlockInteractor {
         if (Math.abs(diff) <= TURN_SNAP) {
             return desired;
         }
-        return current + diff * TURN_EASE;
+        return current + diff * turnEase();
     }
 
     /** 转向到某个水平坐标 —— 缓动转过去（每 tick 按剩余角度比例走一小段） */

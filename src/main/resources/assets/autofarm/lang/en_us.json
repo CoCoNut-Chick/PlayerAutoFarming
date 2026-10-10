@@ -442,5 +442,8 @@
   "autofarm.container.seed": "Seed Input (take seeds)",
   "autofarm.container.tool": "Tool Resupply (take tools / bone meal)",
   "autofarm.container.junk": "Junk Storage (store non-crop items)",
-  "autofarm.notice.bone_meal_from_backpack": "Bone meal moved from backpack to hotbar"
+  "autofarm.notice.bone_meal_from_backpack": "Bone meal moved from backpack to hotbar",
+  "autofarm.option.turn_time": "Turn Time",
+  "autofarm.turn_time.tip": "Roughly how long a view turn takes: smaller is snappier, larger is smoother. It only affects the feel, not whether you can actually mine.",
+  "autofarm.notice.out_of_bone_meal": "Bone meal: out of stock — heading to the supply point"
 }

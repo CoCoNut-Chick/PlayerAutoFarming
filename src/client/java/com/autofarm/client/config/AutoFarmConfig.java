@@ -53,6 +53,21 @@ public class AutoFarmConfig {
      */
     public int aimMode = AIM_NORMAL;
 
+    /**
+     * 「丝滑转向」一个完整转向大致用多少毫秒。
+     *
+     * <p>视角是缓动转过去的（角度越大一步跨得越多、越接近越慢）。这个值决定<b>整体快慢</b>：
+     * 调小 → 转得又快又干脆；调大 → 转得慢而平滑。默认 600 毫秒左右，
+     * 相当于「一次大角度转身用半秒多」。
+     *
+     * <p>它只影响转向的观感，不影响能不能挖到 —— 该命中的照样命中。
+     */
+    public int turnDurationMs = 600;
+
+    /** 转向时间的合法区间（毫秒） */
+    public static final int TURN_DURATION_MIN = 150;
+    public static final int TURN_DURATION_MAX = 2000;
+
     /** 种子不够时是否自动前往补给点取种子 */
     public boolean refillSeeds = true;
 
@@ -1011,6 +1026,7 @@ public class AutoFarmConfig {
         c.scanIntervalTicks = this.scanIntervalTicks;
         c.replant = this.replant;
         c.aimMode = this.aimMode;
+        c.turnDurationMs = this.turnDurationMs;
         c.refillSeeds = this.refillSeeds;
         c.depositWhenFull = this.depositWhenFull;
         c.optimizePath = this.optimizePath;
@@ -1131,6 +1147,8 @@ public class AutoFarmConfig {
         if (aimMode < AIM_NORMAL || aimMode >= AIM_MODE_COUNT) {
             aimMode = AIM_NORMAL;
         }
+        if (turnDurationMs < TURN_DURATION_MIN) turnDurationMs = TURN_DURATION_MIN;
+        if (turnDurationMs > TURN_DURATION_MAX) turnDurationMs = TURN_DURATION_MAX;
 
         highlightColor &= 0xFFFFFF;
         if (highlightWidth < 1) highlightWidth = 1;

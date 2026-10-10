@@ -93,6 +93,11 @@ public final class CropHighlighter {
 
     private static void render(WorldRenderContext context) {
         AutoFarmConfig config = ConfigManager.get();
+        // 总开关一关，什么都别画 —— 描边 / 路线一律不显示（就算 visualize 还开着）。
+        // 这是硬保险：关掉开关之后画面上不该再有任何「它还在工作」的痕迹。
+        if (!config.enabled) {
+            return;
+        }
         if (!config.visualize && !config.showPath) {
             return;
         }

@@ -1123,6 +1123,29 @@ public final class FarmTaskManager {
         // 战斗 / 受击反制接管时不走这一段：人在回头或挥刀，走路和收割都让路
         // ================================================================
         if (!paused && !fightingActive && !hitReacting) {
+            // 「骨粉告罄」：田里还有没熟的目标等着催熟，可背包 + 快捷栏一点骨粉都不剩了 ——
+            // 这时别再顺着当前路线空跑（后面全是撒不了骨粉的催熟目标），<b>中断它</b>，
+            // 先去补给点取骨粉，取到再回来接着催熟。
+            // 授权来自「耗材自给」开关（它才是「自动去补给点取耗材」的那道闸）。
+            boolean boneMealRunDry = config.enabled
+                    && config.boneMealBoost
+                    && config.autoFetchSupplies
+                    && supplyPhase == SupplyPhase.NONE
+                    && supplyCooldown == 0
+                    && !boneMealTargets.isEmpty()
+                    && InventoryScanner.findBoneMealSlotDeep(client.player) < 0;
+            if (boneMealRunDry && containerFor(config, SupplyPurpose.FETCH_TOOL) != null) {
+                PathWalker.stop();
+                CropHarvester.reset();
+                // 这一趟就是去取骨粉：把补给需求点上，别让搬运层以为「什么都不用取」。
+                suppliesWanted = true;
+                toolWanted = false;
+                if (startSupplyRun(client, config, false, false, SupplyPurpose.FETCH_TOOL)) {
+                    announceEvent(client, "autofarm.notice.out_of_bone_meal");
+                    return;
+                }
+            }
+
             if (supplyPhase != SupplyPhase.NONE) {
                 if (!freecamPaused) {
                     runSupply(client, config);
@@ -1591,6 +1614,8 @@ public final class FarmTaskManager {
         state = CropHarvester.isReplanting() ? FarmState.REPLANTING : FarmState.HARVESTING;
 
         if (finished) {
+            // 先记下这一格是不是「骨粉目标」—— 它可能要多撒几次才熟，处理完得允许重排
+            boolean boneMealStop = boneMealTargets.contains(held);
             // 统计：真的收到了才算数（判定「这格不该动」时 wasHarvested 是 false）
             if (CropHarvester.wasHarvested()) {
                 harvestedCount++;
@@ -1632,6 +1657,14 @@ public final class FarmTaskManager {
             PathWalker.releaseTarget();
             drainResolved();
 
+            // 骨粉目标：撒一次未必就熟（原版一次只随机推进 0~2 段），必须允许下一轮
+            // 重新排进催熟路线。否则它会带着「已处理」标记被永久跳过 —— 症状就是
+            // 「催熟过一次之后，就算补了骨粉也不再继续催熟、人也不动了」。
+            // 和掉落物同理，从 handled 撤回来重新评估。
+            if (boneMealStop) {
+                handled.remove(held);
+            }
+
             // 附加功能「失败目标暂时拉黑」：这一棵没干成、而且给出了原因（挖不动、
             // 种不下去……）才拉黑。单纯「这一格已经不是成熟作物」不算失败 ——
             // 那是被别人收走了，重试也没意义。拉黑的做法是从 handled 里撤回来、
@@ -1649,7 +1682,13 @@ public final class FarmTaskManager {
                 // 所以无论「失败拉黑」开没开，都先从 handled 撤回来让下一轮重试；
                 // 开了拉黑再额外记个到期时间（到点才重试，避免每轮都去挖挖不动的东西）。
                 handled.remove(held);
-                if (config.failureCooldown) {
+                // 「材料不够」不算这一格的错：没骨粉 / 没种子时先把它放回队伍，
+                // 别拉黑——补到货就该马上回来继续，而不是干等冷却结束。
+                String failKey = CropHarvester.getNotice();
+                boolean materialShortage = "autofarm.notice.no_bone_meal".equals(failKey)
+                        || "autofarm.notice.no_seed".equals(failKey)
+                        || "autofarm.notice.plant_no_seed".equals(failKey);
+                if (config.failureCooldown && !materialShortage) {
                     failedUntil.put(held.toImmutable(),
                             client.world.getTime() + config.failureCooldownSeconds * 20L);
                 }

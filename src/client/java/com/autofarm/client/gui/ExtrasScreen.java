@@ -80,7 +80,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int ANTIKICK_ROWS = 2;
     private static final int SEC_ANTIKICK_Y = SEC_STEALTH_Y + SEC_STEALTH_H + SECTION_GAP;
     private static final int SEC_ANTIKICK_H = ROW_FIRST + ANTIKICK_ROWS * ROW_GAP + 4;
-    private static final int BEHAVIOR_ROWS = 6;
+    private static final int BEHAVIOR_ROWS = 7;
     private static final int SEC_BEHAVIOR_Y = SEC_ANTIKICK_Y + SEC_ANTIKICK_H + SECTION_GAP;
     private static final int SEC_BEHAVIOR_H = ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 4;
 
@@ -128,6 +128,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] VIOLENCE_CHOICES = {0, 1, 2};
     private static final int[] ANTIKICK_LEVEL_CHOICES = {0, 1, 2, 3};
     private static final int[] REACTION_CHOICES = {4, 10, 20, 30};
+    /** 「丝滑转向时间」档位（毫秒）：越小转得越干脆，越大越平滑 */
+    private static final int[] TURN_DURATION_CHOICES = {200, 350, 600, 900, 1400, 2000};
     private static final int[] HOUR_CHOICES = buildHours();
     private static final int[] AREA_MODE_CHOICES = {0, 1};
     private static final int[] WORK_AREA_RADIUS_CHOICES = {8, 12, 16, 24, 32, 48};
@@ -180,6 +182,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget reactionDelayButton;
     private ButtonWidget reactionTimeButton;
     private ButtonWidget idleLookButton;
+    private ButtonWidget turnTimeButton;
     private ButtonWidget scheduleButton;
     private ButtonWidget scheduleStartButton;
     private ButtonWidget scheduleEndButton;
@@ -399,6 +402,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 draft.idleLookAround, value -> draft.idleLookAround = value,
                 "autofarm.idle_look.tip");
         layout(idleLookButton, contentX, 0, fullW);
+
+        this.turnTimeButton = ButtonWidget.builder(turnTimeLabel(), b -> {
+            draft.turnDurationMs = nextChoice(TURN_DURATION_CHOICES, draft.turnDurationMs);
+            b.setMessage(turnTimeLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        turnTimeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.turn_time.tip")));
+        addScrolling(turnTimeButton);
 
         this.scheduleButton = toggle("autofarm.option.schedule",
                 draft.scheduleEnabled, value -> draft.scheduleEnabled = value,
@@ -948,9 +958,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(reactionDelayButton, behavior + ROW_FIRST);
         setRowY(reactionTimeButton, behavior + ROW_FIRST + ROW_GAP);
         setRowY(idleLookButton, behavior + ROW_FIRST + 2 * ROW_GAP);
-        setRowY(scheduleButton, behavior + ROW_FIRST + 3 * ROW_GAP);
-        setRowY(scheduleStartButton, behavior + ROW_FIRST + 4 * ROW_GAP);
-        setRowY(scheduleEndButton, behavior + ROW_FIRST + 5 * ROW_GAP);
+        setRowY(turnTimeButton, behavior + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(scheduleButton, behavior + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(scheduleStartButton, behavior + ROW_FIRST + 5 * ROW_GAP);
+        setRowY(scheduleEndButton, behavior + ROW_FIRST + 6 * ROW_GAP);
     }
 
     private void positionArea(int originY) {
@@ -1095,6 +1106,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.reactionDelay = false;
         draft.reactionDelayTicks = 10;
         draft.idleLookAround = false;
+        draft.turnDurationMs = 600;
         draft.scheduleEnabled = false;
         draft.scheduleStartHour = 8;
         draft.scheduleEndHour = 23;
@@ -1153,6 +1165,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.reactionDelay = old.reactionDelay;
         draft.reactionDelayTicks = old.reactionDelayTicks;
         draft.idleLookAround = old.idleLookAround;
+        draft.turnDurationMs = old.turnDurationMs;
         draft.scheduleEnabled = old.scheduleEnabled;
         draft.scheduleStartHour = old.scheduleStartHour;
         draft.scheduleEndHour = old.scheduleEndHour;
@@ -1290,6 +1303,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
         return optionLabel("autofarm.option.reaction_time",
                 Text.translatable("autofarm.value.seconds",
                         String.format("%.1f", draft.reactionDelayTicks / 20.0)));
+    }
+
+    private Text turnTimeLabel() {
+        return optionLabel("autofarm.option.turn_time",
+                Text.translatable("autofarm.value.millis", draft.turnDurationMs));
     }
 
     private Text scheduleStartLabel() {
