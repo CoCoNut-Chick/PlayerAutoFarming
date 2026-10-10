@@ -29,8 +29,9 @@ public final class AutoFarmKeybinds {
     /**
      * 打开统计面板。
      *
-     * <p>默认 H 键。统计面板是纯查看（本轮 / 累计的账本），
-     * 给它单开一个键，就不用为了看个数字先开主面板再点进去。
+     * <p>默认<b>不绑定任何键</b>（{@code GLFW_KEY_UNKNOWN}）—— 它是纯查看用的次级功能，
+     * 不该占一个常用键位；想用就去「选项 → 按键控制」里自己绑一个。统计面板里
+     * 也能从主面板的「统计」按钮进。
      */
     public static KeyBinding openStats;
 
@@ -55,7 +56,7 @@ public final class AutoFarmKeybinds {
         openStats = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.autofarm.open_stats",
                 InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_H,
+                GLFW.GLFW_KEY_UNKNOWN,
                 CATEGORY
         ));
     }
