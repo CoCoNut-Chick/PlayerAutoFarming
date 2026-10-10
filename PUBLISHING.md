@@ -6,6 +6,10 @@
 命令都按 **Windows + Git Bash** 写（你现在用的就是这个）。用 PowerShell / CMD 时
 只有引号和路径写法略有差别，会另外标注。
 
+> 🚧 **GitHub 打不开 / 注册页卡住？** 先看 **[附录 A](#附录-agithub-打不开--注册页卡住怎么办)**（不用任何工具的排查顺序），
+> 还不行就走 **[附录 B](#附录-b用-gitee码云发布--国内可用的替代方案)** 用 Gitee 发布 ——
+> 前面的步骤 90% 通用，只换网址。**注册不是必须现在做**，本地代码已经全部就绪了。
+
 ---
 
 ## 第 0 步：发布前先检查三件事
@@ -270,6 +274,8 @@ GitHub 的 Release 只方便已经知道你项目的人；想被玩家搜到，�
 
 | 现象 | 原因 / 解决 |
 |---|---|
+| **注册页打不开 / 一直转圈** | 见 **[附录 A](#附录-agithub-打不开--注册页卡住怎么办)**：换网络（手机热点）→ 换时段 → 换 DNS → 关掉广告拦截插件 |
+| **GitHub 一直上不去** | 走 **[附录 B](#附录-b用-gitee码云发布--国内可用的替代方案)**，用 Gitee 发布，功能完全够用；以后再加个 remote 同步回 GitHub |
 | `remote: Support for password authentication was removed` | 用了账号密码。改用 **Personal Access Token**（第 4 步方式 A） |
 | `! [rejected] main -> main (fetch first)` | GitHub 上建仓库时勾了 README/.gitignore，导致远程有本地没有的提交。要么 `git pull --rebase origin main` 再推，要么删掉仓库重建（**别勾那些框**） |
 | `error: remote origin already exists` | 已经加过远程了。`git remote set-url origin <新地址>` 改地址，或 `git remote remove origin` 再重加 |
@@ -299,3 +305,144 @@ git push -u origin main      # 弹窗里密码位置填 Personal Access Token
 export JAVA_HOME="D:/Java/jdk-21.0.12.1"
 ./gradlew build
 ```
+
+---
+
+# 附录 A：GitHub 打不开 / 注册页卡住怎么办
+
+**先排除「是不是 GitHub 自己挂了」**：打开 <https://www.githubstatus.com/>，
+如果显示 All Systems Operational，那就是你这边到 GitHub 的网络问题。下面按**成本从低到高**排。
+
+## A.1 先判断卡在哪一步
+
+| 你看到的 | 大概率原因 |
+|---|---|
+| 整个页面转圈、根本进不去 | DNS 解析不到 / 出口线路不通 |
+| 页面出来了，但**验证码区域空白**、按钮点不动 | 注册用的 hCaptcha（`hcaptcha.com`）加载不出来 —— **最常见** |
+| 能登录但 `git push` 卡住 / 超时 | git 走的是 443 端口，同样受限 |
+| 提示 `Your request could not be processed` | 刷新/提交太频繁，触发了风控 |
+
+## A.2 按顺序试（不用任何额外工具）
+
+1. **换网络**：手机开热点，电脑连热点再试。蜂窝网络和家宽的国际出口线路通常不一样，
+   **这一招成功率最高**，值得第一个试。
+2. **换时段**：晚 20:00–24:00 是最堵的，早上或凌晨试。
+3. **换 DNS**（Windows：设置 → 网络 → 适配器选项 → 属性 → IPv4 → 使用下面的 DNS）：
+   - 阿里 DNS `223.5.5.5` / `223.6.6.6`
+   - 腾讯 DNS `119.29.29.29`
+   - 改完在 Git Bash / CMD 里执行 `ipconfig /flushdns`
+4. **换浏览器 / 无痕窗口**，并把广告拦截、隐私类插件**全关掉** ——
+   它们经常顺手把验证码域名一起拦了（A.1 第二种情况的常见真凶）。
+5. **用手机 GitHub App 注册**（应用商店搜 GitHub）。手机端和网页端流程不完全一样，
+   有时网页卡住的正是手机端能过的那一步。
+6. **别反复刷新**。失败几次就停手等几分钟，越刷越容易被风控拦。
+
+## A.3 如果手边有可用的国际网络（学校 / 单位提供的）
+
+用它把**注册**这一步做完就行 —— 注册是**一次性**的。
+之后日常 `git push` 如果也慢，可以换下面的方案 B：先把代码放到国内平台，
+GitHub 只作为镜像，等网络方便时再同步。
+
+## A.4 重要：注册不是必须现在做
+
+代码、文档、构建产物在本地**已经全部就绪**了。GitHub 只是"放出去"的渠道之一。
+如果一时半会儿上不去，**直接走附录 B 用 Gitee 发布**，功能上完全够用，
+以后想同步到 GitHub 也就是加一个远程地址的事（B.6 有命令）。
+
+---
+
+# 附录 B：用 Gitee（码云）发布 —— 国内可用的替代方案
+
+Gitee 是国内最大的代码托管平台，注册和访问都稳定，界面和 GitHub 高度相似，
+**本指南前面 90% 的步骤可以原样照搬**，只是把网址从 `github.com` 换成 `gitee.com`。
+
+## B.1 注册
+
+1. 打开 <https://gitee.com/signup>
+2. 用**手机号**注册（也可以用邮箱），收短信验证码 —— 不像 GitHub 那样依赖境外验证码服务，
+   国内网络下基本秒过。
+3. 之后可以再补邮箱、绑定微信等，都不影响使用。
+
+## B.2 建仓库
+
+和 GitHub 一样：右上角 `+` → **新建仓库**
+- 仓库名称：`PlayerAutoFarming`
+- **开源**（Gitee 里叫「公开」）
+- ❌ 同样**不要**勾「使用 Readme 文件初始化这个仓库」（你本地已经有了）
+
+## B.3 推送
+
+```bash
+git branch -M main
+git remote add origin https://gitee.com/你的用户名/PlayerAutoFarming.git
+git push -u origin main
+```
+
+第一次推送会让你输 Gitee 的用户名和密码。
+Gitee 也支持**私人令牌**（设置 → 私人令牌），若开了两步验证就必须用令牌当密码。
+
+## B.4 发版（对应 GitHub 的 Release）
+
+仓库页面 → **发行版**（Releases）→ **新建发行版**：
+- 标签：`v2.3.2`
+- 标题：`v2.3.2`
+- 说明：贴 `CHANGELOG.md` 里 `## 2.3.2` 那一段
+- **上传附件**：`build/libs/playerautofarming-2.3.2.jar`
+
+## B.5 README 要不要改？
+
+基本不用。README 里用的相对链接（`../../releases`、`../../issues`）在 Gitee 上是**同样的路径规则**，
+会正确指向 Gitee 自己的页面。只有顶部那两个徽章要处理：
+
+- GitHub Actions 的 build 徽章在 Gitee 上**没有对应物**，建议删掉那一行；
+- shields.io 的版本/许可证徽章（`img.shields.io`）在国内偶尔慢，但通常能显示，可以先留着。
+
+> 需要的话跟我说一声，我帮你出一个"Gitee 版 README"。
+
+## B.6 以后想同步到 GitHub
+
+一个本地仓库可以有**多个远程**，两边互不干扰：
+
+```bash
+# 加一个叫 github 的远程（origin 还指向 Gitee）
+git remote add github https://github.com/你的用户名/PlayerAutoFarming.git
+
+# 平时推 Gitee
+git push origin main
+# 想同步到 GitHub 时
+git push github main
+```
+
+（等 GitHub 能正常访问了再执行第二条。）
+
+## B.7 关于内容审核
+
+Gitee 会对公开仓库做内容审核，对**作弊 / 外挂类**项目的态度比 GitHub 严得多。
+
+建议的做法是**如实写清楚**，别想着含糊其辞去绕审核：
+
+- 描述里写明「Minecraft 客户端自动化模组」「单人在允许的服务器上使用」；
+- 保留 README 里那段 **⚠️ 使用前必读** 的免责声明；
+- 如果被驳回，就换平台（下面几个），不要改小作文去试探。
+
+## B.8 其他国内托管
+
+| 平台 | 说明 |
+|---|---|
+| **Gitee** | 最主流，推荐首选 |
+| **GitCode**（CSDN） | 支持从 GitHub 一键导入，界面偏开发者社区 |
+| **GitLink** | 之江实验室，偏学术/开源项目 |
+| **阿里云效 Codeup** | 私有仓库免费额度大，但不适合"开源给人看" |
+
+## B.9 模组怎么让人下载到
+
+托管平台只是"源码放哪"，**玩家真正下载 jar 的地方**可以完全独立于它：
+
+- **模组平台**：[Modrinth](https://modrinth.com/)（支持 GitHub/Gitee 账号登录，可从仓库同步版本）、
+  CurseForge（审核更严）；
+- **国内社区**：苦力怕论坛（klpbbs）、[mcmod.cn](https://www.mcmod.cn/)（百科收录，可以提交词条）；
+- **最省事的临时办法**：网盘（蓝奏云等）或 QQ 群文件，先把 jar 发出去，渠道以后慢慢补。
+
+> 无论发到哪个平台，都**保留「可能违反部分服务器规则」这句声明** ——
+> 这既是给使用者的提醒，也是你在被投诉时"我已明确告知"的依据。
+
