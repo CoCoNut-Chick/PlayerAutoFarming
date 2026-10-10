@@ -11,6 +11,7 @@ import net.minecraft.client.input.Input;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayDeque;
@@ -61,6 +62,9 @@ public final class PathWalker {
 
     /** 到达落脚点的竖直容差（格） */
     private static final double WAYPOINT_HEIGHT = 1.5;
+
+    /** 朝向和目标方向差小于这个角度，才敢往前走（视角是缓动转过来的，差太远先转再说） */
+    private static final float FORWARD_ANGLE = 40.0f;
 
     /** 位置变化小于这个值就认为「这一 tick 没动」（格） */
     private static final double STUCK_EPSILON = 0.004;
@@ -357,14 +361,17 @@ public final class PathWalker {
         double dx = target.getX() + 0.5 - player.getX();
         double dz = target.getZ() + 0.5 - player.getZ();
 
-        // ---- 转向。瞬时连贯到位 —— 真人甩鼠标转视角就是连贯的，匀速分段转反而机械。
+        // ---- 转向。缓动转过去：角度大时这一步转得多，越接近目标转得越慢，平滑贴合。
         //      Minecraft 的 yaw 0 度朝 +Z，顺时针增加，所以朝向 (dx, dz) 需要的 yaw 是 atan2(-dx, dz) ----
-        player.setYaw((float) Math.toDegrees(Math.atan2(-dx, dz)));
+        float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float turnLeft = MathHelper.wrapDegrees(desiredYaw - player.getYaw());
+        player.setYaw(BlockInteractor.easeYaw(player.getYaw(), desiredYaw));
 
         // ---- 卡住检测（只在「真的在往前走」时算，否则挖方块时会误判成卡住） ----
         Vec3d pos = player.getPos();
         double horizontal = Math.sqrt(dx * dx + dz * dz);
-        if (lastPos != null) {
+        boolean aligned = Math.abs(turnLeft) < FORWARD_ANGLE;
+        if (lastPos != null && aligned) {
             double moved = Math.sqrt(Math.pow(pos.x - lastPos.x, 2) + Math.pow(pos.z - lastPos.z, 2));
             if (moved < STUCK_EPSILON && horizontal > 0.6) {
                 stuckTicks++;
@@ -379,13 +386,13 @@ public final class PathWalker {
             return;
         }
 
-        // ---- 输出意图：转向已到位，往前走 ----
+        // ---- 输出意图：转过来了才迈步（还没转到位就先原地把视角转过去，免得朝反方向走） ----
         boolean needJump = target.getY() > player.getY() + 0.4;
 
         // 防踢模式：偶尔「悬一下脚」，把前进和疾跑一起放下，让脚步声不再是等间距的。
         // 这一停是<b>我们自己</b>松的手，不是走不动，所以必须把卡住计数和上一帧位置清掉 ——
         // 否则下一 tick 它会把这次停顿当成「卡住了」，接着去跳、甚至放弃这个目标。
-        if (Humanizer.stumble()) {
+        if (aligned && Humanizer.stumble()) {
             wantForward = false;
             wantJump = false;
             player.setSprinting(false);
@@ -394,13 +401,13 @@ public final class PathWalker {
             return;
         }
 
-        wantForward = true;
+        wantForward = aligned;
         // 下一个落脚点比当前高，就是要上台阶 —— 得跳一下
-        wantJump = needJump || stuckTicks >= STUCK_JUMP_TICKS;
+        wantJump = (aligned && needJump) || stuckTicks >= STUCK_JUMP_TICKS;
 
         // ---- 疾跑：赶路时替玩家按住 Ctrl ----
         // 防踢模式下再叠一层「疾跑间歇」：真人不会一路从头跑到尾，中间总要走两步喘口气
-        applySprint(player, !needJump && Humanizer.allowSprint());
+        applySprint(player, aligned && !needJump && Humanizer.allowSprint());
     }
 
     /**

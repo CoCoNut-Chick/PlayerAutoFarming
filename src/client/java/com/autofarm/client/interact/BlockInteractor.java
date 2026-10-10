@@ -77,7 +77,43 @@ public final class BlockInteractor {
 
     // ================= 转向 / 瞄准 =================
 
-    /** 转向到某个水平坐标 —— 瞬时连贯到位，不再每 tick 限速 */
+    /**
+     * 每 tick 消掉「剩余角度」的比例。
+     *
+     * <p>转向做成<b>缓动</b>而不是匀速：每 tick 的步长 = 当前剩余角度 × 这个系数。
+     * 于是角度大时步子大（转得快）、越接近目标步子越小（转得慢），最后轻轻贴合上去，
+     * 既没有「每 tick 固定 18 度」那种一卡一卡的机械感，也没有「瞬间甩到位」的突兀感。
+     * 0.28 大约对应 0.3~0.5 秒转完一个大角度。
+     */
+    private static final float TURN_EASE = 0.28f;
+
+    /** 剩余角度小到这个值就直接贴合 —— 省掉「指数逼近永远差一点点」的尾巴 */
+    private static final float TURN_SNAP = 0.4f;
+
+    /**
+     * 缓动一步：从 {@code current} 朝 {@code desired} 走一小段，返回新的角度。
+     *
+     * <p>用的是「按比例逼近」（指数缓动）：差得越多、这一步走得越多，差得越少、走得越少。
+     * 天然满足「角度越大初始速度越大、越靠近目标越慢」，且一定单调逼近、不会冲过头。
+     */
+    private static float ease(float current, float desired) {
+        float diff = desired - current;
+        if (Math.abs(diff) <= TURN_SNAP) {
+            return desired;
+        }
+        return current + diff * TURN_EASE;
+    }
+
+    /** 缓动一步（yaw，按 ±180 环绕取最短方向 —— 分毫不差地走最短那条路） */
+    public static float easeYaw(float current, float desired) {
+        float diff = MathHelper.wrapDegrees(desired - current);
+        if (Math.abs(diff) <= TURN_SNAP) {
+            return desired;
+        }
+        return current + diff * TURN_EASE;
+    }
+
+    /** 转向到某个水平坐标 —— 缓动转过去（每 tick 按剩余角度比例走一小段） */
     public static void turnTowards(ClientPlayerEntity player, double targetX, double targetZ) {
         double dx = targetX - player.getX();
         double dz = targetZ - player.getZ();
@@ -86,7 +122,7 @@ public final class BlockInteractor {
         }
         // Minecraft 的 yaw 0 度朝 +Z，顺时针增加，所以朝向 (dx, dz) 需要的 yaw 是 atan2(-dx, dz)
         float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-        player.setYaw(desiredYaw);
+        player.setYaw(easeYaw(player.getYaw(), desiredYaw));
     }
 
     /**
@@ -96,8 +132,8 @@ public final class BlockInteractor {
      * 但准星还停在水平线上 —— 挖方块时服务端看到的视角是「低头看着地面却报了个方块」，
      * 很扎眼。瞄准点取目标方块的<b>几何中心</b>，也就是真人会瞄的位置。
      *
-     * <p>视角是<b>瞬时连贯</b>到位，不每 tick 限速 —— 真人甩鼠标转视角就是连贯的，
-     * 匀速分段转反而显得机械。
+     * <p>视角是<b>缓动</b>转过去的：角度越大这一步转得越多、越接近目标越慢，
+     * 平滑贴合，不匀速也不瞬移。
      */
     public static void aimAt(ClientPlayerEntity player, double x, double y, double z) {
         if (player == null) {
@@ -119,8 +155,8 @@ public final class BlockInteractor {
         // pitch 正值代表低头：目标在下方（dy < 0）时 -atan2 得到正值
         float desiredPitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal)) + Humanizer.aimPitchJitter();
 
-        player.setYaw(desiredYaw);
-        player.setPitch(MathHelper.clamp(desiredPitch, -90.0f, 90.0f));
+        player.setYaw(easeYaw(player.getYaw(), desiredYaw));
+        player.setPitch(MathHelper.clamp(ease(player.getPitch(), desiredPitch), -90.0f, 90.0f));
     }
 
     /** 把准星对准某个方块的中心 */
