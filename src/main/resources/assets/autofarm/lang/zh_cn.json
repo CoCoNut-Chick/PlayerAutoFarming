@@ -421,11 +421,17 @@
   "autofarm.notify.start": "AutoFarm 已开始",
   "autofarm.notify.stop": "AutoFarm 已停止",
   "autofarm.notify.issue": "AutoFarm 出现异常",
-  "autofarm.option.efficiency": "效率模式",
-  "autofarm.efficiency.tip": "只要准星已经落在作物上、且在挖掘范围内就直接收，不等视角转到位。收得更快，但「人没转过去、手先动了」在防踢语境里更显眼，别和防踢模式一起开。",
   "autofarm.extras.tab.combat": "战斗",
   "autofarm.extras.tab.stealth": "隐蔽",
   "autofarm.extras.tab.area": "范围",
   "autofarm.extras.tab.survival": "生存",
-  "autofarm.extras.tab.resource": "资源"
+  "autofarm.extras.tab.resource": "资源",
+  "autofarm.option.aim_mode": "瞄准模式",
+  "autofarm.aim_mode.tip": "收菜前怎么瞄。精准（转正中心 8 度内，最稳）→ 效率（转到视线命中方块就挖，更快）→ 极效率（不转头、不管准星，范围内直接挖，最易被服务器判作弊）。",
+  "autofarm.aim_mode.normal": "精准",
+  "autofarm.aim_mode.efficient": "效率",
+  "autofarm.aim_mode.extreme": "极效率",
+  "autofarm.danger.aim_extreme.subtitle": "极效率模式：不管准星直接挖",
+  "autofarm.danger.aim_extreme.body1": "极效率模式完全不转视角、也不管准星是否对准，只要在挖掘范围内就直接出手。服务端看到的是「玩家面朝别处，方块却在碎裂」，是反作弊最敏感的行为之一。",
+  "autofarm.danger.aim_extreme.body2": "在多人服务器使用很可能被识别、甚至被封号。请确认你清楚这个风险，再开启。"
 }

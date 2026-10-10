@@ -421,11 +421,17 @@
   "autofarm.notify.start": "AutoFarm started",
   "autofarm.notify.stop": "AutoFarm stopped",
   "autofarm.notify.issue": "AutoFarm hit an error",
-  "autofarm.option.efficiency": "Efficiency Mode",
-  "autofarm.efficiency.tip": "Harvest as soon as the crosshair is on the crop and within reach, without waiting for the view to turn. Faster, but more visible — don't combine it with anti-kick.",
   "autofarm.extras.tab.combat": "Combat",
   "autofarm.extras.tab.stealth": "Stealth",
   "autofarm.extras.tab.area": "Area",
   "autofarm.extras.tab.survival": "Survival",
-  "autofarm.extras.tab.resource": "Resource"
+  "autofarm.extras.tab.resource": "Resource",
+  "autofarm.option.aim_mode": "Aim Mode",
+  "autofarm.aim_mode.tip": "How to aim before harvesting. Normal (turn to within 8° of center, safest) → Efficient (turn until the crosshair is on the block) → Extreme (no turning, ignores crosshair, most likely to be flagged).",
+  "autofarm.aim_mode.normal": "Normal",
+  "autofarm.aim_mode.efficient": "Efficient",
+  "autofarm.aim_mode.extreme": "Extreme",
+  "autofarm.danger.aim_extreme.subtitle": "Extreme aim: dig regardless of crosshair",
+  "autofarm.danger.aim_extreme.body1": "Extreme mode never turns your view and ignores whether the crosshair is on target — it digs as soon as you're in range. The server sees a player facing away while blocks break, one of the most flag-prone behaviors.",
+  "autofarm.danger.aim_extreme.body2": "Using this on a multiplayer server is very likely to get you detected or banned. Confirm you understand the risk before enabling."
 }

@@ -91,7 +91,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private ButtonWidget replantButton;
     private ButtonWidget refillButton;
     private ButtonWidget depositButton;
-    private ButtonWidget efficiencyButton;
+    private ButtonWidget aimModeButton;
     private ButtonWidget optimizeButton;
     private ButtonWidget showPathButton;
     private ButtonWidget lockSprintButton;
@@ -181,15 +181,11 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         depositButton.setTooltip(Tooltip.of(Text.translatable("autofarm.deposit.tip")));
         addScrolling(depositButton);
 
-        // 效率模式：跳过「转到位再动手」，只要准星落在作物上就在范围内直接收。
-        // 和防踢模式矛盾，这里不拦（留给玩家自己判断），只在提示里说清楚。
-        this.efficiencyButton = ButtonWidget.builder(
-                toggleLabel("autofarm.option.efficiency", draft.efficiencyMode), b -> {
-                    draft.efficiencyMode = !draft.efficiencyMode;
-                    b.setMessage(toggleLabel("autofarm.option.efficiency", draft.efficiencyMode));
-                }).dimensions(contentX, 0, fullW, ROW_H).build();
-        efficiencyButton.setTooltip(Tooltip.of(Text.translatable("autofarm.efficiency.tip")));
-        addScrolling(efficiencyButton);
+        // 瞄准模式：精准 / 效率 / 极效率 三档循环。切到「极效率」要先过风险确认屏。
+        this.aimModeButton = ButtonWidget.builder(aimModeLabel(), b -> onAimModeClicked())
+                .dimensions(contentX, 0, fullW, ROW_H).build();
+        aimModeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.aim_mode.tip")));
+        addScrolling(aimModeButton);
 
         // ---- 路径规划 ----
         this.optimizeButton = ButtonWidget.builder(toggleLabel("autofarm.option.optimize", draft.optimizePath), b -> {
@@ -418,7 +414,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         setRowY(replantButton, originY + ROW_REPLANT);
         setRowY(refillButton, originY + ROW_REFILL);
         setRowY(depositButton, originY + ROW_DEPOSIT);
-        setRowY(efficiencyButton, originY + ROW_EFFICIENCY);
+        setRowY(aimModeButton, originY + ROW_EFFICIENCY);
         setRowY(optimizeButton, originY + ROW_OPTIMIZE);
         setRowY(showPathButton, originY + ROW_SHOW_PATH);
         setRowY(lockSprintButton, originY + ROW_LOCK_SPRINT);
@@ -680,6 +676,47 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         if (this.client != null) {
             this.client.setScreen(new StatsScreen(this));
         }
+    }
+
+    // ================= 瞄准模式 =================
+
+    /** 循环下一档瞄准模式；切到「极效率」先弹风险确认屏 */
+    private void onAimModeClicked() {
+        int next = (draft.aimMode + 1) % AutoFarmConfig.AIM_MODE_COUNT;
+        if (next == AutoFarmConfig.AIM_EXTREME) {
+            confirmAimExtreme(next);
+            return;
+        }
+        draft.aimMode = next;
+        aimModeButton.setMessage(aimModeLabel());
+    }
+
+    /** 极效率模式 = 不管准星直接挖，是最容易被服务器判作弊的一档，弹一次风险确认 */
+    private void confirmAimExtreme(int next) {
+        if (this.client == null) {
+            return;
+        }
+        this.client.setScreen(new DangerConfirmScreen(this, () -> {
+            draft.aimMode = next;
+            if (aimModeButton != null) {
+                aimModeButton.setMessage(aimModeLabel());
+            }
+        }, "autofarm.danger.title", "autofarm.danger.aim_extreme.subtitle",
+                "autofarm.danger.aim_extreme.body1", "autofarm.danger.aim_extreme.body2"));
+    }
+
+    private Text aimModeLabel() {
+        return Text.translatable("autofarm.toggle",
+                Text.translatable("autofarm.option.aim_mode"),
+                Text.translatable("autofarm.aim_mode." + aimModeKey(draft.aimMode)));
+    }
+
+    private static String aimModeKey(int mode) {
+        return switch (mode) {
+            case AutoFarmConfig.AIM_EFFICIENT -> "efficient";
+            case AutoFarmConfig.AIM_EXTREME -> "extreme";
+            default -> "normal";
+        };
     }
 
     private void onSave() {

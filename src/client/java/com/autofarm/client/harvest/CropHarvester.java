@@ -442,20 +442,32 @@ public final class CropHarvester {
             }
         }
 
-        // 一边挖一边把准星压到作物上。步骤是「先对准、再挥镐子」——
-        // 视角还在转就先不动手，否则会出现「头还没转过去，方块先碎了」，
-        // 服务端拿到的方块朝向也会和真实朝向对不上。
-        // 效率模式例外：只要准星已经落在这格方块上、而且在挖掘范围内，就直接挖，
-        // 省掉每棵之间那一小段转视角的时间（代价是「人没转过去、手先动了」）。
-        if (config.efficiencyMode) {
-            if (!isCrosshairOn(client, target)
-                    || !BlockInteractor.isWithinReach(player, target, REACH)) {
-                return Stage.MINE;
+        // 一边挖一边把准星压到作物上。三档瞄准模式，从稳到快：
+        // 精准（转正中心 8 度内）/ 效率（转到视线命中方块）/ 极效率（不转头直接挖）。
+        switch (config.aimMode) {
+            case AutoFarmConfig.AIM_EXTREME -> {
+                // 极效率：完全不转头、不管准星，只要在挖掘范围内就直接挖。
+                // 这是最容易被服务器判成作弊的一档，选它之前主面板已经弹过风险确认屏。
+                if (!BlockInteractor.isWithinReach(player, target, REACH)) {
+                    return Stage.MINE;
+                }
             }
-        } else {
-            BlockInteractor.aimAt(player, target);
-            if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
-                return Stage.MINE; // 转视角很快（几 tick），所以这段时间不计入超时
+            case AutoFarmConfig.AIM_EFFICIENT -> {
+                // 效率：也转头，但只要视线已经命中这个方块就动手，不用压到正中心，
+                // 省掉每棵之间那一小段微调。转视角的几 tick 不计入超时。
+                BlockInteractor.aimAt(player, target);
+                if (!isCrosshairOn(client, target)
+                        || !BlockInteractor.isWithinReach(player, target, REACH)) {
+                    return Stage.MINE;
+                }
+            }
+            default -> {
+                // 精准：先把准星精确压到作物中心（8 度以内）才动手，
+                // 否则会出现「头还没转过去，方块先碎了」。
+                BlockInteractor.aimAt(player, target);
+                if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
+                    return Stage.MINE; // 转视角很快（几 tick），所以这段时间不计入超时
+                }
             }
         }
 

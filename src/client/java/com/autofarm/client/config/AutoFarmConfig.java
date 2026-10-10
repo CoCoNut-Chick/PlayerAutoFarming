@@ -29,17 +29,29 @@ public class AutoFarmConfig {
     /** 收割后是否补种 */
     public boolean replant = true;
 
+    /** 瞄准模式：默认（精准） */
+    public static final int AIM_NORMAL = 0;
+    /** 瞄准模式：效率（转到「视线命中方块」就挖） */
+    public static final int AIM_EFFICIENT = 1;
+    /** 瞄准模式：极效率（不转视角、不管准星，范围内直接挖） */
+    public static final int AIM_EXTREME = 2;
+    /** 瞄准模式档数（面板循环按钮用） */
+    public static final int AIM_MODE_COUNT = 3;
+
     /**
-     * 效率模式：只要准星已经落在作物上、且在挖掘范围内就直接收，不等视角转到位。
+     * 瞄准模式，取值见 {@code AIM_*} 常量。
      *
-     * <p>默认行为是「先限速转头、把准星精确压到作物中心（8 度以内）才动手」——
-     * 更稳、更像真人；效率模式跳过这一步，只要准星已经<b>落在方块上</b>（视线已经
-     * 穿过它）就动手，省掉每棵之间那一小段转视角的时间，收得明显更快。
-     *
-     * <p>代价是「人还没转过去、手已经动了」，在防踢的语境里这更显眼 ——
-     * 所以它和防踢模式是矛盾的，两者别一起开。
+     * <p>三个档位，从稳到快：
+     * <ul>
+     *   <li>{@link #AIM_NORMAL}（默认）—— 先限速转头、把准星精确压到作物中心 8 度以内才动手，
+     *       最稳、最像人；</li>
+     *   <li>{@link #AIM_EFFICIENT} —— 也转头，但只要<b>视线已经命中这个方块</b>（准星落在它的
+     *       可挖掘判定范围内）就动手，不用转到正中心，省掉每棵之间那一小段微调；</li>
+     *   <li>{@link #AIM_EXTREME} —— 完全不转头、不管准星，只要在挖掘范围内就直接挖。
+     *       这是最容易被服务器判成作弊的一档，选它要先过风险确认屏。</li>
+     * </ul>
      */
-    public boolean efficiencyMode = false;
+    public int aimMode = AIM_NORMAL;
 
     /** 种子不够时是否自动前往补给点取种子 */
     public boolean refillSeeds = true;
@@ -968,7 +980,7 @@ public class AutoFarmConfig {
         c.scanRadius = this.scanRadius;
         c.scanIntervalTicks = this.scanIntervalTicks;
         c.replant = this.replant;
-        c.efficiencyMode = this.efficiencyMode;
+        c.aimMode = this.aimMode;
         c.refillSeeds = this.refillSeeds;
         c.depositWhenFull = this.depositWhenFull;
         c.optimizePath = this.optimizePath;
@@ -1069,6 +1081,10 @@ public class AutoFarmConfig {
 
         if (scanIntervalTicks < 2) scanIntervalTicks = 2;
         if (scanIntervalTicks > 200) scanIntervalTicks = 200;
+
+        if (aimMode < AIM_NORMAL || aimMode >= AIM_MODE_COUNT) {
+            aimMode = AIM_NORMAL;
+        }
 
         highlightColor &= 0xFFFFFF;
         if (highlightWidth < 1) highlightWidth = 1;
