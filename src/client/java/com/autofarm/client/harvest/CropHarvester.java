@@ -460,9 +460,9 @@ public final class CropHarvester {
                 if (!BlockInteractor.isWithinReach(player, target, REACH)) {
                     return Stage.MINE;
                 }
-                if (!isCrosshairOn(client, target)) {
+                if (!isCrosshairOn(player, target)) {
                     BlockInteractor.aimAt(player, target);
-                    if (!isCrosshairOn(client, target)) {
+                    if (!isCrosshairOn(player, target)) {
                         return Stage.MINE; // 还在转，转的这几 tick 不计入超时
                     }
                 }
@@ -509,13 +509,18 @@ public final class CropHarvester {
      *
      * <p>效率模式用它代替「对准中心」：它只看视线有没有穿过这格方块，不要求准星
      * 压在方块几何中心上 —— 所以只要角色大致面朝这格，就能跳过转头直接动手。
+     *
+     * <p>这里<b>不读</b> {@code client.crosshairTarget}：那个值是渲染阶段算的，
+     * 滞后一帧，而且 {@code aimAt} 刚转完视角它也不会立刻刷新，用它判断会让效率档
+     * 「明明朝好了却一直不挖」。改走原版 {@code raycast}，每 tick 实时求一次视线命中。
      */
-    private static boolean isCrosshairOn(MinecraftClient client, BlockPos pos) {
-        if (client == null || pos == null || client.crosshairTarget == null) {
+    private static boolean isCrosshairOn(ClientPlayerEntity player, BlockPos pos) {
+        if (player == null || pos == null) {
             return false;
         }
-        return client.crosshairTarget.getType() == HitResult.Type.BLOCK
-                && ((BlockHitResult) client.crosshairTarget).getBlockPos().equals(pos);
+        HitResult hit = player.raycast(REACH, 0.0f, false);
+        return hit != null && hit.getType() == HitResult.Type.BLOCK
+                && ((BlockHitResult) hit).getBlockPos().equals(pos);
     }
 
     private static Stage replant(MinecraftClient client, ClientPlayerEntity player, AutoFarmConfig config) {

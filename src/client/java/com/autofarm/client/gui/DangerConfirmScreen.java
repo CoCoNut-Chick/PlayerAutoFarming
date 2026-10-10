@@ -100,7 +100,14 @@ public class DangerConfirmScreen extends Screen {
                         b -> close())
                 .dimensions(left + PAD, btnY, half, BTN_H).build());
         addDrawableChild(ButtonWidget.builder(Text.translatable("autofarm.danger.confirm"),
-                        b -> onConfirm.run())
+                        b -> {
+                            onConfirm.run();
+                            // 有些确认回调会自己切屏（比如重建附加面板），有些只是改个状态。
+                            // 没主动切屏的，这里负责关掉，否则「点完同意、弹窗还挂在那儿」。
+                            if (this.client != null && this.client.currentScreen == this) {
+                                close();
+                            }
+                        })
                 .dimensions(left + PAD + half + 6, btnY, panelW - PAD * 2 - half - 6, BTN_H).build());
     }
 

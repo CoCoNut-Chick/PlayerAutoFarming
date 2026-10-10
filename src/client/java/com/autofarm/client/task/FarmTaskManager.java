@@ -95,6 +95,9 @@ public final class FarmTaskManager {
      */
     private static final int PICKUP_WAIT_TICKS = 6;
 
+    /** 同一格掉落物「站够了却还没进包」最多再等几轮（每轮 PICKUP_WAIT_TICKS），超了就放行 */
+    private static final int PICKUP_MAX_RETRIES = 5;
+
     /** 掉落物离玩家近到这种程度（格）就当「抬脚就捡到了」，不再专门排进路线 */
     private static final double PICKUP_IGNORE_DISTANCE = 1.6;
 
@@ -264,6 +267,9 @@ public final class FarmTaskManager {
 
     /** 正在等待拾取的那一格（换目标时用来重置上面的倒计时） */
     private static BlockPos pickupWaitPos;
+
+    /** 同一格掉落物「站够了却还没进包」时已经重试了几轮（避免无限耗在同一格） */
+    private static int pickupRetryTicks;
 
     /**
      * 防踢模式：已经「打量过」的目标。
@@ -516,6 +522,7 @@ public final class FarmTaskManager {
         boneMealTargets.clear();
         pickupWaitTicks = 0;
         pickupWaitPos = null;
+        pickupRetryTicks = 0;
         hesitatedAt = null;
         pendingSafety = null;
         safetySeenTicks = 0;
@@ -584,6 +591,7 @@ public final class FarmTaskManager {
             boneMealTargets.clear();
             pickupWaitTicks = 0;
             pickupWaitPos = null;
+            pickupRetryTicks = 0;
             hesitatedAt = null;
             pendingSafety = null;
             safetySeenTicks = 0;
@@ -677,6 +685,7 @@ public final class FarmTaskManager {
                 pickupTargets.clear();
                 pickupWaitTicks = 0;
                 pickupWaitPos = null;
+                pickupRetryTicks = 0;
                 hesitatedAt = null;
                 pendingSafety = null;
                 safetySeenTicks = 0;
@@ -1159,11 +1168,20 @@ public final class FarmTaskManager {
 
         List<BlockPos> pending = new ArrayList<>();
 
+        // 掉落物不要和作物 / 空耕地 / 额外 / 骨粉目标撞在同一格：同一格既有作物又有掉落物时，
+        // 按「作物」收割（收割时脚下掉落物会被顺手吸走），而不是当成掉落物站上去「捡」——
+        // 否则掉落物分支会抢走收割，作物漏收还把它记进 handled，下一轮就卡在「扫描中」。
+        Set<BlockPos> occupied = new HashSet<>();
+        occupied.addAll(matureCrops);
+        occupied.addAll(emptyFarmland);
+        occupied.addAll(extraTargets);
+        occupied.addAll(boneMealTargets);
+
         // 附加功能「优先拾取掉落物」：先把散在地上的作物掉落物排进路线。
         // 它排在成熟作物前面 —— 掉落物不会自己长回去，还可能被水冲走、被怪撞飞，
         // 或者干脆因为存在太久而消失，所以先把它捡回来，再谈地里的活。
         for (BlockPos pos : pickupTargets) {
-            if (!handled.contains(pos)) {
+            if (!occupied.contains(pos) && !handled.contains(pos)) {
                 pending.add(pos);
             }
         }
@@ -1257,6 +1275,19 @@ public final class FarmTaskManager {
         }
     }
 
+    /** 这一格上现在还有没有「作物掉落物」实体 —— 用来判断东西是不是真的进包了 */
+    private static boolean hasCropDropAt(MinecraftClient client, BlockPos pos) {
+        if (client == null || client.world == null || pos == null) {
+            return false;
+        }
+        Box box = new Box(pos).expand(0.5);
+        for (ItemEntity item : client.world.getEntitiesByClass(ItemEntity.class, box,
+                e -> e.isAlive() && CropRegistry.isCropDrop(e.getStack()))) {
+            return true;
+        }
+        return false;
+    }
+
     /**
      * 走一步，或者干一步活。
      *
@@ -1293,16 +1324,29 @@ public final class FarmTaskManager {
             if (!held.equals(pickupWaitPos)) {
                 pickupWaitPos = held;
                 pickupWaitTicks = PICKUP_WAIT_TICKS;
+                pickupRetryTicks = 0;
             }
             if (pickupWaitTicks > 0) {
                 pickupWaitTicks--;
                 state = FarmState.PICKUP;
                 return;
             }
+            // 站够了，看看东西是不是真的进包了。没进包（被水冲走、卡在角落、刚被怪撞飞）
+            // 就先别急着放行，再站一小会儿；但设个上限，别在同一格无限耗下去。
+            if (hasCropDropAt(client, held) && ++pickupRetryTicks < PICKUP_MAX_RETRIES) {
+                pickupWaitTicks = PICKUP_WAIT_TICKS;
+                state = FarmState.PICKUP;
+                return;
+            }
             pickupWaitPos = null;
+            pickupRetryTicks = 0;
             StatsManager.get().recordPickup();
             PathWalker.releaseTarget();
             drainResolved();
+            // 掉落物会消失、会移动，位置不该被当成「已处理」长期锁死 —— 一旦锁进
+            // handled，下一轮扫描若它还在原地，就会因为「已处理」而永远不再去捡，角色卡在
+            // 「扫描中」不动。所以这里把它从 handled 里拿掉，下一轮重新评估。
+            handled.remove(held);
             state = PathWalker.isActive() ? FarmState.MOVING : FarmState.IDLE;
             return;
         }
