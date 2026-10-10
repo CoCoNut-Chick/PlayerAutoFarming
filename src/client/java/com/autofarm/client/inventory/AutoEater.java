@@ -1,5 +1,6 @@
 package com.autofarm.client.inventory;
 
+import com.autofarm.client.compat.CameraCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -85,15 +86,10 @@ public final class AutoEater {
     private AutoEater() {
     }
 
-    /** 正在吃东西 —— 走路的那部分代码看到它就原地等一下 */
-    public static boolean isEating() {
-        return eating;
-    }
-
     /**
      * 「吃饭这件事还没办完」—— 走路和收割都要给它让路。
      *
-     * <p>它比 {@link #isEating()} 宽一点。吃完一口之后有 {@value #RETRY_COOLDOWN} tick 的冷却，
+     * <p>它比单纯的「正在吃」宽一点。吃完一口之后有 {@value #RETRY_COOLDOWN} tick 的冷却，
      * 冷却里 {@code eating} 是 false；但只要你还饿着、快捷栏里也还有东西吃，
      * 那这一口迟早要补上。这时候要是把控制权还给走路逻辑，就会走成
      * 「走 8 tick → 停下吃 → 走 8 tick」的抽搐。所以冷却期间同样算「在办吃饭的事」。
@@ -129,6 +125,14 @@ public final class AutoEater {
 
         // 你打开背包/聊天时不该被偷偷喂食
         if (client.currentScreen != null) {
+            stop(client);
+            cooldown = 0;
+            return;
+        }
+
+        // 自由视角（摄像机和身体分开）时也不该被偷偷喂食 —— 屏幕上身体不动，
+        // 却在那边自己啃东西，同样扎眼。
+        if (CameraCompat.isCameraDetached()) {
             stop(client);
             cooldown = 0;
             return;

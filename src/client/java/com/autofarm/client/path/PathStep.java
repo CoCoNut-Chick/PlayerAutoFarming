@@ -14,14 +14,6 @@ public record PathStep(BlockPos pos, PathAction action) {
         return new PathStep(pos, PathAction.WALK);
     }
 
-    public static PathStep mine(BlockPos pos) {
-        return new PathStep(pos, PathAction.MINE);
-    }
-
-    public static PathStep place(BlockPos pos) {
-        return new PathStep(pos, PathAction.PLACE);
-    }
-
     /** 这一步需要先改变世界吗（挖或垫） */
     public boolean needsWork() {
         return action != PathAction.WALK;

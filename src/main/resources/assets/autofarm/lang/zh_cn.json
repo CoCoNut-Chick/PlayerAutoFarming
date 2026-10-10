@@ -435,7 +435,7 @@
   "autofarm.danger.aim_extreme.body1": "极效率模式完全不转视角、也不管准星是否对准，只要在挖掘范围内就直接出手。服务端看到的是「玩家面朝别处，方块却在碎裂」，是反作弊最敏感的行为之一。",
   "autofarm.danger.aim_extreme.body2": "在多人服务器使用很可能被识别、甚至被封号。请确认你清楚这个风险，再开启。",
   "autofarm.container.title": "存储与补给",
-  "autofarm.container.tip": "给农作物输出、种子输入、工具补给、杂物临时存储各配一个专用箱子坐标，每个都能单独禁用。没设专用容器时退回默认补给点（杂物容器禁用则不存杂物）。",
+  "autofarm.container.tip": "给农作物输出、种子输入、工具补给、杂物临时存储各配一个专用箱子坐标，每个都能单独禁用。没设专用容器时退回默认补给点。杂物容器只搬主背包里、且「存放策略」允许存的非作物物品（食物 / 方块 / 工具默认保留），不会动你的快捷栏。",
   "autofarm.option.containers": "存储与补给容器",
   "autofarm.option.container_enabled": "启用",
   "autofarm.container.crop": "农作物输出容器（存收获物）",

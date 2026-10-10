@@ -73,9 +73,13 @@ public class AutoFarmConfig {
     /**
      * 沿路线行走时锁定疾跑。
      *
-     * <p>打开后角色在赶路时会一直保持疾跑（速度几乎翻倍），到点停下、挖方块、
+     * <p>打开后角色在赶路时会保持疾跑（速度几乎翻倍），到点停下、挖方块、
      * 你打开界面接管控制权时都会自动松开。原版的饥饿/吃东西等限制照样生效 ——
      * 它就是替你把「按住 Ctrl」这件事一直按着，不会绕过任何游戏规则。
+     *
+     * <p><b>与「防踢模式」的关系</b>：防踢策略里有一条「疾跑间歇」——真人不会一路从头跑到尾，
+     * 每隔几秒会走两步喘口气。所以<b>防踢开到中档及以上时，它会盖过这里的「一直疾跑」</b>
+     * （两者本质上是矛盾的：一个要恒速、一个要打散节奏）。想要全程疾跑就别开防踢的疾跑间歇档。
      *
      * <p>代价是饥饿值掉得更快，所以给了个开关。
      */
@@ -1337,12 +1341,6 @@ public class AutoFarmConfig {
         return supplyX != null && supplyY != null && supplyZ != null;
     }
 
-    /** 补给点的可读文本，未设置时返回 null */
-    public String supplyPointText() {
-        if (!hasSupplyPoint()) return null;
-        return supplyX + ", " + supplyY + ", " + supplyZ;
-    }
-
     // ---- 扩展存储与补给（四个专用容器） ----
 
     /** 农作物输出容器是否已完整设置 */
@@ -1397,16 +1395,6 @@ public class AutoFarmConfig {
         workAreaX2 = x;
         workAreaY2 = y;
         workAreaZ2 = z;
-    }
-
-    /** 清掉工作区域的坐标（两个角点一起清） */
-    public void clearWorkArea() {
-        workAreaX = null;
-        workAreaY = null;
-        workAreaZ = null;
-        workAreaX2 = null;
-        workAreaY2 = null;
-        workAreaZ2 = null;
     }
 
     /** 第一个坐标点的可读文本，未设置时返回 null */

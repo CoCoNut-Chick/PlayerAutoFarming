@@ -372,7 +372,9 @@ public final class PathWalker {
         double horizontal = Math.sqrt(dx * dx + dz * dz);
         boolean aligned = Math.abs(turnLeft) < FORWARD_ANGLE;
         if (lastPos != null && aligned) {
-            double moved = Math.sqrt(Math.pow(pos.x - lastPos.x, 2) + Math.pow(pos.z - lastPos.z, 2));
+            double mx = pos.x - lastPos.x;
+            double mz = pos.z - lastPos.z;
+            double moved = Math.sqrt(mx * mx + mz * mz);
             if (moved < STUCK_EPSILON && horizontal > 0.6) {
                 stuckTicks++;
             } else {

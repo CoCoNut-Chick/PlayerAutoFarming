@@ -33,6 +33,7 @@ import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.sound.SoundEvents;
@@ -42,6 +43,7 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -146,6 +148,13 @@ public final class FarmTaskManager {
      * 所以单独一个集合，收割时走「挖掉不补种」的 {@code CropHarvester.startBreak}。
      */
     private static final Set<BlockPos> extraTargets = new HashSet<>();
+
+    /**
+     * {@link #extraTargets} 的只读列表镜像 —— 渲染层每帧都会要它，
+     * 直接在 {@link #getExtraTargets()} 里 new 一份等于每帧都复制，浪费。
+     * 每次扫描填完 extraTargets 后刷新一次即可。
+     */
+    private static List<BlockPos> extraTargetsList = Collections.emptyList();
 
     /**
      * 骨粉催熟目标：田里那些「<b>还没熟、但已经种下了</b>」的作物。
@@ -370,6 +379,64 @@ public final class FarmTaskManager {
     private static BlockPos retreatTarget;
     /** 这一轮低血量是否已经放弃撤退（转成原地停机）——血量恢复后自动复位 */
     private static boolean retreatDone;
+    /** 「危险反应延迟」用在撤退上的计时：低血量 + 有威胁持续了多少 tick */
+    private static int retreatSeenTicks;
+
+    // ================= 每 tick 的威胁查询缓存 =================
+
+    /** 本 tick 是否已经查过「最近的敌对生物」（每 tick 开头清掉，见 {@link #clearThreatCache}） */
+    private static boolean threatCacheReady;
+    /** 本 tick 缓存下来的最近敌对生物（可能是 null） */
+    private static MobEntity threatCache;
+
+    // ================= 每 tick 的背包缓存 =================
+
+    /**
+     * 背包统计（空格数、种子数）本 tick 是否已经算过。
+     *
+     * <p>「背包快满了吗」「还够种几次」这两件事在同一 tick 里会被问好几次
+     * （停机判断、补给判断、HUD…），每次都全量数一遍 36 格太浪费。一 tick 算一次就够。
+     */
+    private static boolean invCacheReady;
+    private static int freeSlotsCache;
+    private static int seedCountCache;
+
+    /** 每 tick 开头作废背包缓存 */
+    private static void clearInventoryCache() {
+        invCacheReady = false;
+    }
+
+    // ================= 每 tick 的容器坐标缓存 =================
+
+    /** 四种补给目的各自缓存下来的容器坐标；每 tick 开头作废 */
+    private static final BlockPos[] containerCache = new BlockPos[SupplyPurpose.values().length];
+    private static final boolean[] containerCacheSet = new boolean[SupplyPurpose.values().length];
+
+    private static void clearContainerCache() {
+        for (int i = 0; i < containerCacheSet.length; i++) {
+            containerCacheSet[i] = false;
+            containerCache[i] = null;
+        }
+    }
+
+    private static void refreshInventoryCache(MinecraftClient client) {
+        invCacheReady = true;
+        if (client == null || client.player == null) {
+            freeSlotsCache = 0;
+            seedCountCache = 0;
+            return;
+        }
+        freeSlotsCache = InventoryScanner.countFreeSlots(client.player);
+        seedCountCache = InventoryScanner.countSeeds(client.player, CropHarvester.getCropBlock());
+    }
+
+    /** 背包空格 ≤ {@code reserve}（本 tick 缓存，避免每 tick 反复数 36 格） */
+    private static boolean isNearlyFull(MinecraftClient client, int reserve) {
+        if (!invCacheReady) {
+            refreshInventoryCache(client);
+        }
+        return freeSlotsCache <= reserve;
+    }
 
     /**
      * 受击反制：上一次看到的受伤计时。
@@ -405,7 +472,7 @@ public final class FarmTaskManager {
 
     /** 额外收割目标（瓜 / 自定义方块）。渲染层拿它画另一种颜色的框 */
     public static List<BlockPos> getExtraTargets() {
-        return new ArrayList<>(extraTargets);
+        return extraTargetsList;
     }
 
     /** 附近空耕地的格数（面板上显示，好知道它为什么要往空地跑） */
@@ -437,11 +504,6 @@ public final class FarmTaskManager {
     /** 当前路线上还剩多少个没到的目标 */
     public static int getRouteRemaining() {
         return PathWalker.isActive() ? PathWalker.getTotalCount() - PathWalker.getDoneCount() : 0;
-    }
-
-    /** 当前路线的目标总数 */
-    public static int getRouteTotal() {
-        return PathWalker.getTotalCount();
     }
 
     /** 从当前位置起还要走多远（格） */
@@ -510,10 +572,11 @@ public final class FarmTaskManager {
      * 还没收过东西时就数背包里所有能种的东西。
      */
     public static int getSeedCount() {
-        MinecraftClient client = MinecraftClient.getInstance();
-        return client == null || client.player == null
-                ? 0
-                : InventoryScanner.countSeeds(client.player, CropHarvester.getCropBlock());
+        // HUD 每帧都要它 —— 走本 tick 的缓存，别每帧数一遍 36 格背包
+        if (!invCacheReady) {
+            refreshInventoryCache(MinecraftClient.getInstance());
+        }
+        return seedCountCache;
     }
 
     /** 玩家退出世界时清空现场 */
@@ -555,6 +618,7 @@ public final class FarmTaskManager {
         sessionTicks = 0;
         pickupTargets.clear();
         extraTargets.clear();
+        extraTargetsList = Collections.emptyList();
         boneMealTargets.clear();
         pickupWaitTicks = 0;
         pickupWaitPos = null;
@@ -572,6 +636,7 @@ public final class FarmTaskManager {
         retreatTried = false;
         retreatTarget = null;
         retreatDone = false;
+        retreatSeenTicks = 0;
         lastHurtTime = 0;
         hitTarget = null;
         hitReactTicks = 0;
@@ -637,6 +702,7 @@ public final class FarmTaskManager {
             retreatTried = false;
             retreatTarget = null;
             retreatDone = false;
+            retreatSeenTicks = 0;
             hitTarget = null;
             hitReactTicks = 0;
             Humanizer.reset();
@@ -688,9 +754,14 @@ public final class FarmTaskManager {
         // BlockInteractor 会再把它置起来。原版读的就是这个标记（见 MinecraftClientMixin）。
         BlockInteractor.beginTick();
 
-        // 防踢模式：推进一次内部随机量（转向速度、瞄准微颤、疾跑节奏）。
+        // 防踢模式：推进一次内部随机量（瞄准微颤、疾跑节奏）。
         // 放在最前面，是为了保证「同一 tick 里不管谁读它，读到的都是同一个值」。
         Humanizer.beginTick();
+
+        // 作废本 tick 的缓存：威胁查询、背包统计都改成「第一次问的时候才算、之后共用」。
+        clearThreatCache();
+        clearInventoryCache();
+        clearContainerCache();
 
         // 累计统计的低频落盘：脏了才真正写（见 StatsManager.save），所以这里只是定个节拍，
         // 让它不用等退出世界才写盘，中途崩了也不至于把整局统计全丢。
@@ -703,59 +774,53 @@ public final class FarmTaskManager {
         // 「自动收割」关了就整个停手，连高亮也不扫 —— 关掉开关就该什么都不显示，
         // 而不是留着描边让人误以为还在工作。
         if (!config.enabled) {
-            reset();
+            // 关掉开关 = 整个停手，连高亮也不扫（关掉就该什么都不显示）。
+            // 只在「刚关掉」那一个 tick 清一次场 —— 不能每 tick 都调 reset()：
+            // 它含 StatsManager.save()（写盘），关着开关挂机就会变成一直写盘。
+            // reset() 内部会把 lastEnabled 置回 false，所以下一 tick 不会再进来。
+            if (lastEnabled) {
+                reset();
+            }
             return;
         }
 
         // 「关 → 开」的边沿：清空「已处理」并强制重扫。
         // 抓边沿而不是只看当前值，是为了让「面板里点开」和「快捷键开」走同一套逻辑，
         // 都能把还没被挖掉的成熟作物重新认出来。
-        if (config.enabled != lastEnabled) {
-            if (config.enabled) {
-                handled.clear();
-                lastScanTick = Long.MIN_VALUE;
-                CropHarvester.reset();
-                supplyNotice = null;
-                // 附加功能的计时也重来一遍，否则「休息」和「运行时长」会带着上一轮的账继续走
-                failedUntil.clear();
-                humanizeDelay = 0;
-                restRemaining = 0;
-                workTicks = 0;
-                sessionTicks = 0;
-                pickupTargets.clear();
-                pickupWaitTicks = 0;
-                pickupWaitPos = null;
-                pickupRetryTicks = 0;
-                hesitatedAt = null;
-                pendingSafety = null;
-                safetySeenTicks = 0;
-                areaReturnTarget = null;
-                areaReturnTried = false;
-                areaReturning = false;
-                fatigueWorkTicks = 0;
-                fatigueRestRemaining = 0;
-                fatigueStopped = false;
-                retreating = false;
-                retreatTried = false;
-                retreatTarget = null;
-                retreatDone = false;
-                hitTarget = null;
-                hitReactTicks = 0;
-                RescueHelper.reset();
-                KillAura.reset();
-            }
-            lastEnabled = config.enabled;
-        }
-
-        // 玩家关掉「自动收割」→ 立刻停手，并把「已处理」清空，
-        // 这样下次打开开关时会重新从头规划一遍
-        if (!config.enabled) {
-            if (PathWalker.isActive() || supplyPhase != SupplyPhase.NONE) {
-                cancelSupply(null);
-                PathWalker.stop();
-                CropHarvester.reset();
-                handled.clear();
-            }
+        if (!lastEnabled) {
+            handled.clear();
+            lastScanTick = Long.MIN_VALUE;
+            CropHarvester.reset();
+            supplyNotice = null;
+            // 附加功能的计时也重来一遍，否则「休息」和「运行时长」会带着上一轮的账继续走
+            failedUntil.clear();
+            humanizeDelay = 0;
+            restRemaining = 0;
+            workTicks = 0;
+            sessionTicks = 0;
+            pickupTargets.clear();
+            pickupWaitTicks = 0;
+            pickupWaitPos = null;
+            pickupRetryTicks = 0;
+            hesitatedAt = null;
+            pendingSafety = null;
+            safetySeenTicks = 0;
+            areaReturnTarget = null;
+            areaReturnTried = false;
+            areaReturning = false;
+            fatigueWorkTicks = 0;
+            fatigueRestRemaining = 0;
+            fatigueStopped = false;
+            retreating = false;
+            retreatTried = false;
+            retreatTarget = null;
+            retreatDone = false;
+            retreatSeenTicks = 0;
+            hitTarget = null;
+            hitReactTicks = 0;
+            RescueHelper.reset();
+            KillAura.reset();
+            lastEnabled = true;
         }
 
         // ================================================================
@@ -817,6 +882,15 @@ public final class FarmTaskManager {
                 && !retreatDone
                 && lowHealth
                 && nearestThreat(client) != null;
+        // 「危险反应延迟」对撤退同样生效：真人不会在血量掉下去的同一 tick 就掉头跑，
+        // 总要慢半拍才反应过来。延迟期间先不动，够 tick 了才真正开始撤 ——
+        // 否则「反应延迟」这个卖点在撤退这一支上就形同虚设了。
+        if (wantRetreat && config.reactionDelay) {
+            retreatSeenTicks++;
+            wantRetreat = retreatSeenTicks >= Math.max(1, config.reactionDelayTicks);
+        } else {
+            retreatSeenTicks = 0;
+        }
         // 真要撤还得有「能操作角色」的前提：开着界面 / 自由视角时先别动，
         // 这时候退回普通停机（见下面的 safety），等能动了再撤。
         boolean retreatActive = wantRetreat
@@ -828,6 +902,7 @@ public final class FarmTaskManager {
             retreatTried = false;
             retreatTarget = null;
             retreatDone = false;
+            retreatSeenTicks = 0;
         }
 
         // 安全条件：血量太低、或者附近有敌对生物。它比「收菜」重要 ——
@@ -856,15 +931,18 @@ public final class FarmTaskManager {
             supplyNotice = null;
         }
 
-        // 这一 tick 要不要整个人停手（背包满、安全保护、外加几个附加功能）
-        boolean resting = config.enabled && updateRest(config);
         // 附加功能「仅在指定时段工作」：不在工作时段就停手（账号仍然在线，只是不干活）
         boolean offSchedule = config.enabled && config.scheduleEnabled && !insideSchedule(config);
         // 附加功能「仅白天 / 仅晴天」：环境不合适就停手，条件一恢复自动继续
         String environment = config.enabled ? environmentNotice(client, config) : null;
+        // 先算「除定时休息之外，是否已经因为别的原因停手」。定时休息的计时要用到它：
+        // 否则夜间挂机 / 背包满停机那些时间也会被算进「连续工作」，一开灯就累到触发休息。
+        boolean pausedBeforeRest = stopForFull || safety != null || offSchedule || environment != null;
+        // 这一 tick 要不要整个人停手（背包满、安全保护、外加几个附加功能）
+        boolean resting = config.enabled && updateRest(config, pausedBeforeRest);
         // 上面这些都成立 = 「已经在停手」。疲劳计时要用到它 ——
         // 只有真正在干活的那些 tick 才该被算进「连续工作」。
-        boolean alreadyPaused = stopForFull || safety != null || resting || offSchedule || environment != null;
+        boolean alreadyPaused = pausedBeforeRest || resting;
         // 附加功能「疲劳收工」：连续干到上限就整场停下来
         boolean fatigued = config.enabled && updateFatigue(config, alreadyPaused);
         boolean paused = alreadyPaused || fatigued;
@@ -914,10 +992,11 @@ public final class FarmTaskManager {
         boolean hitReacting = false;
         if (config.enabled && config.hitReactionEnabled && hitReactTicks > 0) {
             hitReactTicks--;
-            if (!config.autoAttack && hitTarget != null && hitTarget.isAlive()) {
+            hitReacting = true; // 受击窗口内一律停手（能不能回头再另说）
+            if (!config.autoAttack && hitTarget != null && hitTarget.isAlive()
+                    && !CameraCompat.isCameraDetached()) {
                 BlockInteractor.aimAt(client.player, hitTarget.getX(), hitTarget.getEyeY(),
                         hitTarget.getZ());
-                hitReacting = true;
             }
         }
 
@@ -955,8 +1034,11 @@ public final class FarmTaskManager {
         // 判据只看「人在不在区域里」，和「目标在不在区域里」是两件事：
         // 后者在扫描那一步就把圈外的目标滤掉了（见下面 matureCrops 的过滤）。
         // ================================================================
+        // 正在跑补给时不判越界 —— 补给点本身可能在圈外，去补给就是「有意出圈」，
+        // 不能一出圈就被越界返回撤销整趟补给（否则圈外的箱子永远用不了）。
         boolean outsideArea = config.enabled
                 && config.workAreaEnabled
+                && supplyPhase == SupplyPhase.NONE
                 && !config.insideWorkArea(client.player.getX(), client.player.getY(), client.player.getZ());
 
         // 回到圈里了：把返回状态复位，恢复正常作业
@@ -1002,6 +1084,9 @@ public final class FarmTaskManager {
         boolean fightingActive = config.enabled
                 && config.autoAttack
                 && !paused
+                // 吃 > 打怪：饿到要进食时先让 AutoEater 把这口饭吃完，别一边按着使用键啃、
+                // 一边挥刀（两条路会同时跑，看着也不像人）。
+                && !AutoEater.isHandlingHunger()
                 && client.currentScreen == null
                 && !CameraCompat.isCameraDetached()
                 && KillAura.tick(client, config);
@@ -1023,6 +1108,9 @@ public final class FarmTaskManager {
         IdleLook.tick(client, config, config.enabled
                 && !stopForFull
                 && safety == null
+                // 「危险反应延迟」还没数够时 safety 仍是 null，但危险已经在逼近 ——
+                // 这时候别悠闲地东张西望（pendingSafety 有值就说明正有一桩危险挂着）。
+                && pendingSafety == null
                 && !offSchedule
                 && !fightingActive
                 && !hitReacting
@@ -1065,16 +1153,33 @@ public final class FarmTaskManager {
         // 顺便注意：成熟作物的过滤条件挂在扫描里，被筛掉的作物根本不会进列表 ——
         // 于是世界里不给它画描边、面板计数也对得上。
         boolean wantFarmland = config.enabled && config.fillEmptyFarmland;
+        // 顺手记下「被作物筛选挡掉」的作物种类 —— 只在「只收能补种的」模式下用它：
+        // 那种模式挡掉几乎都是因为「没种子」，得据此触发一次种子补给，
+        // 否则会死锁（没种子 → 不收 → 永远不去取种子 → 永远没种子）。
+        Set<Block> filteredBySeed = new HashSet<>();
         CropScanner.ScanResult scanned = CropScanner.scan(
                 client.world,
                 client.player.getBlockPos(),
                 config.scanRadius,
                 CropScanner.DEFAULT_DOWN,
                 CropScanner.DEFAULT_UP,
-                state -> CropFilter.allowsHarvest(state.getBlock(), config, client.player),
+                state -> {
+                    boolean ok = CropFilter.allowsHarvest(state.getBlock(), config, client.player);
+                    if (!ok && config.cropFilterMode == AutoFarmConfig.FILTER_ONLY_REPLANTABLE) {
+                        filteredBySeed.add(state.getBlock());
+                    }
+                    return ok;
+                },
                 wantFarmland
         );
         matureCrops = new ArrayList<>(scanned.mature());
+        // 「只收能补种的」把整片田都挡下来了，而且挡下来的是真作物 → 就是缺种子。
+        // 记一笔补给需求，让下面的补给流程去种子容器取；取到之前先不收（保持模式本意）。
+        if (!filteredBySeed.isEmpty() && matureCrops.isEmpty()) {
+            refillWanted = true;
+            missingSeeds.addAll(filteredBySeed);
+            announceEvent(client, "autofarm.notice.out_of_seeds");
+        }
         emptyFarmland = wantFarmland
                 ? new ArrayList<>(scanned.emptyFarmland())
                 : Collections.emptyList();
@@ -1082,14 +1187,8 @@ public final class FarmTaskManager {
         // 附加功能「圈定工作区域」：圈外的目标一律不要 —— 既防跑丢，也防踩到别人的田。
         // 过滤放在扫描之后、规划之前，而不是塞进扫描器：扫描器只管「什么值得动」，
         // 「这块地是不是我的」是工作范围的事。顺带一个好处是圈外的作物不会被画上描边。
-        if (config.workAreaEnabled && config.hasWorkArea()) {
-            matureCrops.removeIf(pos -> !config.insideWorkArea(
-                    pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
-            if (!emptyFarmland.isEmpty()) {
-                emptyFarmland.removeIf(pos -> !config.insideWorkArea(
-                        pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
-            }
-        }
+        removeIfOutsideWorkArea(matureCrops, config);
+        removeIfOutsideWorkArea(emptyFarmland, config);
 
         // 附加功能「瓜茎识别 + 自定义方块」：找出瓜茎旁的瓜、以及玩家自定义的方块。
         // 它们不是作物（没有 age、判不出成熟），所以不并进 matureCrops，而是单独一个
@@ -1106,10 +1205,9 @@ public final class FarmTaskManager {
                     client.world, client.player.getBlockPos(),
                     config.scanRadius, CropScanner.DEFAULT_DOWN, CropScanner.DEFAULT_UP, customIds));
         }
-        if (config.workAreaEnabled && config.hasWorkArea() && !extraTargets.isEmpty()) {
-            extraTargets.removeIf(pos -> !config.insideWorkArea(
-                    pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
-        }
+        removeIfOutsideWorkArea(extraTargets, config);
+        // 刷新只读镜像（渲染层每帧要用），一次扫描只复制这一回
+        extraTargetsList = List.copyOf(extraTargets);
 
         // 附加功能「骨粉催熟」：把田里还没熟、但已经种下的作物也找出来。
         // 关着时整块跳过 —— 成熟作物表里不会有它们，也不会有任何额外开销。
@@ -1118,9 +1216,15 @@ public final class FarmTaskManager {
             boneMealTargets.addAll(CropScanner.findImmatureCrops(
                     client.world, client.player.getBlockPos(),
                     config.scanRadius, CropScanner.DEFAULT_DOWN, CropScanner.DEFAULT_UP));
-            if (config.workAreaEnabled && config.hasWorkArea() && !boneMealTargets.isEmpty()) {
-                boneMealTargets.removeIf(pos -> !config.insideWorkArea(
-                        pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
+            removeIfOutsideWorkArea(boneMealTargets, config);
+            // 作物筛选的白名单 / 黑名单同样约束催熟 —— 名单里排除掉的作物不该被撒骨粉
+            // （否则「白白催熟一个永远不收割的目标」）。「只收能补种的」模式不适用：
+            // 它管的是收割，催熟本身不消耗种子。
+            if (config.cropFilterMode == AutoFarmConfig.FILTER_WHITELIST
+                    || config.cropFilterMode == AutoFarmConfig.FILTER_BLACKLIST) {
+                boolean whitelist = config.cropFilterMode == AutoFarmConfig.FILTER_WHITELIST;
+                boneMealTargets.removeIf(pos -> whitelist
+                        != CropFilter.contains(config, client.world.getBlockState(pos).getBlock()));
             }
         }
 
@@ -1161,13 +1265,6 @@ public final class FarmTaskManager {
         }
         if (!emptyFarmland.isEmpty()) {
             handled.removeAll(emptyFarmland);
-        }
-
-        if (!config.enabled) {
-            // 只开了「可视化」：照样扫描（这样你能单独看到它认出了哪些方块），
-            // 但状态显示为「空闲」，因为它不会去动角色。
-            state = FarmState.IDLE;
-            return;
         }
 
         if (paused) {
@@ -1213,8 +1310,8 @@ public final class FarmTaskManager {
         // 3a2. 杂物临时存储（可选）：背包满了 + 杂物容器启用 + 真有杂物 → 单独存一趟
         if (config.outJunkEnabled && config.hasJunkOut()
                 && supplyCooldown == 0
-                && InventoryScanner.isNearlyFull(client.player, INVENTORY_RESERVE)
-                && hasDepositableJunk(client.player)
+                && isNearlyFull(client, INVENTORY_RESERVE)
+                && hasDepositableJunk(client.player, config)
                 && startSupplyRun(client, config, true, false, SupplyPurpose.DEPOSIT_JUNK)) {
             return;
         }
@@ -1266,24 +1363,18 @@ public final class FarmTaskManager {
         // 撒的时候再换到快捷栏）。
         if (config.boneMealBoost && InventoryScanner.findBoneMealSlotDeep(client.player) >= 0) {
             for (BlockPos pos : boneMealTargets) {
-                if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
-                    pending.add(pos);
-                }
+                addPending(pending, pos);
             }
         }
 
         for (BlockPos pos : matureCrops) {
-            if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
-                pending.add(pos);
-            }
+            addPending(pending, pos);
         }
 
         // 附加功能「瓜茎识别 + 自定义方块」：额外目标（瓜 / 自定义方块）也排进同一条路线。
         // 排在成熟作物之后 —— 先把正儿八经的庄稼收完，再挖瓜和自定义方块。
         for (BlockPos pos : extraTargets) {
-            if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
-                pending.add(pos);
-            }
+            addPending(pending, pos);
         }
 
         // 空耕地也排进同一条路线（如果开着补种空地）。
@@ -1292,9 +1383,7 @@ public final class FarmTaskManager {
         if (config.fillEmptyFarmland && !emptyFarmland.isEmpty()) {
             if (InventoryScanner.countSeeds(client.player, null) > 0) {
                 for (BlockPos pos : emptyFarmland) {
-                    if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
-                        pending.add(pos);
-                    }
+                    addPending(pending, pos);
                 }
             } else {
                 refillWanted = true;
@@ -1355,6 +1444,22 @@ public final class FarmTaskManager {
                         && CropRegistry.isCropDrop(e.getStack())
                         && config.insideWorkArea(e.getX(), e.getY(), e.getZ()))) {
             out.add(item.getBlockPos().toImmutable());
+        }
+    }
+
+    /** 把工作区域外的目标从集合里剔掉（功能没开 / 没设坐标时原样保留，不影响既有行为） */
+    private static void removeIfOutsideWorkArea(Collection<BlockPos> targets, AutoFarmConfig config) {
+        if (targets.isEmpty() || !config.workAreaEnabled || !config.hasWorkArea()) {
+            return;
+        }
+        targets.removeIf(pos -> !config.insideWorkArea(
+                pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
+    }
+
+    /** 把一个目标排进本轮待办路线 —— 统一的「已处理 / 已在冷却」过滤 */
+    private static void addPending(List<BlockPos> pending, BlockPos pos) {
+        if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
+            pending.add(pos);
         }
     }
 
@@ -1471,9 +1576,12 @@ public final class FarmTaskManager {
             supplyNotice = null; // 新的活开始了，上一次补给的那句话可以撤掉
             // 额外目标（瓜 / 自定义方块）不是作物，走「挖掉不补种」；
             // 骨粉目标不是收成，撒完就撒完了 —— 三者各有各的入口
+            // 顺序很关键：成熟作物优先于「额外目标」。因为自定义方块名单里若不小心加进了
+            // 普通作物，那一格会同时在 matureCrops 和 extraTargets 里 —— 先判成熟作物
+            // 才能走「正常收割 + 补种」，否则会被当成「挖掉不补种」，补种被静默关掉。
             if (boneMealTargets.contains(held)) {
                 CropHarvester.startBoneMeal(client.world, held, config);
-            } else if (extraTargets.contains(held)) {
+            } else if (extraTargets.contains(held) && !matureCrops.contains(held)) {
                 CropHarvester.startBreak(client.world, held);
             } else {
                 CropHarvester.start(client.world, held, config);
@@ -1572,7 +1680,7 @@ public final class FarmTaskManager {
         return config.depositWhenFull
                 && containerFor(config, SupplyPurpose.DEPOSIT_CROP) != null
                 && supplyCooldown == 0
-                && InventoryScanner.isNearlyFull(client.player, INVENTORY_RESERVE)
+                && isNearlyFull(client, INVENTORY_RESERVE)
                 && InventoryScanner.hasDepositableItems(client.player, config);
     }
 
@@ -1588,7 +1696,7 @@ public final class FarmTaskManager {
      * 其实一格都存不掉，这时候停手反而莫名其妙。
      */
     private static boolean shouldStopForFullInventory(MinecraftClient client, AutoFarmConfig config) {
-        if (!InventoryScanner.isNearlyFull(client.player, INVENTORY_RESERVE)) {
+        if (!isNearlyFull(client, INVENTORY_RESERVE)) {
             return false;
         }
         if (!InventoryScanner.hasDepositableItems(client.player, config)) {
@@ -1598,21 +1706,38 @@ public final class FarmTaskManager {
                 containerFor(config, SupplyPurpose.DEPOSIT_CROP)) == null;
     }
 
-    /** 背包里有没有「非作物相关」的杂物（食物 / 方块 / 工具），杂物临时存储用它判 */
-    private static boolean hasDepositableJunk(ClientPlayerEntity player) {
+    /**
+     * 背包里有没有「该进杂物容器」的东西。
+     *
+     * <p>判定要和搬运时完全一致（见 {@code ContainerTransfer.nextDepositSlot}）：
+     * 只数<b>主背包</b>里、<b>非作物相关</b>、且「存放策略」允许存（{@code budget >= 0}）的物品。
+     * 少任何一条都会「白跑一趟」或「把快捷栏里保命的食物搬走」。
+     */
+    private static boolean hasDepositableJunk(ClientPlayerEntity player, AutoFarmConfig config) {
         if (player == null) {
             return false;
         }
         PlayerInventory inv = player.getInventory();
-        for (int i = 0; i < InventoryScanner.INVENTORY_SLOTS; i++) {
+        int hotbar = PlayerInventory.getHotbarSize();
+        Map<Item, Integer> kept = new HashMap<>();
+        for (int i = hotbar; i < InventoryScanner.INVENTORY_SLOTS; i++) {
             ItemStack stack = inv.getStack(i);
             if (stack.isEmpty()) {
                 continue;
             }
             ItemCategory category = ItemCategory.classify(stack);
-            if (category != null && !category.isCropRelated()) {
+            if (category == null || category.isCropRelated()) {
+                continue;
+            }
+            int budget = InventoryScanner.depositKeepBudget(stack, config);
+            if (budget < 0) {
+                continue;
+            }
+            int already = kept.getOrDefault(stack.getItem(), 0);
+            if (already >= budget) {
                 return true;
             }
+            kept.merge(stack.getItem(), 1, Integer::sum);
         }
         return false;
     }
@@ -1823,6 +1948,19 @@ public final class FarmTaskManager {
      * 而不是把杂物和作物混进同一个默认箱子。
      */
     private static BlockPos containerFor(AutoFarmConfig config, SupplyPurpose purpose) {
+        // 同一 tick 里会被问好几次（停机判断、补给判断、出发……），每次都 new BlockPos 太亏 ——
+        // 一 tick 算一次。每 tick 开头由 clearContainerCache() 作废。
+        int i = purpose.ordinal();
+        if (containerCacheSet[i]) {
+            return containerCache[i];
+        }
+        BlockPos result = computeContainerFor(config, purpose);
+        containerCache[i] = result;
+        containerCacheSet[i] = true;
+        return result;
+    }
+
+    private static BlockPos computeContainerFor(AutoFarmConfig config, SupplyPurpose purpose) {
         BlockPos dedicated = switch (purpose) {
             case DEPOSIT_CROP -> config.outCropEnabled && config.hasCropOut()
                     ? new BlockPos(config.outCropX, config.outCropY, config.outCropZ) : null;
@@ -1876,10 +2014,7 @@ public final class FarmTaskManager {
         // 附加功能「自动打怪」开着时，这一条让位 —— 怪由 KillAura 处理。
         // 不让位的话会出现自相矛盾的状态：它一边挥刀打怪、一边因为「附近有怪」而停手。
         if (config.pauseWhenMobsNear && !config.autoAttack) {
-            Box box = client.player.getBoundingBox().expand(AutoFarmConfig.MOB_ALERT_RADIUS);
-            List<MobEntity> threats = client.world.getEntitiesByClass(MobEntity.class, box,
-                    mob -> mob.isAlive() && mob instanceof Monster);
-            if (!threats.isEmpty()) {
+            if (nearestMonster(client) != null) {
                 return "autofarm.notice.paused_mobs_near";
             }
         }
@@ -1905,9 +2040,12 @@ public final class FarmTaskManager {
      * 休息结束再重新累计。关掉这个功能时会把计时归零 —— 否则下次打开时
      * 可能「一上来就欠着几分钟」，立刻就开始休息，很莫名其妙。
      *
+     * @param alreadyPaused 这一 tick 是否已经因为别的原因停手（背包满 / 危险 / 时段外 /
+     *                      环境不合适）。为真时<b>不计入</b>「连续工作」——
+     *                      口径要和 {@link #updateFatigue} 一致。
      * @return 这一 tick 是不是在休息
      */
-    private static boolean updateRest(AutoFarmConfig config) {
+    private static boolean updateRest(AutoFarmConfig config, boolean alreadyPaused) {
         if (!config.randomRest) {
             restRemaining = 0;
             workTicks = 0;
@@ -1916,6 +2054,9 @@ public final class FarmTaskManager {
         if (restRemaining > 0) {
             restRemaining--;
             return true;
+        }
+        if (alreadyPaused) {
+            return false; // 没在干活，就不算「连续工作」
         }
         workTicks++;
         int interval = Math.max(1, config.restIntervalMinutes) * 20 * 60; // 分钟 → tick
@@ -2109,9 +2250,31 @@ public final class FarmTaskManager {
      * 判定半径比「敌对生物靠近停机」那个稍大一些，好让人有机会在挨打之前就撤。
      */
     private static Vec3d nearestThreat(MinecraftClient client) {
+        MobEntity mob = nearestMonster(client);
+        return mob == null ? null : new Vec3d(mob.getX(), mob.getY(), mob.getZ());
+    }
+
+    /** 每 tick 开头作废威胁缓存（清完第一次访问才真正去查） */
+    private static void clearThreatCache() {
+        threatCacheReady = false;
+        threatCache = null;
+    }
+
+    /**
+     * MOB_ALERT_RADIUS 内最近的敌对生物，<b>同一 tick 只查一次</b>。
+     *
+     * <p>「附近有怪停机」「危险撤退」「受击反制找嫌疑犯」三处都要做同一份查询，
+     * 不缓存的话一 tick 要重复扫 2~3 次实体列表。用 {@link #threatCacheReady} 标记，
+     * 每 tick 开头清一次即可（客户端主线程单线程，不存在并发问题）。
+     */
+    private static MobEntity nearestMonster(MinecraftClient client) {
         if (client == null || client.player == null || client.world == null) {
             return null;
         }
+        if (threatCacheReady) {
+            return threatCache;
+        }
+        threatCacheReady = true;
         Box box = client.player.getBoundingBox().expand(AutoFarmConfig.MOB_ALERT_RADIUS);
         MobEntity best = null;
         double bestDist = Double.MAX_VALUE;
@@ -2123,7 +2286,8 @@ public final class FarmTaskManager {
                 best = mob;
             }
         }
-        return best == null ? null : new Vec3d(best.getX(), best.getY(), best.getZ());
+        threatCache = best;
+        return best;
     }
 
     /**
@@ -2236,26 +2400,8 @@ public final class FarmTaskManager {
                 && living != client.player) {
             return living;
         }
-        return nearestMonster(client, AutoFarmConfig.MOB_ALERT_RADIUS);
-    }
-
-    /** 最近的一只敌对生物（受击反制的兜底「嫌疑犯」） */
-    private static LivingEntity nearestMonster(MinecraftClient client, double radius) {
-        if (client == null || client.player == null || client.world == null) {
-            return null;
-        }
-        Box box = client.player.getBoundingBox().expand(radius);
-        LivingEntity best = null;
-        double bestDist = Double.MAX_VALUE;
-        for (LivingEntity entity : client.world.getEntitiesByClass(LivingEntity.class, box,
-                e -> e.isAlive() && e instanceof Monster)) {
-            double d = entity.squaredDistanceTo(client.player);
-            if (d < bestDist) {
-                bestDist = d;
-                best = entity;
-            }
-        }
-        return best;
+        // 兜底「嫌疑犯」：最近的那只敌对生物（复用同一份 tick 缓存，不再单独查一次）
+        return nearestMonster(client);
     }
 
     /** 这句话是不是「停机原因」——停机解除时要记得把它撤掉 */

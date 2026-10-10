@@ -98,16 +98,6 @@ public final class CropScanner {
         return types;
     }
 
-    /** 只找成熟作物（{@link #scan} 的简化版，不带过滤、不收空耕地） */
-    public static List<BlockPos> findMatureCrops(ClientWorld world, BlockPos center, int radius,
-                                                 int down, int up) {
-        return scan(world, center, radius, down, up, null, false).mature();
-    }
-
-    public static List<BlockPos> findMatureCrops(ClientWorld world, BlockPos center, int radius) {
-        return findMatureCrops(world, center, radius, DEFAULT_DOWN, DEFAULT_UP);
-    }
-
     /**
      * 找「还没熟、但已经种下了」的作物 —— 附加功能「骨粉催熟」的目标。
      *

@@ -154,11 +154,6 @@ public final class KillAura {
         }
     }
 
-    /** 现在是不是锁着目标（给状态显示用） */
-    public static boolean hasTarget() {
-        return locked != null;
-    }
-
     // ================= 目标筛选 =================
 
     /** 这个目标现在还能不能打：活着、在范围内、而且符合当前的目标范围设置 */

@@ -433,17 +433,18 @@ public final class CropHighlighter {
         double vy = dz * ux - dx * uz;
         double vz = dx * uy - dy * ux;
 
-        double[] px = new double[4];
-        double[] py = new double[4];
-        double[] pz = new double[4];
-        double[] qx = new double[4];
-        double[] qy = new double[4];
-        double[] qz = new double[4];
-        double[][] corners = {{1, 1}, {1, -1}, {-1, -1}, {-1, 1}};
+        // 复用静态数组 —— beam() 每帧会被路线上的每一段调用几十上百次，
+        // 每次 new 六个数组没必要（渲染是单线程，一段画完才画下一段）。
+        double[] px = BEAM_PX;
+        double[] py = BEAM_PY;
+        double[] pz = BEAM_PZ;
+        double[] qx = BEAM_QX;
+        double[] qy = BEAM_QY;
+        double[] qz = BEAM_QZ;
 
         for (int i = 0; i < 4; i++) {
-            double su = r * corners[i][0];
-            double sv = r * corners[i][1];
+            double su = r * BEAM_CORNERS[i][0];
+            double sv = r * BEAM_CORNERS[i][1];
             double ox = ux * su + vx * sv;
             double oy = uy * su + vy * sv;
             double oz = uz * su + vz * sv;
@@ -465,6 +466,15 @@ public final class CropHighlighter {
                     cr, cg, cb, ca);
         }
     }
+
+    /** {@link #beam} 复用的临时数组与四个角方向（渲染单线程，安全） */
+    private static final double[] BEAM_PX = new double[4];
+    private static final double[] BEAM_PY = new double[4];
+    private static final double[] BEAM_PZ = new double[4];
+    private static final double[] BEAM_QX = new double[4];
+    private static final double[] BEAM_QY = new double[4];
+    private static final double[] BEAM_QZ = new double[4];
+    private static final int[][] BEAM_CORNERS = {{1, 1}, {1, -1}, {-1, -1}, {-1, 1}};
 
     private static double clampHalf(double value) {
         return Math.max(MIN_HALF, Math.min(MAX_HALF, value));

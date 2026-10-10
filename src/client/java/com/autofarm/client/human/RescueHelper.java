@@ -1,5 +1,6 @@
 package com.autofarm.client.human;
 
+import com.autofarm.client.compat.CameraCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.interact.BlockInteractor;
 import net.minecraft.block.BlockState;
@@ -76,6 +77,11 @@ public final class RescueHelper {
         if (!config.enabled || !config.selfRescueEnabled || player.isSpectator()) {
             return false;
         }
+        // 自由视角（摄像机和身体分开）时不接管 —— 否则屏幕上身体不动，却在那边自己
+        // 上浮 / 朝水源跑，很扎眼。返回 false 并保持「没在自救」，控制权不落在我们手上。
+        if (CameraCompat.isCameraDetached()) {
+            return false;
+        }
 
         // ---- 1. 溺水：潜在水里、氧气见底 → 上浮 ----
         int maxAir = player.getMaxAir();
@@ -119,11 +125,6 @@ public final class RescueHelper {
         input.movementSideways = 0.0f;
         input.jumping = wantJump;
         input.sneaking = false;
-    }
-
-    /** 现在是不是在自救（给状态显示、任务大脑判断用） */
-    public static boolean isActive() {
-        return mode != Mode.NONE;
     }
 
     /** 自救时该播报的那句话（翻译键）；不在自救时返回 null */

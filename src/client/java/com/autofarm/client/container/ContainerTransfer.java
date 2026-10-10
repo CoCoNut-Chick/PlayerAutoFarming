@@ -224,10 +224,6 @@ public final class ContainerTransfer {
         forceStage = 0;
     }
 
-    public static boolean isActive() {
-        return active;
-    }
-
     /** 这一次实际存进去几栈 */
     public static int getDepositedStacks() {
         return deposited;
@@ -507,6 +503,12 @@ public final class ContainerTransfer {
                 if ((pass == 0) != hotbar) {
                     continue;
                 }
+                // 存杂物时<b>不碰快捷栏</b>：那里面是自动进食的食物、垫路的方块、
+                // 手上的工具 —— 搬走它们会让这几个功能当场失效。作物产物不在此限
+                // （收下来的庄稼就该腾出去）。
+                if (depositJunk && hotbar) {
+                    continue;
+                }
                 ItemStack stack = slot.getStack();
                 if (stack.isEmpty()) {
                     continue;
@@ -516,11 +518,10 @@ public final class ContainerTransfer {
                 if (cropRelated == depositJunk) {
                     continue; // 存杂物时跳过作物，存作物时跳过杂物
                 }
-                // 杂物临时存储不看「存放策略」的额度，一律全存腾空间；
-                // 作物产物仍按 keepFor 的额度存。
-                int budget = depositJunk
-                        ? ItemCategory.STORE_ALL
-                        : InventoryScanner.depositKeepBudget(stack, config);
+                // 两趟都按「存放策略」的额度存 —— 杂物也不再无脑全存：
+                // 否则食物（默认不存）、垫脚方块（默认不存）会被一起搬走，
+                // 自动进食断粮、跨沟垫路失效。想清空某类杂物，去「存放策略」把它设成「全存」。
+                int budget = InventoryScanner.depositKeepBudget(stack, config);
                 if (budget < 0) {
                     continue; // 不该存的，连数都不用数
                 }
