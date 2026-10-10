@@ -1,5 +1,6 @@
 package com.autofarm.client.interact;
 
+import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.human.Humanizer;
 import com.autofarm.client.inventory.InventoryScanner;
@@ -286,9 +287,13 @@ public final class BlockInteractor {
 
         // 4. 抬手之前先把准星压到那一面上。差得太远就先不发交互 ——
         // 调用方是每隔几 tick 试一次的，下一轮视角就更接近了。
-        aimAt(player, hitPos.x, hitPos.y, hitPos.z);
-        if (!isAimedAt(player, hitPos.x, hitPos.y, hitPos.z, PLACE_AIM_TOLERANCE)) {
-            return false;
+        // 极效率模式例外：放置也无视准星，直接构造合法命中发出去（代价是面朝向
+        // 可能与实际视角不符，服务端对放置的朝向校验比破坏宽松）。
+        if (ConfigManager.get().aimMode != AutoFarmConfig.AIM_EXTREME) {
+            aimAt(player, hitPos.x, hitPos.y, hitPos.z);
+            if (!isAimedAt(player, hitPos.x, hitPos.y, hitPos.z, PLACE_AIM_TOLERANCE)) {
+                return false;
+            }
         }
 
         BlockHitResult hit = new BlockHitResult(hitPos, side, neighbour, false);
@@ -313,9 +318,12 @@ public final class BlockInteractor {
         }
         Vec3d center = Vec3d.ofCenter(pos);
         Direction side = faceTowards(player, pos);
-        aimAt(player, center.x, center.y, center.z);
-        if (!isAimedAt(player, center.x, center.y, center.z, PLACE_AIM_TOLERANCE)) {
-            return false;
+        // 极效率模式：右键也无视准星，直接朝方块中心发交互。
+        if (ConfigManager.get().aimMode != AutoFarmConfig.AIM_EXTREME) {
+            aimAt(player, center.x, center.y, center.z);
+            if (!isAimedAt(player, center.x, center.y, center.z, PLACE_AIM_TOLERANCE)) {
+                return false;
+            }
         }
         client.interactionManager.interactBlock(player, Hand.MAIN_HAND,
                 new BlockHitResult(center, side, pos, false));

@@ -1089,6 +1089,15 @@ public final class FarmTaskManager {
         pickupTargets.clear();
         if (config.pickupDroppedItems) {
             collectPickupTargets(client, config, pickupTargets);
+            // 掉落物若和作物 / 空耕地 / 额外 / 骨粉目标落在同一格，从掉落物集合里剔除 ——
+            // 那格按「作物」处理（收割时顺手把脚下掉落物吸走）。否则掉落物分支会在 drive 里
+            // 抢走收割：角色被精确走到作物格上、只「捡」不「收」，作物漏收还进 handled，
+            // 下一轮就永久卡在「扫描中」。这里把 pickupTargets 本身清干净，setExactTargets
+            // 和 drive 的「是不是掉落物」判断才不会误伤作物格。
+            pickupTargets.removeAll(matureCrops);
+            pickupTargets.removeAll(emptyFarmland);
+            pickupTargets.removeAll(extraTargets);
+            pickupTargets.removeAll(boneMealTargets);
         }
 
         // 让「已处理」集合跟着扫描结果瘦身，避免玩家在同一片区域待久了无限膨胀。
@@ -1103,6 +1112,12 @@ public final class FarmTaskManager {
             current.addAll(extraTargets);
             current.addAll(boneMealTargets);
             handled.retainAll(current);
+        }
+        // 兜底：成熟作物若还躺在「已处理」里，说明上一次处理没成功（挖不动、被掉落物抢走、
+        // 或其它意外）—— 它明明还是成熟作物却进不了路线，角色就会卡在「扫描中」。
+        // 这里把所有「仍是成熟作物」的位置从 handled 撤回来，让下一轮重试，绝不永久卡死。
+        if (!matureCrops.isEmpty()) {
+            handled.removeAll(matureCrops);
         }
 
         if (!config.enabled) {
@@ -1227,6 +1242,14 @@ public final class FarmTaskManager {
             }
         }
 
+        // 正在收割 / 捡掉落物（PathWalker 已经走到目标跟前、握着它等任务大脑处理）时，
+        // 别用新路线打断它 —— PathWalker.start() 会把 holding 和 resolved 一起重置，
+        // 正在收割的作物停在半路，和新的当前目标错位，最终卡死。等它干完放行，
+        // 下一轮扫描自然重新规划。
+        if (PathWalker.isHolding()) {
+            return;
+        }
+
         if (pending.isEmpty()) {
             // 这一轮都收完了。等新一批作物成熟，或者走回还没扫过的区域，才会重新规划。
             state = matureCrops.isEmpty() ? FarmState.IDLE : FarmState.SCANNING;
@@ -1281,11 +1304,8 @@ public final class FarmTaskManager {
             return false;
         }
         Box box = new Box(pos).expand(0.5);
-        for (ItemEntity item : client.world.getEntitiesByClass(ItemEntity.class, box,
-                e -> e.isAlive() && CropRegistry.isCropDrop(e.getStack()))) {
-            return true;
-        }
-        return false;
+        return !client.world.getEntitiesByClass(ItemEntity.class, box,
+                e -> e.isAlive() && CropRegistry.isCropDrop(e.getStack())).isEmpty();
     }
 
     /**
@@ -1456,11 +1476,15 @@ public final class FarmTaskManager {
                 StatsManager.get().logIssue("harvest failed (" + CropHarvester.getNotice()
                         + ") at " + held.getX() + "," + held.getY() + "," + held.getZ());
                 notify(client, config, "issue");
-            }
-            if (config.failureCooldown && failed && held != null) {
-                failedUntil.put(held.toImmutable(),
-                        client.world.getTime() + config.failureCooldownSeconds * 20L);
+                // 失败 = 这一格没干成，绝不能留在 handled 里 —— 否则它还是成熟作物、
+                // 却因为「已处理」被永久跳过，角色就卡在「扫描中」再也动不了。
+                // 所以无论「失败拉黑」开没开，都先从 handled 撤回来让下一轮重试；
+                // 开了拉黑再额外记个到期时间（到点才重试，避免每轮都去挖挖不动的东西）。
                 handled.remove(held);
+                if (config.failureCooldown) {
+                    failedUntil.put(held.toImmutable(),
+                            client.world.getTime() + config.failureCooldownSeconds * 20L);
+                }
             }
 
             // 附加功能「拟人化节奏」：这一次真的动了手（收了或种了），就歇一小会儿

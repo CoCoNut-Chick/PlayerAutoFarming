@@ -354,7 +354,7 @@ public final class CropHarvester {
 
         Stage next = switch (stage) {
             case MINE -> mine(client, player, config);
-            case PICK -> pick(client, player);
+            case PICK -> pick(client, player, config);
             case REPLANT -> replant(client, player, config);
             case PLANT -> plant(client, player, config);
             case BONE_MEAL -> boneMealTick(client, player, config);
@@ -386,7 +386,7 @@ public final class CropHarvester {
      * 就算成功。原版摘完会把 age 退一格（甜浆果），或者把浆果标志清掉（发光浆果），
      * 两种都会让它从 {@code USE} 变成 {@code SKIP}。
      */
-    private static Stage pick(MinecraftClient client, ClientPlayerEntity player) {
+    private static Stage pick(MinecraftClient client, ClientPlayerEntity player, AutoFarmConfig config) {
         // 已经摘掉了、或者被别的玩家摘走了 → 完事
         if (CropRegistry.harvestMode(client.world.getBlockState(target))
                 != CropRegistry.HarvestMode.USE) {
@@ -394,9 +394,12 @@ public final class CropHarvester {
             return Stage.DONE;
         }
 
-        BlockInteractor.aimAt(player, target);
-        if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
-            return Stage.PICK; // 转视角很快，不计入超时
+        // 极效率模式：摘取也无视准星，够得着就右键（不 aimAt）。
+        if (config.aimMode != AutoFarmConfig.AIM_EXTREME) {
+            BlockInteractor.aimAt(player, target);
+            if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
+                return Stage.PICK; // 转视角很快，不计入超时
+            }
         }
 
         // 够得着才发交互：隔着两格按右键，服务端会当成作弊
@@ -538,10 +541,13 @@ public final class CropHarvester {
             return Stage.DONE;
         }
 
-        // 同样先对准：种子是种在脚下那块耕地上的，准星要压在那一格上
-        BlockInteractor.aimAt(player, target);
-        if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
-            return Stage.REPLANT;
+        // 同样先对准：种子是种在脚下那块耕地上的，准星要压在那一格上。
+        // 极效率模式例外：放置也无视准星（placeWith 内部同样跳过瞄准）。
+        if (config.aimMode != AutoFarmConfig.AIM_EXTREME) {
+            BlockInteractor.aimAt(player, target);
+            if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
+                return Stage.REPLANT;
+            }
         }
 
         // 种子是「种在下面那块耕地上的」，所以要贴着耕地往上一格放
@@ -602,10 +608,12 @@ public final class CropHarvester {
             return Stage.DONE;
         }
 
-        // 和补种一样：准星先压到那一格上，再放
-        BlockInteractor.aimAt(player, target);
-        if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
-            return Stage.PLANT;
+        // 和补种一样：准星先压到那一格上，再放。极效率模式例外：无视准星。
+        if (config.aimMode != AutoFarmConfig.AIM_EXTREME) {
+            BlockInteractor.aimAt(player, target);
+            if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
+                return Stage.PLANT;
+            }
         }
 
         if (ticks >= nextActionAt) {
@@ -668,9 +676,12 @@ public final class CropHarvester {
             return Stage.BONE_MEAL;
         }
 
-        BlockInteractor.aimAt(player, target);
-        if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
-            return Stage.BONE_MEAL; // 转视角很快（几 tick），所以这段时间不计入超时
+        // 极效率模式：撒骨粉也无视准星，够得着就右键。
+        if (config.aimMode != AutoFarmConfig.AIM_EXTREME) {
+            BlockInteractor.aimAt(player, target);
+            if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
+                return Stage.BONE_MEAL; // 转视角很快（几 tick），所以这段时间不计入超时
+            }
         }
 
         // 够得着才撒：隔着两格按右键，服务端会当成作弊
