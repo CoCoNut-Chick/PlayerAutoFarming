@@ -1113,11 +1113,14 @@ public final class FarmTaskManager {
             current.addAll(boneMealTargets);
             handled.retainAll(current);
         }
-        // 兜底：成熟作物若还躺在「已处理」里，说明上一次处理没成功（挖不动、被掉落物抢走、
-        // 或其它意外）—— 它明明还是成熟作物却进不了路线，角色就会卡在「扫描中」。
-        // 这里把所有「仍是成熟作物」的位置从 handled 撤回来，让下一轮重试，绝不永久卡死。
+        // 兜底：成熟作物 / 空耕地若还躺在「已处理」里，说明上一次处理没成功（挖不动、
+        // 被掉落物抢走、补种没种子……）—— 它明明还是目标却进不了路线，角色就会卡住。
+        // 这里把所有「仍是成熟作物 / 仍是空耕地」的位置从 handled 撤回来，让下一轮重试。
         if (!matureCrops.isEmpty()) {
             handled.removeAll(matureCrops);
+        }
+        if (!emptyFarmland.isEmpty()) {
+            handled.removeAll(emptyFarmland);
         }
 
         if (!config.enabled) {
