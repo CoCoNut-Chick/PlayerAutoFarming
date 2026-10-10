@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"id": "autofarm",
 	"version": "${version}",
-	"name": "AutoFarm",
-	"description": "Drives your character to harvest fully-grown crops and replant the seeds, with a visual control panel and shortest-path route planning.",
+	"name": "PlayerAutoFarming",
+	"description": "Drives your character to harvest fully-grown crops and replant the seeds, with a visual control panel and shortest-path route planning. Client-side only.",
 	"authors": [
 		"CoCoNutChick"
 	],

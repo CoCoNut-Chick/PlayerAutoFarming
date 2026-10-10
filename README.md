@@ -1,9 +1,43 @@
-# AutoFarm
+# PlayerAutoFarming
 
-Minecraft Java 版 **1.20.1** 的 Fabric **客户端**模组：自动收割 + 补种。
+[![build](https://github.com/YOUR_NAME/PlayerAutoFarming/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_NAME/PlayerAutoFarming/actions/workflows/build.yml)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1-62b47a.svg)](https://www.minecraft.net/)
+[![Loader](https://img.shields.io/badge/Fabric-0.19.5%2B-dbb69c.svg)](https://fabricmc.net/)
+[![License](https://img.shields.io/badge/License-CC0--1.0-lightgrey.svg)](LICENSE)
+
+Minecraft Java 版 **1.20.1** 的 Fabric **客户端**模组：自动收割 + 补种，带可视控制面板和最短路径规划。
 
 全部逻辑在客户端完成，服务端只当你是一个普通玩家 —— 原版服务器和模组服务器都能用，
-服主不需要安装任何东西。
+服主不需要安装任何东西。（模组的内部 id 仍是 `autofarm`，配置文件为 `config/autofarm.json`。）
+
+## ⚠️ 使用前必读
+
+- 这是**纯客户端**模组，只替你操作自家角色的键盘鼠标：不发自定义包、不改游戏规则、
+  不穿墙、不飞。但它仍然**是自动化**。
+- **请在你被允许的范围内使用。** 附加功能里的「自动打怪」属于**作弊级功能**，
+  「防踢模式」「极效率瞄准」这类选项是用来降低被识别概率的 ——
+  **很多服务器明令禁止自动化 / 脚本**。使用前先确认你所在服务器的规则，被封号、被回档、
+  被没收物品等后果**由使用者自行承担**。
+- 合适的使用场景：单人存档、自己开的服务器、明确允许自动化模组的服务器。
+
+## 安装
+
+1. 给 Minecraft 1.20.1 装 [Fabric Loader](https://fabricmc.net/use/installer/)（0.19.5 或更高）；
+2. 下载 [Fabric API](https://modrinth.com/mod/fabric-api)（1.20.1 对应版本）放进 `.minecraft/mods/`；
+3. 下载本模组的 jar（从 [Releases](../../releases) 页）放进 `.minecraft/mods/`；
+4. 可选：装 [Mod Menu](https://modrinth.com/mod/modmenu)，就能在「模组列表 → 配置」里直接打开面板。
+
+需要 Java 17 或更高。
+
+## 快速上手
+
+| 按键 | 作用 |
+|---|---|
+| `G` | 打开/关闭控制面板 |
+| `` ` ``（反引号） | 一键开关「自动收割」 |
+| （默认未绑定） | 打开统计面板，可在「选项 → 按键控制」里自己设一个 |
+
+打开面板 → 「收割」页把总开关打开 → 角色就会自己扫描周围的成熟作物、规划路线、走过去收割补种。
 
 ## 功能
 
@@ -36,8 +70,8 @@ Minecraft Java 版 **1.20.1** 的 Fabric **客户端**模组：自动收割 + �
 
 ## 版本
 
-当前版本 **2.3.1**。版本规范与完整变更记录见 [CHANGELOG.md](CHANGELOG.md)；
-各版本构建产物归档在 `versions/<版本号>/`。
+当前版本 **2.3.2**。版本规范与完整变更记录见 [CHANGELOG.md](CHANGELOG.md)；
+各版本构建产物归档在 `versions/<版本号>/`，发布版本见 [Releases](../../releases)。
 
 ## 构建
 
@@ -47,8 +81,58 @@ Minecraft Java 版 **1.20.1** 的 Fabric **客户端**模组：自动收割 + �
 ./gradlew build
 ```
 
-产物在 `build/libs/autofarm-<版本号>.jar`。
+产物在 `build/libs/playerautofarming-<版本号>.jar`。
+
+> Windows + Git Bash：Gradle 有时拿不到 `JAVA_HOME`，可以先
+> `export JAVA_HOME="C:/Program Files/Java/jdk-17"` 再构建。
+
+## 反馈与贡献
+
+- 遇到问题请开 [Issue](../../issues)，附上：游戏版本、Fabric Loader / Fabric API 版本、
+  装了哪些模组、复现步骤，以及 `logs/latest.log`（或崩溃报告）。
+- 欢迎 Pull Request。动大的改动前建议先开个 Issue 说一声，免得白做。
+
+## 关于本项目 / How it was made
+
+**创意、需求与设计来自 [CoCoNutChick](https://github.com/YOUR_NAME)：** 做什么功能、
+每个开关的取舍、什么时候该拦一道风险提示、界面长什么样，全部由作者提出并逐项拍板；
+每一版都进游戏实测，发现问题再回头改。
+
+**代码实现由 AI 辅助完成：** 具体的技术方案、代码编写、调试与文档，
+是在「作者提需求 → AI 实现 → 作者实测反馈 → AI 修正」的循环里推进的。
+换句话说，**这是作者的想法 + AI 的手**。
+
+> This project is the author's idea: the concept, feature set and every design decision came from
+> CoCoNutChick, who also play-tested each build. The code itself was written with AI assistance,
+> iterating through "author requests → AI implements → author tests → AI fixes".
 
 ## 许可
 
-见 [LICENSE](LICENSE)。
+本项目以 **CC0-1.0** 发布（见 [LICENSE](LICENSE)）：可以自由使用、修改、再发布，无需署名。
+「Minecraft」是 Mojang Studios 的商标，本项目与 Mojang / Microsoft 无隶属关系。
+
+---
+
+## English
+
+**PlayerAutoFarming** is a client-side Fabric mod for **Minecraft Java 1.20.1** that harvests
+fully-grown crops and replants them for you, with a visual control panel and A\* route planning.
+Everything runs on the client — no server-side installation is required.
+
+Install [Fabric Loader](https://fabricmc.net/use/installer/) and
+[Fabric API](https://modrinth.com/mod/fabric-api) for 1.20.1, then drop the jar from the
+[Releases](../../releases) page into `.minecraft/mods/`. [Mod Menu](https://modrinth.com/mod/modmenu)
+is optional but adds a config button in the mod list. Java 17+ required.
+
+Press `G` for the panel and `` ` `` to toggle harvesting.
+
+> **Use responsibly.** This is a client-side automation mod. Some optional features are
+> anti-cheat evasion (mob-killing aura, "anti-kick", instant aiming mode) and are **against the
+> rules of many servers**. Check your server's rules before using it, and note that you are
+> responsible for any consequences.
+
+Licensed under CC0-1.0. "Minecraft" is a trademark of Mojang Studios; this project is not
+affiliated with or endorsed by Mojang or Microsoft.
+
+See [How it was made](#关于本项目--how-it-was-made) above: the idea and all design decisions are
+the author's; the code was written with AI assistance.

@@ -6,6 +6,30 @@ AutoFarm 采用语义化版本：`主版本.次版本.修订号`。
 
 ---
 
+## 2.3.2
+
+**主题：改名为 PlayerAutoFarming + 开源发布准备**
+
+### 改名
+
+- 项目展示名 `AutoFarm` → **PlayerAutoFarming**：
+  `settings.gradle` 的 `rootProject.name`（jar 文件名因此变成 `playerautofarming-<版本>.jar`）、
+  `fabric.mod.json` 的 `name`、中英文语言文件里的面板标题 / HUD / 提示文案。
+- **技术 id 保持 `autofarm` 不变**（配置目录 `config/autofarm.json`、语言键前缀、
+  mixin 配置名、按键绑定分类）—— 改 id 会让老玩家的配置和按键设置全部失效，收益也不大。
+
+### 开源准备
+
+- `README.md` 重写：徽章、**使用前必读**（客户端模组 / 作弊级功能的免责说明）、安装步骤、
+  快速上手按键表、构建说明、反馈与贡献、许可，并加了英文段落。
+- 新增 [`PUBLISHING.md`](PUBLISHING.md)：从注册 GitHub 账号到发第一版 Release 的完整流程，
+  含认证方式（Token / SSH）、常见报错对照表。
+- 新增 `.github/ISSUE_TEMPLATE/bug_report.yml`：报 bug 时强制填版本 / 环境 / 日志，
+  省掉来回问的功夫。
+- `.github/workflows/build.yml` 的 CI JDK 由 25 改为 21（与本地开发一致）。
+
+---
+
 ## 2.3.1
 
 **主题：细节调整 —— 「转向时间」填危险值必须确认（0 也不例外）**

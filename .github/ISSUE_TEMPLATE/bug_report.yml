@@ -1,0 +1,97 @@
+name: Bug report / 问题反馈
+description: 模组没按预期工作 / 报错 / 崩溃
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请尽量把下面每一项都填上 —— 特别是**崩溃日志**，
+        没有日志的话绝大部分问题没法定位。
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: 模组版本
+      description: 在文件名或控制面板标题里能看到，例如 2.3.2
+      placeholder: "2.3.2"
+    validations:
+      required: true
+
+  - type: input
+    id: mc-version
+    attributes:
+      label: 游戏版本
+      placeholder: "1.20.1"
+    validations:
+      required: true
+
+  - type: input
+    id: deps
+    attributes:
+      label: Fabric Loader / Fabric API 版本
+      placeholder: "Loader 0.19.5 / Fabric API 0.92.12+1.20.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: env
+    attributes:
+      label: 在什么环境里出问题
+      options:
+        - 单人存档
+        - 自己开的服务器（局域网 / 自建）
+        - 别人的服务器
+        - 开发环境（./gradlew runClient）
+    validations:
+      required: true
+
+  - type: textarea
+    id: mods
+    attributes:
+      label: 装的其他模组
+      description: 只列和问题相关的也行；装了 OptiFine / OptiFabric / 其他自动化模组请务必写明
+      placeholder: |
+        - Fabric API 0.92.12
+        - Mod Menu 7.2.2
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 你期望它怎么做、实际它做了什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 越具体越好，能照着复现的话修起来快很多
+      placeholder: |
+        1. 打开总开关
+        2. 开启「骨粉催熟」并把骨粉放到背包深处
+        3. 角色走到第一株幼苗前就不动了
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: |
+        `logs/latest.log`，或者是崩溃时的 `crash-reports/` 文件。可以直接拖进来。
+        模组自己还会把异常写进 `config/autofarm.log`，那个也很有用。
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我确认当前使用的不是旧版本（已到 Releases 页看过最新版本号）
+          required: true
