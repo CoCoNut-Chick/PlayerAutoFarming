@@ -2,12 +2,10 @@
   "category.autofarm": "自动农场",
   "key.autofarm.open_panel": "打开控制面板",
   "key.autofarm.toggle_enabled": "一键开关自动收割",
-
   "autofarm.title": "AutoFarm 控制面板",
   "autofarm.toggle": "%s：%s",
   "autofarm.on": "开",
   "autofarm.off": "关",
-
   "autofarm.section.status": "运行状态",
   "autofarm.status.current": "当前状态：%s",
   "autofarm.status.mature": "附近成熟作物：%s",
@@ -17,7 +15,6 @@
   "autofarm.status.harvest.done_noreplant": "收割：上一棵已收下（未补种）",
   "autofarm.status.picked": "收割：上一丛已摘下（植株保留）",
   "autofarm.status.planted": "补种：上一格空地已种上",
-
   "autofarm.notice.mine_timeout": "收割：挖不动这棵，已跳过",
   "autofarm.notice.no_seed": "收割：种子用完了（背包里也没有），跳过补种",
   "autofarm.notice.seed_from_backpack": "收割：种子已从背包换到快捷栏",
@@ -28,7 +25,6 @@
   "autofarm.notice.out_of_seeds": "种子用完了，收完这趟就去补给点取",
   "autofarm.notice.paused_low_health": "安全：血量过低，已停机（回血后自动继续）",
   "autofarm.notice.paused_mobs_near": "安全：附近有敌对生物，已停机",
-
   "autofarm.supply.free_slots": "背包空格：%s",
   "autofarm.notice.inventory_full_no_supply": "背包满了，又没有可用的存储方块：已停止收割",
   "autofarm.notice.supply_unreachable": "补给：这一趟到不了补给点",
@@ -40,7 +36,6 @@
   "autofarm.notice.supply_refilled": "补给：种子已取回",
   "autofarm.notice.supply_no_seed": "补给：箱子里没有要的种子",
   "autofarm.notice.supply_deposited": "补给：收获物已存好",
-
   "autofarm.section.harvest": "收割设置",
   "autofarm.option.enabled": "自动收割",
   "autofarm.enabled.tip": "游戏里可以随时用快捷键（默认 ` 键）开/关，不用回面板。关掉再打开会清空「已经去过」的记忆，于是那些还没被挖掉的成熟作物会被重新认一遍 —— 卡住的时候按两下就是重来。",
@@ -52,7 +47,6 @@
   "autofarm.refill.tip": "补种时快捷栏里没有种子，就先走完手上这条路线，再去补给点取一趟。取的是「放下去会变成作物」的物品（也就是种子）；如果知道缺的是哪种作物，就只取那一种。",
   "autofarm.option.deposit": "背包满时回补给点存放",
   "autofarm.deposit.tip": "背包快满（空格 ≤ 1）时放下手上的路线，先去补给点存东西。具体哪一类存、哪一类留、留几组，由「存放策略」那张表逐类决定（默认：补种种子 / 食物 / 方块 / 工具一栈不留，胡萝卜、土豆、甘蔗这类「收获物即种子」的留 1 组，小麦这类纯收获物全存）。背包满了又没设补给点（或那一格不是存储方块）时会自动停下来，不再收割。",
-
   "autofarm.section.path": "路径规划",
   "autofarm.option.optimize": "优化访问顺序",
   "autofarm.optimize.tip": "先按「每次走向最近的一个」排出一条初始路线，再用 2-opt 反复翻转其中的路段把它缩短。关掉就只用贪心版，路线会明显绕。",
@@ -73,7 +67,6 @@
   "autofarm.path.hotbar": "快捷栏可用方块：%s",
   "autofarm.status.route": "路线：剩余 %s 个目标，约 %s 格",
   "autofarm.status.route.none": "路线：未规划",
-
   "autofarm.section.display": "可视化",
   "autofarm.option.visualize": "高亮成熟作物",
   "autofarm.option.through_walls": "穿透显示（隔墙可见）",
@@ -83,7 +76,6 @@
   "autofarm.freecam_pause.tip": "开着「灵魂出窍 / 自由视角」时先停手，只保留描边和路线。屏幕上人一动不动、方块却自己在碎会显得很怪。描边和路线本来就是按摄像机算的，所以不打开这个开关，也可以一边飞在天上一遍看它干活。",
   "autofarm.section.display.hint": "点右侧小方块自定义",
   "autofarm.highlight.customize": "自定义描边：颜色 / 粗细 / 不透明度",
-
   "autofarm.highlight.title": "描边样式",
   "autofarm.highlight.section.preview": "预览",
   "autofarm.highlight.preview.hint": "在游戏里大致长这样",
@@ -98,21 +90,17 @@
   "autofarm.highlight.alpha": "不透明度",
   "autofarm.highlight.reset": "恢复默认",
   "autofarm.highlight.done": "完成",
-
   "autofarm.section.supply": "补给点 / 储存",
   "autofarm.supply.record": "记录当前位置",
   "autofarm.supply.clear": "清除",
   "autofarm.supply.none": "未设置补给点",
   "autofarm.supply.found": "已识别存储方块：%s",
   "autofarm.supply.not_container": "这一格不是存储方块（箱子 / 木桶 / 其他存储模组都行）",
-
   "autofarm.option.default_seed": "默认种子槽位",
   "autofarm.value.slot": "第 %s 格",
   "autofarm.default_seed.tip": "指定快捷栏里的哪一格专门放种子（点一下换一格，1~9 循环）。两个用处：补种时优先用这一格；从箱子里取种子回来而背包一个空格都没有时，会把那一组种子直接换到这一格（格子里原来那件东西塞回箱子），保证种子总有地方放。",
-
   "autofarm.option.storage_policy": "存放策略…",
   "autofarm.storage.tip": "存放东西时，哪一类该全留、哪一类该全存、哪一类留几组 —— 在这里逐类设置。默认：补种种子 / 食物 / 方块 / 工具不留存，胡萝卜土豆这类「收下来就是种子」的留 1 组，甜菜根这类「收获食物」（能吃、但收下来种不回去）和小麦这类纯收获物全存。",
-
   "autofarm.storage.title": "存放策略",
   "autofarm.storage.section.hint": "说明",
   "autofarm.storage.col.category": "类别",
@@ -127,59 +115,46 @@
   "autofarm.storage.current": "当前背包：%s",
   "autofarm.storage.current.none": "当前背包：这一类暂时没有",
   "autofarm.storage.examples": "原版例子：%s",
-
   "autofarm.category.seed": "补种种子",
   "autofarm.category.seed.tip": "放下去会专门长成作物、本身不能吃的东西（真正的种子）。默认不存储 —— 补种缺了它就得跑一趟补给点。",
   "autofarm.category.seed.examples": "小麦种子、甜菜种子、南瓜种子、西瓜种子、地狱疣",
-
   "autofarm.category.self_seed": "收获物即种子",
   "autofarm.category.self_seed.tip": "收获物本身就是补种材料：既能种又能吃，或者种下去长出来的就是它自己。默认留 1 组备用、其余存掉 —— 全存了下次没种子，全留了背包会被它们塞满。",
   "autofarm.category.self_seed.examples": "胡萝卜、土豆、甘蔗、竹子、仙人掌",
-
   "autofarm.category.food": "食物（不能种）",
   "autofarm.category.food.tip": "能吃、种不下去，也看不出是哪种作物收下来的东西。默认不存储 —— 饿到跑不动时要靠它。",
   "autofarm.category.food.examples": "面包、熟牛排、烤马铃薯、金苹果",
-
   "autofarm.category.harvest_food": "收获食物（不能补种）",
   "autofarm.category.harvest_food.tip": "某种作物收下来、但种不回去的食物：种下去的是「种子」，收上来的是另一样东西，两者不是同一个物品。甜菜根就是典型（种子是甜菜种子、收上来是甜菜根）。默认完全存储 —— 它只能吃，留着占格子。",
   "autofarm.category.harvest_food.examples": "甜菜根（它的种子叫甜菜种子）",
-
   "autofarm.category.block": "方块（不能种）",
   "autofarm.category.block.tip": "放下去会变成方块、但那个方块不是作物的东西。默认不存储 —— 可能被拿去垫脚铺路。",
   "autofarm.category.block.examples": "石头、泥土、木板（放下去不长东西的方块）",
-
   "autofarm.category.tool": "工具 / 武器",
   "autofarm.category.tool.tip": "有耐久的物品。默认不存储。",
   "autofarm.category.tool.examples": "镐、斧、锹、锄、剑、弓",
-
   "autofarm.category.produce": "纯收获物",
   "autofarm.category.produce.tip": "既不能吃、也不是方块、又没有耐久的收获物。默认完全存储 —— 留在身上只会占格子。",
   "autofarm.category.produce.examples": "小麦、糖，多数模组作物里不能吃也不是方块的果实",
-
   "autofarm.section.safety": "安全与提示",
   "autofarm.section.safety.hint": "先保命，再收菜",
-
   "autofarm.option.show_hud": "游戏内状态显示",
   "autofarm.show_hud.tip": "在屏幕左上角常驻一块小状态：现在在干什么、这一轮收了多少、手边还有多少能补种的东西，有异常（背包满、缺种子、安全停机）时把原因也顶上来。以前这些只有打开面板才看得到，而收割的时候你最不想做的就是开界面。",
   "autofarm.hud.title": "AutoFarm · %s",
   "autofarm.hud.off": "AutoFarm · 已关闭（按 ` 开启）",
   "autofarm.hud.stats": "已收 %s · 种子 %s",
-
   "autofarm.option.low_health": "低血量时停机",
   "autofarm.low_health.tip": "血量掉到这个值以下就立刻停手，站着等你处理，回血上来了自动继续 —— 不用重新开开关。默认 4 心（半血）。收割的时候人一直低着头，被偷袭、掉坑都反应不过来，所以留一道保险。点一下换一档：关闭 → 3 心 → 4 心 → 5 心 → 6 心。",
   "autofarm.value.off": "关闭",
   "autofarm.value.hearts": "%s 心",
-
   "autofarm.option.mobs_near": "敌对生物靠近时停机",
   "autofarm.mobs_near.tip": "8 格以内出现敌对生物（僵尸、骷髅、苦力怕、蜘蛛这类）就停手。它只负责「停下来」，不会帮你反击或者逃跑 —— 保证的是不会一边挨打一边傻站着收菜。",
-
   "autofarm.section.crop": "作物与筛选",
   "autofarm.crop.summary": "筛选：%s · 空地补种：%s（附近 %s 格）",
   "autofarm.option.fill_empty": "补种空耕地",
   "autofarm.fill_empty.tip": "除了刚收掉的那一格，把附近「上面空着、下面是耕地」的格子也种上。种什么由「作物筛选」里那一项决定（默认挑手边数量最多的种子）。它会消耗种子，所以默认关闭。",
   "autofarm.option.crop_filter": "作物筛选…",
   "autofarm.crop.tip": "挑哪些作物要收、哪些不收，以及空地补种哪一种作物。默认全收、不过滤。",
-
   "autofarm.crop.title": "作物筛选",
   "autofarm.crop.section.mode": "筛选模式",
   "autofarm.crop.section.list": "作物列表",
@@ -210,16 +185,13 @@
   "autofarm.crop.plant.tip": "往空耕地上种哪一种作物。点一下换一种，循环顺序是「自动 → 小麦 → 胡萝卜 → …」。候选只列你手边真有种子的那几种，所以不会指定到一个根本种不了的东西。",
   "autofarm.crop.plant.hint.1": "往空着的耕地种什么：优先用上面指定的作物，",
   "autofarm.crop.plant.hint.2": "没指定就用你手边数量最多的那种种子。",
-
   "autofarm.button.save": "保存并关闭",
   "autofarm.button.cancel": "取消",
-
   "autofarm.message.saved": "AutoFarm 设置已保存",
   "autofarm.message.toggled": "自动收割：%s",
-
   "autofarm.section.extras": "附加功能",
   "autofarm.option.extras": "附加功能…",
-  "autofarm.extras.tip": "默认全部关闭的增强项：安全与隐蔽、防踢模式、行为真实感、工作范围、环境与作息、工具维护、容错统计、掉落物拾取，以及分开放置的高风险战斗项。不打开就不改变原有行为。",
+  "autofarm.extras.tip": "默认全部关闭的增强项：安全与隐蔽、防踢模式、行为真实感、工作范围、环境与作息、生存自保、工具维护、容错统计、掉落物拾取，以及分开放置的高风险战斗项。不打开就不改变原有行为。",
   "autofarm.extras.summary": "已启用 %s 项（默认全关）",
   "autofarm.extras.title": "附加功能",
   "autofarm.extras.section.combat": "战斗（高风险）",
@@ -237,7 +209,6 @@
   "autofarm.extras.section.pickup": "掉落物",
   "autofarm.extras.note": "除「战斗（高风险）」之外，这里的功能只影响节奏与顺手程度，不会绕开任何游戏规则。战斗项会替玩家出手攻击生物，属于高风险功能、默认关闭，开启前需要确认。",
   "autofarm.extras.reset": "全部关闭",
-
   "autofarm.danger.title": "高风险功能确认",
   "autofarm.danger.subtitle": "我们不推荐开启「自动打怪」",
   "autofarm.danger.body1": "「自动打怪」等价于常见的「杀戮光环（Kill Aura）」，属于作弊级功能。在多人服务器上使用，可能被反作弊系统记录、被其他玩家举报，进而导致被踢出、封禁或数据回滚 —— 后果由你自行承担。",
@@ -251,7 +222,6 @@
   "autofarm.danger.violence.subtitle": "即将提高暴力程度",
   "autofarm.danger.violence.body1": "暴力程度越高越不像人：中度会让出手间隔减半，保命档更是每个游戏刻都出手一次。这些特征在服务端日志里非常扎眼，被记录、举报、封禁的概率显著上升。",
   "autofarm.danger.violence.body2": "保命档确实能最大程度避免角色被怪打死，但它换来的正是最高的风险。请自行权衡。降低档位不需要确认。",
-
   "autofarm.option.antikick": "防踢模式",
   "autofarm.antikick.tip": "一整套「让操作更像真人」的措施：转向不再是匀速的、视角不再精确压在方块正中心、脚步偶尔悬一下、疾跑有间歇、动手前会犹豫、干久了会「累」。不绕过任何游戏规则，只是把机器味抹掉。",
   "autofarm.option.antikick_level": "防踢强度",
@@ -286,7 +256,6 @@
   "autofarm.pickup_drops.tip": "把散落在田里的作物掉落物专门捡回来：收割后掉在地上、过了判定延迟还没进背包的，会排在路线最前面走过去捡。",
   "autofarm.option.pickup_delay": "拾取判定延迟",
   "autofarm.pickup_delay.tip": "掉落物在地上待够这么久还没被捡走，才当成「漏捡」专门跑一趟。只在上一项开启时生效。",
-
   "autofarm.option.auto_attack": "自动打怪",
   "autofarm.auto_attack.tip": "高风险：附近生物进入攻击距离时自动出手。必须先打开主面板的「自动收割」总开关才能开启 —— 它不能单独使用，否则就只是纯粹的作弊。默认走「非暴力」路线（出手前先转头瞄准、两次出手之间有随机间隔），并且需要在弹窗里确认过风险才会真正打开。在多人服务器上使用可能被反作弊记录或封禁，请自行判断。",
   "autofarm.option.attack_interval": "攻击间隔",
@@ -305,7 +274,6 @@
   "autofarm.attack_violence.level.light": "轻度",
   "autofarm.attack_violence.level.medium": "中度",
   "autofarm.attack_violence.level.lifesaver": "保命",
-
   "autofarm.option.reaction_delay": "危险反应延迟",
   "autofarm.reaction_delay.tip": "遇到危险（血量过低、附近有敌对生物 / 玩家）时不再在同一 tick 瞬间停手，而是先愣一下再停 —— 真人从看见危险到松手总要几百毫秒，反应比机器还快本身就是破绽。代价是这几百毫秒里人还在照常干活。",
   "autofarm.option.reaction_time": "反应时间",
@@ -318,7 +286,6 @@
   "autofarm.schedule_start.tip": "每天从这个整点开始工作。点一下换一小时（0~23 循环）。",
   "autofarm.option.schedule_end": "结束时间",
   "autofarm.schedule_end.tip": "每天到这个整点停止工作（这一小时不算）。和开始时间相同时表示全天工作。点一下换一小时。",
-
   "autofarm.option.work_area": "圈定工作区域",
   "autofarm.work_area.tip": "只在自己划定的范围里收割 —— 既防跑丢，也防误踩别人的田。区域外的作物不去收、掉落物不去捡；人自己走出区域时会先停手，再走回区域中心。坐标没记全时本项不生效。",
   "autofarm.option.work_area_mode": "范围方式",
@@ -335,7 +302,6 @@
   "autofarm.work_area.corner_b.tip": "走到斜对角的那个角再点它，记下角点 B —— 两点之间的长方体就是工作区域。",
   "autofarm.work_area.none": "未设置",
   "autofarm.work_area.hint": "区域外的目标不去收；人走出区域会自动返回",
-
   "autofarm.option.daylight": "仅在白天工作",
   "autofarm.daylight.tip": "只在白天收割，日落即停、天亮自动继续。用的是世界时间，不是本机时间。避开夜里怪物多、而且「每天凌晨都在线劳作」这条显眼特征。",
   "autofarm.option.clear_weather": "仅在晴天工作",
@@ -347,14 +313,12 @@
   "autofarm.option.fatigue_rest": "收工后休息",
   "autofarm.fatigue_rest.tip": "收工后歇多久自动上工（分钟）。选「手动恢复」就是一直停着，等你把这一项（或总开关）关掉再打开。",
   "autofarm.fatigue_rest.manual": "手动恢复",
-
   "autofarm.value.blocks": "%s 格",
   "autofarm.value.minutes": "%s 分钟",
   "autofarm.value.seconds": "%s 秒",
   "autofarm.value.percent": "%s%%",
   "autofarm.value.hour": "%s:00",
   "autofarm.value.millis": "%s 毫秒",
-
   "autofarm.notice.paused_player_near": "安全：附近有其他玩家，已停机",
   "autofarm.notice.paused_resting": "附加功能：定时休息中",
   "autofarm.notice.paused_schedule": "附加功能：不在工作时段，已暂停",
@@ -363,7 +327,6 @@
   "autofarm.notice.paused_fatigue": "附加功能：连续工作已达上限，收工休息",
   "autofarm.notice.out_of_area": "附加功能：已走出工作区域，正在返回",
   "autofarm.hud.verbose": "运行 %s · 补种 %s",
-
   "autofarm.state.idle": "空闲",
   "autofarm.state.scanning": "扫描中",
   "autofarm.state.moving": "移动中",
@@ -374,5 +337,32 @@
   "autofarm.state.replanting": "补种中",
   "autofarm.state.supply": "前往补给点",
   "autofarm.state.transfer": "存取物品中",
-  "autofarm.state.paused": "已暂停"
+  "autofarm.state.paused": "已暂停",
+  "autofarm.extras.section.survival": "生存自保",
+  "autofarm.option.retreat": "危险撤退",
+  "autofarm.retreat.tip": "血量偏低、附近又有敌对生物时，主动撤到安全距离再等回血 —— 而不是原地站着挨打。只认怪物、不针对玩家；撤退只尝试一次，走不通就退回原地停机。",
+  "autofarm.option.retreat_health": "撤退血量",
+  "autofarm.retreat_health.tip": "掉到几心以下就撤。建议留在「低血量时停机」的门槛之上，这样能先撤、实在不行才停。",
+  "autofarm.option.retreat_distance": "撤退距离",
+  "autofarm.retreat_distance.tip": "朝远离那只怪的方向走多少格。太短还在攻击范围里，太长可能跑到自己的田外面。",
+  "autofarm.option.hit_reaction": "受击反制",
+  "autofarm.hit_reaction.tip": "挨打的那一 tick 立刻停手，并把视角限速转向攻击者几秒 —— 真人被捅一刀总会停下来回头看。开着「自动打怪」时会顺带把那只怪列为优先反击目标。",
+  "autofarm.option.hit_reaction_time": "反制时长",
+  "autofarm.hit_reaction_time.tip": "受击之后「停手 + 回头」持续多久。",
+  "autofarm.option.self_rescue": "环境自救",
+  "autofarm.self_rescue.tip": "把角色从环境危险里捞出来：水下憋气时自动上浮换气；身上着火、附近又有水时朝最近的水跑去。排在所有收割动作之前。",
+  "autofarm.option.auto_reconnect": "掉线重连",
+  "autofarm.auto_reconnect.tip": "在多人服务器上意外掉线时，等一会儿自动重连。自己点「保存并退出」回标题页不会被拉回来；单人存档也不重连。",
+  "autofarm.option.reconnect_delay": "重连延迟",
+  "autofarm.reconnect_delay.tip": "掉线后等几秒再重连。",
+  "autofarm.option.reconnect_attempts": "重试次数",
+  "autofarm.reconnect_attempts.tip": "最多自动重连几次。「不限次数」就是一直试下去。",
+  "autofarm.reconnect_attempts.unlimited": "不限次数",
+  "autofarm.value.count": "%s 次",
+  "autofarm.state.retreating": "撤退中",
+  "autofarm.state.hit_react": "受击反应",
+  "autofarm.state.rescuing": "环境自救",
+  "autofarm.notice.retreating": "危险撤退：血量过低，正在远离威胁",
+  "autofarm.notice.rescue_drowning": "环境自救：水下缺氧，正在上浮",
+  "autofarm.notice.rescue_fire": "环境自救：着火了，正在跑向水源"
 }

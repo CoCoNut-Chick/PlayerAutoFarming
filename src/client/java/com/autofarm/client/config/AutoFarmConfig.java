@@ -603,6 +603,85 @@ public class AutoFarmConfig {
      */
     public int fatigueRestMinutes = 15;
 
+    // ---- 生存自保（C 组：危险撤退 / 受击反制 / 环境自救 / 掉线重连） ----
+    //
+    // 前面那一大组管的是「像不像人」，这一组管的是更硬的四个字：别把号玩没了。
+    // 它们同样默认全关 —— 不打开就等于不存在。
+
+    /**
+     * 危险撤退：血量偏低、附近又有威胁时，主动撤到安全距离（默认关闭）。
+     *
+     * <p>它和主面板的「低血量时停机」是一对：那个是<b>原地站着不动</b>等回血，
+     * 这个更进一步 —— 血掉到 {@link #retreatHealthHearts} 心以下、而且附近
+     * 有敌对生物时，模组会朝着<b>远离那只怪</b>的方向走开 {@link #retreatDistance} 格，
+     * 先脱离接触再等回血。
+     *
+     * <p>撤退<b>只尝试一次</b>：这条路走不通就退回「原地停机」——不会为了逃命
+     * 满世界乱跑。血量恢复到家以后自动继续干活，不用重新开开关。
+     *
+     * <p>只认敌对生物，<b>不针对玩家</b>：被别的玩家追着打属于 PVP，
+     * 模组不介入，那边请自己按着 Shift 跑。
+     */
+    public boolean retreatEnabled = false;
+
+    /** 撤退的血量门槛（心）。掉到它以下就撤；建议留在「低血量停机」门槛之上 */
+    public int retreatHealthHearts = 6;
+
+    /** 撤退时朝反方向走多远（格） */
+    public int retreatDistance = 16;
+
+    /** 撤退血量门槛的合法区间（心） */
+    public static final int RETREAT_HEARTS_MIN = 3;
+    public static final int RETREAT_HEARTS_MAX = 10;
+
+    /**
+     * 受击反制：挨打的那一下做出反应（默认关闭）。
+     *
+     * <p>模组的角色挨打时本来是<b>毫无反应</b>的 —— 继续低着头收菜。这在真人身上
+     * 说不过去：被捅一刀，人总会停手、回头看是谁。打开这个开关，受伤的那一 tick
+     * 模组会<b>立刻停下手上的活</b>，并把视角限速转向攻击者，持续
+     * {@link #hitReactionSeconds} 秒。
+     *
+     * <p>如果同时还开着<b>自动打怪</b>，这个被锁定的攻击者会被优先交给战斗逻辑反击；
+     * 没开自动打怪时，它就只是「停手 + 回头看一眼」——依旧不主动出手打任何人。
+     */
+    public boolean hitReactionEnabled = false;
+
+    /** 受击反制持续多久（秒） */
+    public int hitReactionSeconds = 2;
+
+    /**
+     * 环境自救：把角色从「环境危险」里捞出来（默认关闭）。
+     *
+     * <p>两类场景：
+     * <ul>
+     *   <li><b>溺水</b> —— 水下的氧气见底时自动上浮，别让角色在水里憋到掉血；</li>
+     *   <li><b>着火</b> —— 身上着火、附近又正好有水时，朝最近的水跑过去。</li>
+     * </ul>
+     * 都走原版那套移动输入，不改任何游戏规则。着火时附近没有水就只能作罢
+     * （那属于没法自救的情况）。它和「危险撤退」一样排在所有收割动作之前 ——
+     * 人都在水里了，收菜的事先放一放。
+     */
+    public boolean selfRescueEnabled = false;
+
+    /**
+     * 掉线重连：意外断开时自动回到上一个多人服务器（默认关闭）。
+     *
+     * <p>它只处理<b>多人服务器</b>：进服务器之后记下地址，一旦连接被意外切断
+     * （超时、服务器重启、被踢），等 {@link #reconnectDelaySeconds} 秒后自动重连，
+     * 最多重试 {@link #reconnectMaxAttempts} 次（0 = 不限次数）。
+     *
+     * <p>你自己点「保存并退出」回到标题页<b>不会</b>被拉回来 —— 那是有意为之。
+     * 单人存档也不重连。
+     */
+    public boolean autoReconnectEnabled = false;
+
+    /** 掉线后等多少秒再重连 */
+    public int reconnectDelaySeconds = 10;
+
+    /** 最多重连几次；<b>0 = 不限</b> */
+    public int reconnectMaxAttempts = 3;
+
     // ---- 战斗（高风险，默认关闭） ----
     //
     // 上面所有附加功能都在「不改变游戏规则」的框架里；这一组是唯一破例的：
@@ -731,6 +810,10 @@ public class AutoFarmConfig {
         if (workDaylightOnly) n++;
         if (workClearWeatherOnly) n++;
         if (fatigueStop) n++;
+        if (retreatEnabled) n++;
+        if (hitReactionEnabled) n++;
+        if (selfRescueEnabled) n++;
+        if (autoReconnectEnabled) n++;
         if (autoAttack) n++;
         return n;
     }
@@ -804,6 +887,15 @@ public class AutoFarmConfig {
         c.fatigueStop = this.fatigueStop;
         c.fatigueWorkMinutes = this.fatigueWorkMinutes;
         c.fatigueRestMinutes = this.fatigueRestMinutes;
+        c.retreatEnabled = this.retreatEnabled;
+        c.retreatHealthHearts = this.retreatHealthHearts;
+        c.retreatDistance = this.retreatDistance;
+        c.hitReactionEnabled = this.hitReactionEnabled;
+        c.hitReactionSeconds = this.hitReactionSeconds;
+        c.selfRescueEnabled = this.selfRescueEnabled;
+        c.autoReconnectEnabled = this.autoReconnectEnabled;
+        c.reconnectDelaySeconds = this.reconnectDelaySeconds;
+        c.reconnectMaxAttempts = this.reconnectMaxAttempts;
         c.autoAttack = this.autoAttack;
         c.autoAttackViolent = this.autoAttackViolent;
         c.attackIntervalMs = this.attackIntervalMs;
@@ -927,6 +1019,18 @@ public class AutoFarmConfig {
         if (fatigueWorkMinutes > 480) fatigueWorkMinutes = 480;
         if (fatigueRestMinutes < 0) fatigueRestMinutes = 0;
         if (fatigueRestMinutes > 480) fatigueRestMinutes = 480;
+
+        // 生存自保（C 组）：数值都拉回合理区间
+        if (retreatHealthHearts < RETREAT_HEARTS_MIN) retreatHealthHearts = RETREAT_HEARTS_MIN;
+        if (retreatHealthHearts > RETREAT_HEARTS_MAX) retreatHealthHearts = RETREAT_HEARTS_MAX;
+        if (retreatDistance < 4) retreatDistance = 4;
+        if (retreatDistance > 64) retreatDistance = 64;
+        if (hitReactionSeconds < 1) hitReactionSeconds = 1;
+        if (hitReactionSeconds > 10) hitReactionSeconds = 10;
+        if (reconnectDelaySeconds < 3) reconnectDelaySeconds = 3;
+        if (reconnectDelaySeconds > 60) reconnectDelaySeconds = 60;
+        if (reconnectMaxAttempts < 0) reconnectMaxAttempts = 0;
+        if (reconnectMaxAttempts > 50) reconnectMaxAttempts = 50;
 
         // 战斗：间隔 / 距离都拉回合法区间。注意下界放得很低（50ms）——
         // 「保命」档本来就要尽量快，所以这里只做「能不能填」的兜底，

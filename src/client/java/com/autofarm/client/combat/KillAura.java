@@ -140,6 +140,20 @@ public final class KillAura {
         cooldown = 0;
     }
 
+    /**
+     * 强制把某个生物设为当前目标（附加功能「受击反制」用）。
+     *
+     * <p>正常选目标是「挑最近的一只」，但挨打的时候，打你的那只才是第一优先 ——
+     * 哪怕它不是最近的。这里就是把目标钉到它身上，并把出手冷却压到最短，
+     * 让反击尽快打出去；下一 tick 起会照常去校验它是否仍可攻击。
+     */
+    public static void focus(LivingEntity target) {
+        if (target != null && target.isAlive()) {
+            locked = target;
+            cooldown = Math.min(cooldown, 1);
+        }
+    }
+
     /** 现在是不是锁着目标（给状态显示用） */
     public static boolean hasTarget() {
         return locked != null;

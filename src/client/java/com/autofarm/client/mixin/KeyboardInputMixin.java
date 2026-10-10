@@ -1,5 +1,6 @@
 package com.autofarm.client.mixin;
 
+import com.autofarm.client.human.RescueHelper;
 import com.autofarm.client.path.PathWalker;
 import net.minecraft.client.input.Input;
 import net.minecraft.client.input.KeyboardInput;
@@ -32,6 +33,10 @@ public class KeyboardInputMixin {
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void autofarm$applyWalkInput(boolean slowDown, float slowDownFactor, CallbackInfo ci) {
-        PathWalker.applyInputOverride((Input) (Object) this);
+        Input input = (Input) (Object) this;
+        // 寻路优先；它没在接管（手上没有路线）时才轮到环境自救。
+        // 触发自救时任务大脑会先把寻路停掉，所以两边不会同时抢输入。
+        PathWalker.applyInputOverride(input);
+        RescueHelper.applyInputOverride(input);
     }
 }

@@ -2,12 +2,10 @@
   "category.autofarm": "AutoFarm",
   "key.autofarm.open_panel": "Open Control Panel",
   "key.autofarm.toggle_enabled": "Toggle AutoFarm",
-
   "autofarm.title": "AutoFarm Control Panel",
   "autofarm.toggle": "%s: %s",
   "autofarm.on": "ON",
   "autofarm.off": "OFF",
-
   "autofarm.section.status": "Status",
   "autofarm.status.current": "State: %s",
   "autofarm.status.mature": "Mature crops nearby: %s",
@@ -17,7 +15,6 @@
   "autofarm.status.harvest.done_noreplant": "Harvest: last crop taken (not replanted)",
   "autofarm.status.picked": "Harvest: last bush picked (plant kept)",
   "autofarm.status.planted": "Plant: last empty farmland sown",
-
   "autofarm.notice.mine_timeout": "Harvest: can't break this one, skipped",
   "autofarm.notice.no_seed": "Harvest: out of seeds (none in the backpack either), replant skipped",
   "autofarm.notice.seed_from_backpack": "Harvest: moved seeds from backpack to hotbar",
@@ -28,7 +25,6 @@
   "autofarm.notice.out_of_seeds": "Out of seeds - heading to the supply point after this route",
   "autofarm.notice.paused_low_health": "Safety: health too low, paused (resumes when healed)",
   "autofarm.notice.paused_mobs_near": "Safety: hostile mobs nearby, paused",
-
   "autofarm.supply.free_slots": "Free slots: %s",
   "autofarm.notice.inventory_full_no_supply": "Inventory full with no usable storage block: harvesting stopped",
   "autofarm.notice.supply_unreachable": "Supply: can't get to the supply point",
@@ -40,7 +36,6 @@
   "autofarm.notice.supply_refilled": "Supply: seeds collected",
   "autofarm.notice.supply_no_seed": "Supply: no matching seeds in the container",
   "autofarm.notice.supply_deposited": "Supply: harvest stored away",
-
   "autofarm.section.harvest": "Harvest Settings",
   "autofarm.option.enabled": "Auto harvest",
   "autofarm.enabled.tip": "Toggle it any time in game with the keybind (default `), no need to open this panel. Turning it off and on again clears the memory of already-visited targets, so crops that are still standing get recognised again - press it twice when it gets stuck.",
@@ -52,7 +47,6 @@
   "autofarm.refill.tip": "When replanting finds no seeds in your hotbar, it finishes the current route first, then makes one trip to the supply point. It takes items that plant into a crop block (i.e. seeds); if it knows which crop was missing, it only takes that one.",
   "autofarm.option.deposit": "Deposit when inventory is full",
   "autofarm.deposit.tip": "When free slots drop to 1 or fewer, it drops the current route and goes to store things. Which category gets stored, kept, or partly kept is decided per category in the Storage policy table (by default: seeds / food / blocks / tools are never stored, self-seeding crops like carrot, potato and sugar cane keep 1 stack, and raw produce like wheat is stored entirely). If the inventory fills up with no supply point configured (or that block is not storage), it stops harvesting instead of dropping crops.",
-
   "autofarm.section.path": "Route Planning",
   "autofarm.option.optimize": "Optimize visit order",
   "autofarm.optimize.tip": "Builds an initial route by always heading to the nearest target, then repeatedly reverses segments with 2-opt to shorten it. Turn off to keep the plain greedy order, which wanders noticeably more.",
@@ -73,7 +67,6 @@
   "autofarm.path.hotbar": "Placeable in hotbar: %s",
   "autofarm.status.route": "Route: %s left, ~%s blocks",
   "autofarm.status.route.none": "Route: not planned",
-
   "autofarm.section.display": "Visualization",
   "autofarm.option.visualize": "Highlight mature crops",
   "autofarm.option.through_walls": "See through blocks",
@@ -83,7 +76,6 @@
   "autofarm.freecam_pause.tip": "While a free camera / disembodied view is active, the mod stops driving your character and only keeps drawing outlines and routes. Watching a player stand perfectly still while blocks break themselves looks odd, hence the option. Outlines and routes are computed from the camera anyway, so you can also just fly around and watch it work with this left off.",
   "autofarm.section.display.hint": "Click the swatch to customize",
   "autofarm.highlight.customize": "Customize outline: color / width / opacity",
-
   "autofarm.highlight.title": "Outline Style",
   "autofarm.highlight.section.preview": "Preview",
   "autofarm.highlight.preview.hint": "Roughly how it looks in game",
@@ -98,21 +90,17 @@
   "autofarm.highlight.alpha": "Opacity",
   "autofarm.highlight.reset": "Reset",
   "autofarm.highlight.done": "Done",
-
   "autofarm.section.supply": "Supply Point / Storage",
   "autofarm.supply.record": "Record current position",
   "autofarm.supply.clear": "Clear",
   "autofarm.supply.none": "No supply point set",
   "autofarm.supply.found": "Storage block found: %s",
   "autofarm.supply.not_container": "That block is not storage (chest / barrel / any storage mod works)",
-
   "autofarm.option.default_seed": "Default seed slot",
   "autofarm.value.slot": "Slot %s",
   "autofarm.default_seed.tip": "Picks which hotbar slot is reserved for seeds (click to cycle 1-9). Two uses: replanting prefers that slot, and when fetching seeds from the container with no free slot left in your inventory, that seed stack is swapped straight into it (whatever was there goes back into the container), so seeds always have somewhere to land.",
-
   "autofarm.option.storage_policy": "Storage policy...",
   "autofarm.storage.tip": "When storing things: which category is kept in full, which is stored in full, and which keeps a few stacks - all set per category here. Defaults: seeds / food / blocks / tools are never stored, self-seeding crops like carrots and potatoes keep 1 stack, and harvest food like beetroot plus raw produce like wheat is stored entirely.",
-
   "autofarm.storage.title": "Storage Policy",
   "autofarm.storage.section.hint": "Notes",
   "autofarm.storage.col.category": "Category",
@@ -127,59 +115,46 @@
   "autofarm.storage.current": "In inventory: %s",
   "autofarm.storage.current.none": "In inventory: nothing of this kind",
   "autofarm.storage.examples": "Vanilla examples: %s",
-
   "autofarm.category.seed": "Replanting seeds",
   "autofarm.category.seed.tip": "Items that grow into a crop but cannot be eaten (true seeds). Kept by default - running out means a trip to the supply point.",
   "autofarm.category.seed.examples": "wheat seeds, beetroot seeds, pumpkin seeds, melon seeds, nether wart",
-
   "autofarm.category.self_seed": "Harvest is the seed",
   "autofarm.category.self_seed.tip": "The harvest itself is what you replant: either edible as well, or it simply grows back into itself. Keeps 1 stack by default and stores the rest - storing all leaves nothing to plant, keeping all fills your inventory.",
   "autofarm.category.self_seed.examples": "carrot, potato, sugar cane, bamboo, cactus",
-
   "autofarm.category.food": "Food (not plantable)",
   "autofarm.category.food.tip": "Edible, cannot be planted, and not recognisable as the harvest of a crop. Kept by default - you need it when hunger stops you sprinting.",
   "autofarm.category.food.examples": "bread, steak, baked potato, golden apple",
-
   "autofarm.category.harvest_food": "Harvest food (not replantable)",
   "autofarm.category.harvest_food.tip": "Edible, and clearly the harvest of a crop, yet it cannot be replanted: what you plant is a seed item and what you harvest is a different item. Beetroot is the classic case (beetroot seeds go in, beetroot comes out). Stored entirely by default - it is just food and only wastes slots.",
   "autofarm.category.harvest_food.examples": "beetroot (its seed is beetroot seeds)",
-
   "autofarm.category.block": "Blocks (not plantable)",
   "autofarm.category.block.tip": "Places a block, but that block is not a crop. Kept by default - it may be used to bridge gaps.",
   "autofarm.category.block.examples": "stone, dirt, planks (blocks that grow nothing)",
-
   "autofarm.category.tool": "Tools / weapons",
   "autofarm.category.tool.tip": "Anything with durability. Kept by default.",
   "autofarm.category.tool.examples": "pickaxe, axe, shovel, hoe, sword, bow",
-
   "autofarm.category.produce": "Raw produce",
   "autofarm.category.produce.tip": "Harvest that is neither food, nor a block, nor a durability item. Stored entirely by default - carrying it only wastes slots.",
   "autofarm.category.produce.examples": "wheat, sugar, most modded crop fruit that is neither food nor a block",
-
   "autofarm.section.safety": "Safety & Feedback",
   "autofarm.section.safety.hint": "Stay alive first, harvest second",
-
   "autofarm.option.show_hud": "In-game status display",
   "autofarm.show_hud.tip": "Keeps a small status readout in the top-left corner: what it is doing right now, how much it has harvested this round, how many replantable items you still carry, plus the reason whenever something is wrong (inventory full, out of seeds, safety pause). All of that used to be visible only inside the panel - and opening a screen is the last thing you want to do while harvesting.",
   "autofarm.hud.title": "AutoFarm - %s",
   "autofarm.hud.off": "AutoFarm - off (press ` to start)",
   "autofarm.hud.stats": "Harvested %s - seeds %s",
-
   "autofarm.option.low_health": "Pause at low health",
   "autofarm.low_health.tip": "Stops immediately when health drops below the chosen value, waits for you, and resumes on its own once healed - no need to flip the switch again. Default 4 hearts (half health). While harvesting your character keeps looking down, so a sneak attack or a fall is easy to miss; this is the seatbelt. Click to cycle: off -> 3 -> 4 -> 5 -> 6 hearts.",
   "autofarm.value.off": "Off",
   "autofarm.value.hearts": "%s hearts",
-
   "autofarm.option.mobs_near": "Pause when mobs are near",
   "autofarm.mobs_near.tip": "Pauses when a hostile mob (zombie, skeleton, creeper, spider and the like) comes within 8 blocks. It only stops - it will not fight or run for you; the point is to never stand there harvesting while being hit.",
-
   "autofarm.section.crop": "Crops & Filtering",
   "autofarm.crop.summary": "Filter: %s - Plant empty farmland: %s (%s spots nearby)",
   "autofarm.option.fill_empty": "Plant empty farmland",
   "autofarm.fill_empty.tip": "Besides the cell it just harvested, it also sows nearby farmland that has nothing growing on it. What gets planted is decided by the Crop filter screen (by default the seed type you carry the most of). It consumes seeds, so it is off by default.",
   "autofarm.option.crop_filter": "Crop filter...",
   "autofarm.crop.tip": "Choose which crops to harvest and which to leave alone, plus what to sow on empty farmland. Defaults to harvesting everything.",
-
   "autofarm.crop.title": "Crop Filter",
   "autofarm.crop.section.mode": "Filter mode",
   "autofarm.crop.section.list": "Crops",
@@ -210,16 +185,13 @@
   "autofarm.crop.plant.tip": "Which crop gets sown on empty farmland. Click to cycle: auto -> wheat -> carrot -> ... The candidates are only the seed types you actually carry, so you can never pick something you cannot plant.",
   "autofarm.crop.plant.hint.1": "What goes on empty farmland: the crop chosen above,",
   "autofarm.crop.plant.hint.2": "or the seed type you carry most of when set to auto.",
-
   "autofarm.button.save": "Save & Close",
   "autofarm.button.cancel": "Cancel",
-
   "autofarm.message.saved": "AutoFarm settings saved",
   "autofarm.message.toggled": "AutoFarm: %s",
-
   "autofarm.section.extras": "Extras",
   "autofarm.option.extras": "Extras…",
-  "autofarm.extras.tip": "Optional enhancements, all off by default: safety & stealth, anti-kick, behavior realism, work area, environment & rest, tool upkeep, recovery & stats, dropped-item pickup, plus a separate high-risk combat group. Nothing changes unless you turn it on.",
+  "autofarm.extras.tip": "Optional enhancements, all off by default: safety & stealth, anti-kick, behavior realism, work area, environment & rest, survival, tool upkeep, recovery & stats, dropped-item pickup, plus a separate high-risk combat group. Nothing changes unless you turn it on.",
   "autofarm.extras.summary": "%s enabled (off by default)",
   "autofarm.extras.title": "Extras",
   "autofarm.extras.section.combat": "Combat (high risk)",
@@ -237,7 +209,6 @@
   "autofarm.extras.section.pickup": "Drops",
   "autofarm.extras.note": "Apart from \"Combat (high risk)\", everything here only affects pacing and convenience and never bypasses game rules. The combat entry makes the mod attack mobs for you: it is high risk, off by default, and asks for confirmation before it turns on.",
   "autofarm.extras.reset": "All Off",
-
   "autofarm.danger.title": "High-risk feature",
   "autofarm.danger.subtitle": "We do not recommend enabling Auto-attack",
   "autofarm.danger.body1": "\"Auto-attack\" is equivalent to the well-known \"Kill Aura\" and counts as cheating. Using it on multiplayer servers may be logged by anti-cheat, reported by other players, and lead to kicks, bans or rollbacks — the consequences are yours to bear.",
@@ -251,7 +222,6 @@
   "autofarm.danger.violence.subtitle": "About to raise the violence level",
   "autofarm.danger.violence.body1": "Higher violence looks less human: Medium halves the interval, and Lifesaver strikes once per game tick. Those patterns stand out badly in server logs and sharply raise the chance of being logged, reported or banned.",
   "autofarm.danger.violence.body2": "Lifesaver does the most to keep your character alive, but it buys that with the highest risk. Weigh it yourself. Lowering the level needs no confirmation.",
-
   "autofarm.option.antikick": "Anti-Kick mode",
   "autofarm.antikick.tip": "A whole set of \"act more human\" measures: turning is no longer uniform, aim no longer sits exactly on the block centre, footsteps occasionally falter, sprinting comes and goes, it hesitates before acting and \"tires\" over time. It never bypasses game rules, it just sands off the machine feel.",
   "autofarm.option.antikick_level": "Anti-Kick strength",
@@ -286,7 +256,6 @@
   "autofarm.pickup_drops.tip": "Sweep up crop drops left lying in the field: anything that has sat on the ground past the delay without being collected is walked to first.",
   "autofarm.option.pickup_delay": "Pickup delay",
   "autofarm.pickup_delay.tip": "How long a drop must stay uncollected before it counts as missed and gets a dedicated trip. Only used when the option above is on.",
-
   "autofarm.option.auto_attack": "Auto-attack",
   "autofarm.auto_attack.tip": "High risk: automatically attack nearby mobs once they come within reach. It can only be turned on after the main \"Auto-harvest\" master switch is on — it cannot be used on its own, which would just be plain cheating. The default \"non-violent\" route turns to aim before each strike and leaves random gaps between hits, and it only turns on after you confirm the risk in a popup. May be logged by anti-cheat or get you banned on multiplayer servers — use your own judgement.",
   "autofarm.option.attack_interval": "Attack interval",
@@ -305,7 +274,6 @@
   "autofarm.attack_violence.level.light": "Light",
   "autofarm.attack_violence.level.medium": "Medium",
   "autofarm.attack_violence.level.lifesaver": "Lifesaver",
-
   "autofarm.option.reaction_delay": "Delayed threat reaction",
   "autofarm.reaction_delay.tip": "Don't stop on the very same tick a threat appears (low health, hostile mobs or players nearby) — pause after a short beat instead. A human takes a few hundred milliseconds to react, and reacting faster than a machine is itself a tell. The cost is that the bot keeps working for that brief moment.",
   "autofarm.option.reaction_time": "Reaction time",
@@ -318,7 +286,6 @@
   "autofarm.schedule_start.tip": "Start working at this hour each day. Click to step one hour (0-23 cycles).",
   "autofarm.option.schedule_end": "End time",
   "autofarm.schedule_end.tip": "Stop working at this hour each day (that hour excluded). Same as the start time means all day. Click to step one hour.",
-
   "autofarm.option.work_area": "Work Area Limit",
   "autofarm.work_area.tip": "Only work inside an area you set yourself - no wandering off, no stepping on someone else's farm. Crops and drops outside are ignored; walk out yourself and it stops, then walks back to the area. Has no effect until the coordinates are set.",
   "autofarm.option.work_area_mode": "Area Shape",
@@ -335,7 +302,6 @@
   "autofarm.work_area.corner_b.tip": "Walk to the opposite corner and press to record corner B - the box between them is your work area.",
   "autofarm.work_area.none": "not set",
   "autofarm.work_area.hint": "Targets outside are ignored; leaving the area walks you back",
-
   "autofarm.option.daylight": "Daylight Only",
   "autofarm.daylight.tip": "Only work during the day: stops at dusk, resumes at dawn. Uses world time, not your local clock. Avoids both the mobs of the night and the giveaway of working at 3am every day.",
   "autofarm.option.clear_weather": "Clear Weather Only",
@@ -347,14 +313,12 @@
   "autofarm.option.fatigue_rest": "Break Time",
   "autofarm.fatigue_rest.tip": "How long (minutes) to rest before going back to work. Pick \"manual\" to stay off until you toggle this option (or the master switch) yourself.",
   "autofarm.fatigue_rest.manual": "Manual",
-
   "autofarm.value.blocks": "%s blocks",
   "autofarm.value.minutes": "%s min",
   "autofarm.value.seconds": "%s s",
   "autofarm.value.percent": "%s%%",
   "autofarm.value.hour": "%s:00",
   "autofarm.value.millis": "%s ms",
-
   "autofarm.notice.paused_player_near": "Safety: another player is nearby, paused",
   "autofarm.notice.paused_resting": "Extras: taking a scheduled break",
   "autofarm.notice.paused_schedule": "Extras: outside the work window, paused",
@@ -363,7 +327,6 @@
   "autofarm.notice.paused_fatigue": "Add-on: work limit reached, clocking off",
   "autofarm.notice.out_of_area": "Add-on: outside the work area, returning now",
   "autofarm.hud.verbose": "Run %s · Replanted %s",
-
   "autofarm.state.idle": "Idle",
   "autofarm.state.scanning": "Scanning",
   "autofarm.state.moving": "Moving",
@@ -374,5 +337,32 @@
   "autofarm.state.replanting": "Replanting",
   "autofarm.state.supply": "Heading to supply point",
   "autofarm.state.transfer": "Transferring items",
-  "autofarm.state.paused": "Paused"
+  "autofarm.state.paused": "Paused",
+  "autofarm.extras.section.survival": "Survival",
+  "autofarm.option.retreat": "Danger retreat",
+  "autofarm.retreat.tip": "When health is low and a hostile mob is nearby, walk away to a safe distance and wait to heal instead of standing still and taking hits. Mobs only, never players. It tries once and falls back to pausing if it cannot get away.",
+  "autofarm.option.retreat_health": "Retreat health",
+  "autofarm.retreat_health.tip": "Retreat once health drops below this. Keep it above the 'stop on low health' threshold so it retreats first and only pauses as a last resort.",
+  "autofarm.option.retreat_distance": "Retreat distance",
+  "autofarm.retreat_distance.tip": "How far to walk away from the mob. Too short and you are still in reach; too far and you may leave your own field.",
+  "autofarm.option.hit_reaction": "Hit reaction",
+  "autofarm.hit_reaction.tip": "On the tick you take damage, stop working and slowly turn to face the attacker for a few seconds, like a real player looking up when hit. With auto-attack on, that mob is queued as the priority counter-target.",
+  "autofarm.option.hit_reaction_time": "Reaction time",
+  "autofarm.hit_reaction_time.tip": "How long the 'stop and look' lasts after taking damage.",
+  "autofarm.option.self_rescue": "Self-rescue",
+  "autofarm.self_rescue.tip": "Get the player out of environmental danger: surface for air when drowning, and run to the nearest water when on fire. Runs before any farming action.",
+  "autofarm.option.auto_reconnect": "Auto-reconnect",
+  "autofarm.auto_reconnect.tip": "If you are unexpectedly disconnected from a multiplayer server, reconnect automatically after a delay. Quitting to the title screen yourself is never overridden, and singleplayer worlds are ignored.",
+  "autofarm.option.reconnect_delay": "Reconnect delay",
+  "autofarm.reconnect_delay.tip": "How many seconds to wait before reconnecting.",
+  "autofarm.option.reconnect_attempts": "Max attempts",
+  "autofarm.reconnect_attempts.tip": "How many times to retry automatically. 'Unlimited' keeps trying.",
+  "autofarm.reconnect_attempts.unlimited": "Unlimited",
+  "autofarm.value.count": "%s times",
+  "autofarm.state.retreating": "Retreating",
+  "autofarm.state.hit_react": "Hit reaction",
+  "autofarm.state.rescuing": "Self-rescue",
+  "autofarm.notice.retreating": "Danger retreat: low health, moving away from the threat",
+  "autofarm.notice.rescue_drowning": "Self-rescue: out of air underwater, surfacing",
+  "autofarm.notice.rescue_fire": "Self-rescue: on fire, running to water"
 }

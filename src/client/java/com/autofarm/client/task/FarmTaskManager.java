@@ -9,6 +9,7 @@ import com.autofarm.client.container.ContainerTransfer;
 import com.autofarm.client.harvest.CropHarvester;
 import com.autofarm.client.human.Humanizer;
 import com.autofarm.client.human.IdleLook;
+import com.autofarm.client.human.RescueHelper;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.AutoEater;
 import com.autofarm.client.inventory.InventoryScanner;
@@ -22,12 +23,15 @@ import com.autofarm.client.scan.CropScanner;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -276,6 +280,29 @@ public final class FarmTaskManager {
     /** 疲劳「手动恢复」模式下已经收工、正等着玩家自己重开 */
     private static boolean fatigueStopped;
 
+    // ================= 生存自保（C 组）=================
+
+    /** 危险撤退：本次低血量周期内正在撤退（用来抓进出边沿、复位下面几项） */
+    private static boolean retreating;
+    /** 这一轮低血量是否已经排过一次回撤路线（排过还撤不了就不再反复重排） */
+    private static boolean retreatTried;
+    /** 撤退路线要走到的那一格；null = 还没排 */
+    private static BlockPos retreatTarget;
+    /** 这一轮低血量是否已经放弃撤退（转成原地停机）——血量恢复后自动复位 */
+    private static boolean retreatDone;
+
+    /**
+     * 受击反制：上一次看到的受伤计时。
+     *
+     * <p>{@code hurtTime} 是原版那个「受伤变红」的倒计时，受伤瞬间被置成 10 再递减。
+     * 这里盯的是它从 0 变成 &gt;0 的那一个<b>上升沿</b>，也就是「这一 tick 挨打了」。
+     */
+    private static int lastHurtTime;
+    /** 受击反制期间要盯着看的那个攻击者 */
+    private static LivingEntity hitTarget;
+    /** 受击反制的剩余 tick；&gt;0 表示还在「停手 + 回头」的状态里 */
+    private static int hitReactTicks;
+
     private FarmTaskManager() {
     }
 
@@ -437,8 +464,16 @@ public final class FarmTaskManager {
         fatigueWorkTicks = 0;
         fatigueRestRemaining = 0;
         fatigueStopped = false;
+        retreating = false;
+        retreatTried = false;
+        retreatTarget = null;
+        retreatDone = false;
+        lastHurtTime = 0;
+        hitTarget = null;
+        hitReactTicks = 0;
         Humanizer.reset();
         IdleLook.reset();
+        RescueHelper.reset();
         KillAura.reset();
     }
 
@@ -485,8 +520,15 @@ public final class FarmTaskManager {
             hesitatedAt = null;
             pendingSafety = null;
             safetySeenTicks = 0;
+            retreating = false;
+            retreatTried = false;
+            retreatTarget = null;
+            retreatDone = false;
+            hitTarget = null;
+            hitReactTicks = 0;
             Humanizer.reset();
             IdleLook.reset();
+            RescueHelper.reset();
             KillAura.reset();
             state = FarmState.IDLE;
         } else {
@@ -564,6 +606,13 @@ public final class FarmTaskManager {
                 fatigueWorkTicks = 0;
                 fatigueRestRemaining = 0;
                 fatigueStopped = false;
+                retreating = false;
+                retreatTried = false;
+                retreatTarget = null;
+                retreatDone = false;
+                hitTarget = null;
+                hitReactTicks = 0;
+                RescueHelper.reset();
                 KillAura.reset();
             }
             lastEnabled = config.enabled;
@@ -592,16 +641,74 @@ public final class FarmTaskManager {
         }
 
         // ================================================================
+        // 附加功能「环境自救」（C 组）：溺水 / 着火的保命动作。
+        // 排在所有事情之前 —— 人都在水里了，收菜的事先放一放。
+        // 自救期间由 RescueHelper 接管移动输入（见 KeyboardInputMixin）。
+        // ================================================================
+        if (config.enabled && RescueHelper.tick(client, config)) {
+            if (PathWalker.isActive() || supplyPhase != SupplyPhase.NONE) {
+                cancelSupply(null);
+                PathWalker.stop();
+            }
+            CropHarvester.reset();
+            announcePause(client, RescueHelper.notice());
+            state = FarmState.RESCUING;
+            return;
+        }
+
+        // ================================================================
+        // 附加功能「受击反制」（C 组）：挨打的那一 tick 记下来，接下来几秒停手 + 回头。
+        // 捕获的是「受伤计时从 0 变成 >0」的上升沿 —— 也就是这一 tick 真的受了伤。
+        // ================================================================
+        int hurtTime = client.player.hurtTime;
+        if (config.enabled && config.hitReactionEnabled) {
+            if (hurtTime > 0 && lastHurtTime == 0) {
+                beginHitReaction(client, config);
+            }
+        } else {
+            hitTarget = null;
+            hitReactTicks = 0;
+        }
+        lastHurtTime = hurtTime;
+
+        // ================================================================
         // 背包满了，又没地方存 → 停手
         // 继续收下去，多出来的作物只会掉在地上烂掉。宁可停下来等你处理，
         // 也不做这种「收了个寂寞」的事。腾出空间（或者设好补给点）之后自动恢复。
         // ================================================================
         boolean stopForFull = config.enabled && shouldStopForFullInventory(client, config);
+
+        // 附加功能「危险撤退」（C 组）：血少 + 附近有威胁时，用「主动撤离」代替「原地停机」。
+        // 判据在这里先算好；它成立时下面会跳过「低血量停机」那一条 ——
+        // 否则会出现「一边要撤、一边被自己的安全检查按住」的矛盾。
+        boolean lowHealth = config.enabled
+                && client.player.getHealth() < config.retreatHealthHearts * 2.0f;
+        boolean wantRetreat = config.enabled
+                && config.retreatEnabled
+                && !retreatDone
+                && lowHealth
+                && nearestThreat(client) != null;
+        // 真要撤还得有「能操作角色」的前提：开着界面 / 自由视角时先别动，
+        // 这时候退回普通停机（见下面的 safety），等能动了再撤。
+        boolean retreatActive = wantRetreat
+                && client.currentScreen == null
+                && !CameraCompat.isCameraDetached();
+        if (!lowHealth) {
+            // 血回来了：撤退相关的记忆全部复位，下一次低血量可以重新撤
+            retreating = false;
+            retreatTried = false;
+            retreatTarget = null;
+            retreatDone = false;
+        }
+
         // 安全条件：血量太低、或者附近有敌对生物。它比「收菜」重要 ——
         // 人被打了还低着头收菜，是最容易出事的状态。
         // 附加功能「危险反应延迟」：危险第一次出现时先愣一下再停手 ——
         // 机器会在冒出危险的同一 tick 停手，真人总要花上几百毫秒（见 applyReactionDelay）。
-        String safety = config.enabled ? applyReactionDelay(config, safetyNotice(client, config)) : null;
+        // 撤退接管时不走这一条：那种情况下的正确动作是「走开」，不是「原地不动」。
+        String safety = config.enabled && !retreatActive
+                ? applyReactionDelay(config, safetyNotice(client, config))
+                : null;
 
         if (stopForFull) {
             cancelSupply(null);
@@ -655,19 +762,63 @@ public final class FarmTaskManager {
 
         // 附加功能：HUD 详细统计的「运行时长」——只数真正干活的时间，
         // 暂停（满包 / 危险 / 休息 / 开着界面）的 tick 不算，这样它更像一块秒表。
-        if (config.enabled && !paused) {
+        // 撤退是在「保命」而不是「干活」，所以也不算进去。
+        if (config.enabled && !paused && !retreatActive) {
             sessionTicks++;
         }
 
         // 防踢模式：把「这一 tick 到底有没有在干活」喂给疲劳模型 ——
         // 干得越久，动作越容易走神；歇下来（暂停、开界面）它会慢慢回落
-        Humanizer.feedWorking(config.enabled && !paused);
+        Humanizer.feedWorking(config.enabled && !paused && !retreatActive);
 
         // 自由视角（masa 全家桶的「灵魂出窍」）：摄像机和身体分开之后，
         // 屏幕上看到的人是不动的，可世界里方块却在自己碎 —— 那太显眼了。
         // 打开这个开关就先停手，只保留描边和路线；关掉开关则照常干活
         // （渲染本来就是按摄像机算的，所以画面不会错位）。
         boolean freecamPaused = config.pauseOnFreecam && CameraCompat.isCameraDetached();
+
+        // ================================================================
+        // 附加功能「受击反制」（C 组）：挨打之后的这几秒，停手 + 回头看向攻击者。
+        // 开着自动打怪时由 KillAura 负责转向与反击（见下面的 fightingActive），
+        // 这里只处理「没开自动打怪」时的转向，避免两边抢视角。
+        // ================================================================
+        boolean hitReacting = false;
+        if (config.enabled && config.hitReactionEnabled && hitReactTicks > 0) {
+            hitReactTicks--;
+            if (!config.autoAttack && hitTarget != null && hitTarget.isAlive()) {
+                BlockInteractor.aimAt(client.player, hitTarget.getX(), hitTarget.getEyeY(),
+                        hitTarget.getZ());
+                hitReacting = true;
+            }
+        }
+
+        // ================================================================
+        // 附加功能「危险撤退」（C 组）：血少 + 附近有威胁 → 朝反方向撤到安全距离。
+        // 排在「工作区域返回」之前 —— 保命优先于回自己的地。
+        // ================================================================
+        if (retreatActive) {
+            if (!retreating) {
+                // 刚进入撤退：把手上的活全放下，准备撤离
+                retreating = true;
+                retreatTried = false;
+                cancelSupply(null);
+                PathWalker.stop();
+                CropHarvester.reset();
+                handled.clear();
+                matureCrops = Collections.emptyList();
+                emptyFarmland = Collections.emptyList();
+                pickupTargets.clear();
+            }
+            if (runRetreat(client, config)) {
+                PathWalker.setPaused(false);
+                state = FarmState.RETREATING;
+                announcePause(client, "autofarm.notice.retreating");
+                IdleLook.tick(client, config, false);
+                return;
+            }
+            // 撤不了（没威胁 / 走不通 / 已经到位）→ 放弃撤退，退回普通停机
+            retreatDone = true;
+        }
 
         // ================================================================
         // 附加功能「圈定工作区域」：人跑出圈了就停手、走回来
@@ -732,7 +883,8 @@ public final class FarmTaskManager {
                 || !client.player.isAlive()
                 || freecamPaused
                 || paused
-                || fightingActive;
+                || fightingActive
+                || hitReacting;
         PathWalker.setPaused(walkPaused);
 
         // 附加功能「空闲时环顾四周」：只有在「没在动、没在收、没在补给、也没因危险停机」时，
@@ -744,15 +896,16 @@ public final class FarmTaskManager {
                 && safety == null
                 && !offSchedule
                 && !fightingActive
+                && !hitReacting
                 && client.currentScreen == null
                 && !CameraCompat.isCameraDetached()
                 && !viewBusy);
 
         // ================================================================
         // 优先级 2 —— 补给 / 走 / 收
-        // 战斗接管时不走这一段：手在挥刀，走路和收割都让路
+        // 战斗 / 受击反制接管时不走这一段：人在回头或挥刀，走路和收割都让路
         // ================================================================
-        if (!paused && !fightingActive) {
+        if (!paused && !fightingActive && !hitReacting) {
             if (supplyPhase != SupplyPhase.NONE) {
                 if (!freecamPaused) {
                     runSupply(client, config);
@@ -839,6 +992,12 @@ public final class FarmTaskManager {
             // 背包满 / 安全保护：这一 tick 只扫描、不动角色。
             // 状态已经在上面设成「已暂停」了，别被后面的规划覆盖掉。
             state = FarmState.PAUSED;
+            return;
+        }
+
+        if (hitReacting) {
+            // 附加功能「受击反制」：挨打之后的这几秒只「停手 + 回头」，不规划、不收割。
+            state = FarmState.HIT_REACT;
             return;
         }
 
@@ -1579,6 +1738,164 @@ public final class FarmTaskManager {
         PathWalker.setExactTargets(List.of(goal));
         PathWalker.start(PathPlanner.plan(client.player.getBlockPos(), List.of(goal), false));
         areaReturnTarget = PathWalker.isActive() ? goal : null;
+    }
+
+    // ================= 危险撤退（C 组）=================
+
+    /**
+     * 最近的「威胁」位置（危险撤退用）。
+     *
+     * <p>只认<b>敌对生物</b> —— 被别的玩家追着打属于 PVP，这个模组不介入。
+     * 判定半径比「敌对生物靠近停机」那个稍大一些，好让人有机会在挨打之前就撤。
+     */
+    private static Vec3d nearestThreat(MinecraftClient client) {
+        if (client == null || client.player == null || client.world == null) {
+            return null;
+        }
+        Box box = client.player.getBoundingBox().expand(AutoFarmConfig.MOB_ALERT_RADIUS);
+        MobEntity best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (MobEntity mob : client.world.getEntitiesByClass(MobEntity.class, box,
+                m -> m.isAlive() && m instanceof Monster)) {
+            double d = mob.squaredDistanceTo(client.player);
+            if (d < bestDist) {
+                bestDist = d;
+                best = mob;
+            }
+        }
+        return best == null ? null : new Vec3d(best.getX(), best.getY(), best.getZ());
+    }
+
+    /**
+     * 撤退：朝「背离威胁」的方向走一段。
+     *
+     * <p>走的是 {@link PathWalker} 那条通道，但因为目标不是作物，要用
+     * {@link PathWalker#setExactTargets} 说明「要站到它本身那一格」，到站后手动放行。
+     *
+     * <p>只尝试一次：走不通、或者走完还在威胁附近（被推、被围），就原地待命、
+     * 不再反复重排 —— 否则会变成每 tick 重算 A* 的空转。
+     *
+     * @return true 表示还在撤（或刚排好路线）；false 表示已经到位 / 撤不了
+     */
+    private static boolean runRetreat(MinecraftClient client, AutoFarmConfig config) {
+        if (PathWalker.isActive() && retreatTarget != null
+                && retreatTarget.equals(PathWalker.getCurrentTarget())) {
+            PathWalker.tick(client);
+            drainResolved();
+            BlockPos held = PathWalker.getHeldTarget();
+            if (held != null && held.equals(retreatTarget)) {
+                PathWalker.releaseTarget();
+                drainResolved();
+                retreatTarget = null;
+                return false; // 到位了
+            }
+            return true;
+        }
+        if (PathWalker.isActive()) {
+            PathWalker.stop();
+        }
+        if (retreatTried) {
+            return false;
+        }
+        retreatTried = true;
+
+        BlockPos goal = chooseRetreatGoal(client, config);
+        if (goal == null) {
+            return false;
+        }
+        PathWalker.setExactTargets(List.of(goal));
+        PathWalker.start(PathPlanner.plan(client.player.getBlockPos(), List.of(goal), false));
+        retreatTarget = PathWalker.isActive() ? goal : null;
+        return retreatTarget != null;
+    }
+
+    /**
+     * 选一个撤退落脚点：从玩家位置出发，沿「远离威胁」的方向走 {@code retreatDistance} 格，
+     * 再在那一列附近找一个真正能站的格子。
+     */
+    private static BlockPos chooseRetreatGoal(MinecraftClient client, AutoFarmConfig config) {
+        Vec3d threat = nearestThreat(client);
+        if (threat == null) {
+            return null;
+        }
+        double dx = client.player.getX() - threat.x;
+        double dz = client.player.getZ() - threat.z;
+        double len = Math.sqrt(dx * dx + dz * dz);
+        if (len < 1.0e-4) {
+            dx = 1.0;
+            dz = 0.0;
+            len = 1.0;
+        }
+        int dist = Math.max(4, config.retreatDistance);
+        int gx = (int) Math.floor(client.player.getX() + dx / len * dist);
+        int gz = (int) Math.floor(client.player.getZ() + dz / len * dist);
+        int gy = client.player.getBlockPos().getY();
+
+        // 目标那一列可能站不住人（悬崖、水、树），往外螺旋找最近的可站格
+        for (int r = 0; r <= 5; r++) {
+            for (int ox = -r; ox <= r; ox++) {
+                for (int oz = -r; oz <= r; oz++) {
+                    if (Math.max(Math.abs(ox), Math.abs(oz)) != r) {
+                        continue; // 只看这一圈的「外框」
+                    }
+                    BlockPos floor = BlockNavigator.findFloor(client.world, gx + ox, gz + oz, gy, 4, 3);
+                    if (floor != null) {
+                        return floor;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // ================= 受击反制（C 组）=================
+
+    /** 挨打那一下：记下攻击者，进入「停手 + 回头」状态；开着自动打怪则顺带把目标交给它反击 */
+    private static void beginHitReaction(MinecraftClient client, AutoFarmConfig config) {
+        LivingEntity attacker = findAttacker(client);
+        hitTarget = attacker;
+        hitReactTicks = Math.max(1, config.hitReactionSeconds) * 20;
+        if (config.autoAttack && attacker != null) {
+            KillAura.focus(attacker); // 真正的「反制」：优先还手
+        }
+    }
+
+    /**
+     * 找出「刚才是谁打的我」。
+     *
+     * <p>首选原版同步过来的最近伤害来源；但很多时候服务端并不会把攻击者同步给客户端，
+     * 那时候就退而求其次 —— 用最近的有威胁生物顶上。两者都没有就等于「说不出是谁」，
+     * 这时受击反制只做「停手」，不转头。
+     */
+    private static LivingEntity findAttacker(MinecraftClient client) {
+        if (client == null || client.player == null) {
+            return null;
+        }
+        DamageSource source = client.player.getRecentDamageSource();
+        if (source != null && source.getAttacker() instanceof LivingEntity living
+                && living != client.player) {
+            return living;
+        }
+        return nearestMonster(client, AutoFarmConfig.MOB_ALERT_RADIUS);
+    }
+
+    /** 最近的一只敌对生物（受击反制的兜底「嫌疑犯」） */
+    private static LivingEntity nearestMonster(MinecraftClient client, double radius) {
+        if (client == null || client.player == null || client.world == null) {
+            return null;
+        }
+        Box box = client.player.getBoundingBox().expand(radius);
+        LivingEntity best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (LivingEntity entity : client.world.getEntitiesByClass(LivingEntity.class, box,
+                e -> e.isAlive() && e instanceof Monster)) {
+            double d = entity.squaredDistanceTo(client.player);
+            if (d < bestDist) {
+                bestDist = d;
+                best = entity;
+            }
+        }
+        return best;
     }
 
     /** 这句话是不是「停机原因」——停机解除时要记得把它撤掉 */

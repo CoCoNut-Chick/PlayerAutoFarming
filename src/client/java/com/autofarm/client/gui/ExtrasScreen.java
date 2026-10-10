@@ -26,7 +26,7 @@ import java.util.List;
  * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
  * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
  *
- * <h2>九段</h2>
+ * <h2>十段</h2>
  * <ol>
  *   <li><b>战斗（高风险）</b> —— 自动打怪、目标范围、攻击间隔（输入框）、攻击距离、
  *       暴力模式与暴力程度。默认关闭、警示配色、开启与调高参数都要过风险确认屏，
@@ -37,6 +37,7 @@ import java.util.List;
  *   <li><b>工作范围</b> —— 圈定自己那块地（圆形或两点矩形），区域外的目标不碰，
  *       人走出区域会自动走回来；</li>
  *   <li><b>环境与作息</b> —— 仅白天 / 仅晴天，以及「连续工作到上限就收工」的疲劳档；</li>
+ *   <li><b>生存自保</b> —— 危险撤退、受击反制、环境自救、掉线重连；</li>
  *   <li><b>工具维护</b> —— 工具耐久自动换新；</li>
  *   <li><b>容错与统计</b> —— 失败目标暂时拉黑、HUD 详细统计；</li>
  *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物。</li>
@@ -98,8 +99,16 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_ENV_Y = SEC_WORKAREA_Y + SEC_WORKAREA_H + SECTION_GAP;
     private static final int SEC_ENV_H = ROW_FIRST + ENV_ROWS * ROW_GAP + 4;
 
+    /**
+     * 生存自保（C 组）：危险撤退（开关 + 血量 + 距离）、受击反制（开关 + 时长）、
+     * 环境自救（开关）、掉线重连（开关 + 延迟 + 次数）—— 共 9 行。
+     */
+    private static final int SURVIVAL_ROWS = 9;
+    private static final int SEC_SURVIVAL_Y = SEC_ENV_Y + SEC_ENV_H + SECTION_GAP;
+    private static final int SEC_SURVIVAL_H = ROW_FIRST + SURVIVAL_ROWS * ROW_GAP + 4;
+
     private static final int TOOL_ROWS = 2;
-    private static final int SEC_TOOL_Y = SEC_ENV_Y + SEC_ENV_H + SECTION_GAP;
+    private static final int SEC_TOOL_Y = SEC_SURVIVAL_Y + SEC_SURVIVAL_H + SECTION_GAP;
     private static final int SEC_TOOL_H = ROW_FIRST + TOOL_ROWS * ROW_GAP + 4;
 
     private static final int MISC_ROWS = 3;
@@ -139,6 +148,16 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] FATIGUE_WORK_CHOICES = {15, 30, 60, 120, 240};
     /** 疲劳收工：休息时长的档位（分钟）；0 = 手动恢复 */
     private static final int[] FATIGUE_REST_CHOICES = {0, 5, 10, 15, 30, 60};
+    /** 生存自保：撤退血量门槛（心） */
+    private static final int[] RETREAT_HEALTH_CHOICES = {3, 4, 5, 6, 8, 10};
+    /** 生存自保：撤退距离（格） */
+    private static final int[] RETREAT_DISTANCE_CHOICES = {8, 12, 16, 24, 32};
+    /** 生存自保：受击反制时长（秒） */
+    private static final int[] HIT_REACTION_CHOICES = {1, 2, 3, 5};
+    /** 生存自保：掉线后重连延迟（秒） */
+    private static final int[] RECONNECT_DELAY_CHOICES = {5, 10, 20, 30, 60};
+    /** 生存自保：最多重连次数；0 = 不限 */
+    private static final int[] RECONNECT_ATTEMPT_CHOICES = {0, 3, 5, 10, 20};
 
     private static int[] buildHours() {
         int[] hours = new int[24];
@@ -190,6 +209,15 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget fatigueButton;
     private ButtonWidget fatigueWorkButton;
     private ButtonWidget fatigueRestButton;
+    private ButtonWidget retreatButton;
+    private ButtonWidget retreatHealthButton;
+    private ButtonWidget retreatDistanceButton;
+    private ButtonWidget hitReactionButton;
+    private ButtonWidget hitReactionTimeButton;
+    private ButtonWidget selfRescueButton;
+    private ButtonWidget reconnectButton;
+    private ButtonWidget reconnectDelayButton;
+    private ButtonWidget reconnectAttemptsButton;
 
     public ExtrasScreen(Screen parent, AutoFarmConfig sharedDraft) {
         super(parent, Text.translatable("autofarm.extras.title"));
@@ -418,6 +446,64 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         fatigueRestButton.setTooltip(Tooltip.of(Text.translatable("autofarm.fatigue_rest.tip")));
         addScrolling(fatigueRestButton);
+
+        // ---- 生存自保（C 组）----
+        // 这一组管的是「别把号玩没了」：危险撤退、受击反制、环境自救、掉线重连。
+
+        this.retreatButton = toggle("autofarm.option.retreat",
+                draft.retreatEnabled, value -> draft.retreatEnabled = value,
+                "autofarm.retreat.tip");
+        layout(retreatButton, contentX, 0, fullW);
+
+        this.retreatHealthButton = ButtonWidget.builder(retreatHealthLabel(), b -> {
+            draft.retreatHealthHearts = nextChoice(RETREAT_HEALTH_CHOICES, draft.retreatHealthHearts);
+            b.setMessage(retreatHealthLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        retreatHealthButton.setTooltip(Tooltip.of(Text.translatable("autofarm.retreat_health.tip")));
+        addScrolling(retreatHealthButton);
+
+        this.retreatDistanceButton = ButtonWidget.builder(retreatDistanceLabel(), b -> {
+            draft.retreatDistance = nextChoice(RETREAT_DISTANCE_CHOICES, draft.retreatDistance);
+            b.setMessage(retreatDistanceLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        retreatDistanceButton.setTooltip(Tooltip.of(Text.translatable("autofarm.retreat_distance.tip")));
+        addScrolling(retreatDistanceButton);
+
+        this.hitReactionButton = toggle("autofarm.option.hit_reaction",
+                draft.hitReactionEnabled, value -> draft.hitReactionEnabled = value,
+                "autofarm.hit_reaction.tip");
+        layout(hitReactionButton, contentX, 0, fullW);
+
+        this.hitReactionTimeButton = ButtonWidget.builder(hitReactionTimeLabel(), b -> {
+            draft.hitReactionSeconds = nextChoice(HIT_REACTION_CHOICES, draft.hitReactionSeconds);
+            b.setMessage(hitReactionTimeLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        hitReactionTimeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.hit_reaction_time.tip")));
+        addScrolling(hitReactionTimeButton);
+
+        this.selfRescueButton = toggle("autofarm.option.self_rescue",
+                draft.selfRescueEnabled, value -> draft.selfRescueEnabled = value,
+                "autofarm.self_rescue.tip");
+        layout(selfRescueButton, contentX, 0, fullW);
+
+        this.reconnectButton = toggle("autofarm.option.auto_reconnect",
+                draft.autoReconnectEnabled, value -> draft.autoReconnectEnabled = value,
+                "autofarm.auto_reconnect.tip");
+        layout(reconnectButton, contentX, 0, fullW);
+
+        this.reconnectDelayButton = ButtonWidget.builder(reconnectDelayLabel(), b -> {
+            draft.reconnectDelaySeconds = nextChoice(RECONNECT_DELAY_CHOICES, draft.reconnectDelaySeconds);
+            b.setMessage(reconnectDelayLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        reconnectDelayButton.setTooltip(Tooltip.of(Text.translatable("autofarm.reconnect_delay.tip")));
+        addScrolling(reconnectDelayButton);
+
+        this.reconnectAttemptsButton = ButtonWidget.builder(reconnectAttemptsLabel(), b -> {
+            draft.reconnectMaxAttempts = nextChoice(RECONNECT_ATTEMPT_CHOICES, draft.reconnectMaxAttempts);
+            b.setMessage(reconnectAttemptsLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        reconnectAttemptsButton.setTooltip(Tooltip.of(Text.translatable("autofarm.reconnect_attempts.tip")));
+        addScrolling(reconnectAttemptsButton);
 
         // ---- 工具维护 ----
 
@@ -689,6 +775,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.daylight" -> draft.workDaylightOnly;
             case "autofarm.option.clear_weather" -> draft.workClearWeatherOnly;
             case "autofarm.option.fatigue" -> draft.fatigueStop;
+            case "autofarm.option.retreat" -> draft.retreatEnabled;
+            case "autofarm.option.hit_reaction" -> draft.hitReactionEnabled;
+            case "autofarm.option.self_rescue" -> draft.selfRescueEnabled;
+            case "autofarm.option.auto_reconnect" -> draft.autoReconnectEnabled;
             default -> false;
         };
     }
@@ -779,6 +869,17 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(fatigueWorkButton, env + ROW_FIRST + 3 * ROW_GAP);
         setRowY(fatigueRestButton, env + ROW_FIRST + 4 * ROW_GAP);
 
+        int survival = originY + SEC_SURVIVAL_Y;
+        setRowY(retreatButton, survival + ROW_FIRST);
+        setRowY(retreatHealthButton, survival + ROW_FIRST + ROW_GAP);
+        setRowY(retreatDistanceButton, survival + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(hitReactionButton, survival + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(hitReactionTimeButton, survival + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(selfRescueButton, survival + ROW_FIRST + 5 * ROW_GAP);
+        setRowY(reconnectButton, survival + ROW_FIRST + 6 * ROW_GAP);
+        setRowY(reconnectDelayButton, survival + ROW_FIRST + 7 * ROW_GAP);
+        setRowY(reconnectAttemptsButton, survival + ROW_FIRST + 8 * ROW_GAP);
+
         int tool = originY + SEC_TOOL_Y;
         setRowY(replaceToolButton, tool + ROW_FIRST);
         setRowY(durabilityButton, tool + ROW_FIRST + ROW_GAP);
@@ -819,6 +920,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
         drawSection(context, originY, SEC_ENV_Y, SEC_ENV_H);
         drawHeader(context, originY, SEC_ENV_Y, "autofarm.extras.section.environment");
+
+        drawSection(context, originY, SEC_SURVIVAL_Y, SEC_SURVIVAL_H);
+        drawHeader(context, originY, SEC_SURVIVAL_Y, "autofarm.extras.section.survival");
 
         drawSection(context, originY, SEC_TOOL_Y, SEC_TOOL_H);
         drawHeader(context, originY, SEC_TOOL_Y, "autofarm.extras.section.tool");
@@ -871,6 +975,15 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.fatigueStop = false;
         draft.fatigueWorkMinutes = 60;
         draft.fatigueRestMinutes = 15;
+        draft.retreatEnabled = false;
+        draft.retreatHealthHearts = 6;
+        draft.retreatDistance = 16;
+        draft.hitReactionEnabled = false;
+        draft.hitReactionSeconds = 2;
+        draft.selfRescueEnabled = false;
+        draft.autoReconnectEnabled = false;
+        draft.reconnectDelaySeconds = 10;
+        draft.reconnectMaxAttempts = 3;
         draft.humanizeTiming = false;
         draft.randomRest = false;
         draft.restIntervalMinutes = 10;
@@ -919,6 +1032,15 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.fatigueStop = old.fatigueStop;
         draft.fatigueWorkMinutes = old.fatigueWorkMinutes;
         draft.fatigueRestMinutes = old.fatigueRestMinutes;
+        draft.retreatEnabled = old.retreatEnabled;
+        draft.retreatHealthHearts = old.retreatHealthHearts;
+        draft.retreatDistance = old.retreatDistance;
+        draft.hitReactionEnabled = old.hitReactionEnabled;
+        draft.hitReactionSeconds = old.hitReactionSeconds;
+        draft.selfRescueEnabled = old.selfRescueEnabled;
+        draft.autoReconnectEnabled = old.autoReconnectEnabled;
+        draft.reconnectDelaySeconds = old.reconnectDelaySeconds;
+        draft.reconnectMaxAttempts = old.reconnectMaxAttempts;
         draft.humanizeTiming = old.humanizeTiming;
         draft.randomRest = old.randomRest;
         draft.restIntervalMinutes = old.restIntervalMinutes;
@@ -1077,6 +1199,33 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 draft.fatigueRestMinutes <= 0
                         ? Text.translatable("autofarm.fatigue_rest.manual")
                         : Text.translatable("autofarm.value.minutes", draft.fatigueRestMinutes));
+    }
+
+    private Text retreatHealthLabel() {
+        return optionLabel("autofarm.option.retreat_health",
+                Text.translatable("autofarm.value.hearts", draft.retreatHealthHearts));
+    }
+
+    private Text retreatDistanceLabel() {
+        return optionLabel("autofarm.option.retreat_distance",
+                Text.translatable("autofarm.value.blocks", draft.retreatDistance));
+    }
+
+    private Text hitReactionTimeLabel() {
+        return optionLabel("autofarm.option.hit_reaction_time",
+                Text.translatable("autofarm.value.seconds", draft.hitReactionSeconds));
+    }
+
+    private Text reconnectDelayLabel() {
+        return optionLabel("autofarm.option.reconnect_delay",
+                Text.translatable("autofarm.value.seconds", draft.reconnectDelaySeconds));
+    }
+
+    private Text reconnectAttemptsLabel() {
+        return optionLabel("autofarm.option.reconnect_attempts",
+                draft.reconnectMaxAttempts <= 0
+                        ? Text.translatable("autofarm.reconnect_attempts.unlimited")
+                        : Text.translatable("autofarm.value.count", draft.reconnectMaxAttempts));
     }
 
     /** 把玩家当前所在的那一格记成工作区域的一个点（圆形 = 中心，矩形 = 角点） */

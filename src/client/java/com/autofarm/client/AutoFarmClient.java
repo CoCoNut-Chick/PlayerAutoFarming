@@ -3,6 +3,7 @@ package com.autofarm.client;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.gui.AutoFarmScreen;
 import com.autofarm.client.keybind.AutoFarmKeybinds;
+import com.autofarm.client.net.ReconnectManager;
 import com.autofarm.client.render.AutoFarmHud;
 import com.autofarm.client.render.CropHighlighter;
 import com.autofarm.client.task.FarmTaskManager;
@@ -31,6 +32,8 @@ public class AutoFarmClient implements ClientModInitializer {
         CropHighlighter.register();
         // 左上角那行常驻状态：不开面板也能知道它在干嘛
         AutoFarmHud.register();
+        // 附加功能「掉线重连」（C 组）：意外断开时自动回到上一个多人服务器
+        ReconnectManager.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             // 打开控制面板（用 while 是因为 wasPressed 在一个 tick 内可能累积多次）
