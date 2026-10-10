@@ -102,9 +102,12 @@ public final class CropHighlighter {
         // 空耕地（补种目标）用另一种颜色描出来 —— 不然你会看到角色往一片空地上跑，
         // 而画面上什么都没有，根本不知道它去干嘛
         List<BlockPos> spots = config.visualize ? FarmTaskManager.getFarmlandTargets() : List.of();
+        // 额外目标（瓜茎旁的瓜 / 自定义方块）再用第三种颜色 —— 它们不是作物，却也是收割目标
+        List<BlockPos> extras = config.visualize ? FarmTaskManager.getExtraTargets() : List.of();
         List<BlockPos> route = config.showPath ? FarmTaskManager.getRoute() : List.of();
         List<PathStep> segment = config.showPath ? FarmTaskManager.getActiveSegment() : List.of();
-        if (crops.isEmpty() && spots.isEmpty() && route.isEmpty() && segment.isEmpty()) {
+        if (crops.isEmpty() && spots.isEmpty() && extras.isEmpty()
+                && route.isEmpty() && segment.isEmpty()) {
             return;
         }
 
@@ -127,9 +130,9 @@ public final class CropHighlighter {
                 config.highlightAlpha01());
 
         if (config.highlightThroughWalls) {
-            renderThroughWalls(params, crops, spots, route, segment);
+            renderThroughWalls(params, crops, spots, extras, route, segment);
         } else {
-            renderDepthTested(context, params, crops, spots, route, segment);
+            renderDepthTested(context, params, crops, spots, extras, route, segment);
         }
     }
 
@@ -142,6 +145,7 @@ public final class CropHighlighter {
      */
     private static void renderDepthTested(WorldRenderContext context, Params params,
                                           List<BlockPos> crops, List<BlockPos> spots,
+                                          List<BlockPos> extras,
                                           List<BlockPos> route, List<PathStep> segment) {
         VertexConsumerProvider consumers = context.consumers();
         if (consumers == null) {
@@ -149,7 +153,7 @@ public final class CropHighlighter {
         }
 
         VertexConsumer vertexConsumer = consumers.getBuffer(RenderLayer.getDebugQuads());
-        drawAll(vertexConsumer, params, crops, spots, route, segment);
+        drawAll(vertexConsumer, params, crops, spots, extras, route, segment);
 
         // 事件返回后 MC 还会统一绘制一次，这里主动 flush 让绘制时机确定可控
         if (consumers instanceof VertexConsumerProvider.Immediate immediate) {
@@ -166,6 +170,7 @@ public final class CropHighlighter {
      * <p>全程用 try/finally 还原，避免污染后面的天气、粒子、手部渲染。
      */
     private static void renderThroughWalls(Params params, List<BlockPos> crops, List<BlockPos> spots,
+                                          List<BlockPos> extras,
                                           List<BlockPos> route, List<PathStep> segment) {
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
         RenderSystem.enableBlend();
@@ -181,7 +186,7 @@ public final class CropHighlighter {
             // Tessellator 的缓冲是全局复用的，万一之前被谁 fixedColor() 过，
             // 我们的颜色会被静默忽略（画出来全白）。这一行把状态清掉。
             buffer.unfixColor();
-            drawAll(buffer, params, crops, spots, route, segment);
+            drawAll(buffer, params, crops, spots, extras, route, segment);
             BufferRenderer.drawWithGlobalProgram(buffer.end());
         } finally {
             RenderSystem.enableDepthTest();
@@ -199,11 +204,16 @@ public final class CropHighlighter {
      * 可以共用这一份代码。
      */
     private static void drawAll(VertexConsumer vc, Params p, List<BlockPos> crops,
-                                List<BlockPos> spots, List<BlockPos> route, List<PathStep> segment) {
+                                List<BlockPos> spots, List<BlockPos> extras,
+                                List<BlockPos> route, List<PathStep> segment) {
         drawBoxes(vc, p, crops, p.red(), p.green(), p.blue(), p.alpha());
         // 空耕地用固定的青色：和成熟作物的橙红区分开，也避开「挖红 / 垫蓝」这两个路线色
         if (!spots.isEmpty()) {
             drawBoxes(vc, p, spots, EMPTY_FARMLAND_R, EMPTY_FARMLAND_G, EMPTY_FARMLAND_B, p.alpha());
+        }
+        // 额外目标（瓜 / 自定义方块）用金黄：既不是「成熟作物」也不是「空地」，单独一档
+        if (!extras.isEmpty()) {
+            drawBoxes(vc, p, extras, EXTRA_R, EXTRA_G, EXTRA_B, p.alpha());
         }
         drawRoute(vc, p, route, segment);
     }
@@ -212,6 +222,11 @@ public final class CropHighlighter {
     private static final float EMPTY_FARMLAND_R = 0.32f;
     private static final float EMPTY_FARMLAND_G = 0.86f;
     private static final float EMPTY_FARMLAND_B = 0.70f;
+
+    /** 额外目标描边的颜色（金黄），和橙红（作物）、青绿（空耕地）都区分开 */
+    private static final float EXTRA_R = 0.98f;
+    private static final float EXTRA_G = 0.78f;
+    private static final float EXTRA_B = 0.16f;
 
     /**
      * 把一串方块坐标各画成一个粗线框。

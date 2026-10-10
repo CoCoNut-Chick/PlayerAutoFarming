@@ -433,6 +433,43 @@ public class AutoFarmConfig {
      */
     public int pickupDelaySeconds = 1;
 
+    // ---- 瓜类与自定义作物（瓜茎识别 + 自定义方块） ----
+    //
+    // 原版的西瓜 / 南瓜不是「作物方块」：它们没有 age，茎才带 age。
+    // 所以默认扫描认不出「长在茎旁边的瓜」。这一组专补这个洞，再加一个
+    // 玩家自定义方块的出口，让「别的模组的作物 / 你特意想收的东西」也能被认出来。
+
+    /**
+     * 瓜茎识别：收割「紧挨着瓜茎、由茎自然长出来的瓜方块」（默认关闭）。
+     *
+     * <p>西瓜 / 南瓜的植株是<b>茎</b>（{@code StemBlock}），瓜只是长在茎旁边的一格。
+     * 默认扫描只认「带 age、长满了的作物」，所以茎长满后它旁边那格瓜会被当成
+     * 普通方块跳过 —— 于是瓜田永远收不到。打开这个开关，扫描会额外找出
+     * <b>紧挨瓜茎的那格瓜方块</b>（西瓜块 / 南瓜块），把它们当作「挖掉就收」的目标：
+     * 挖掉瓜、茎留着，之后茎会继续长下一个瓜。
+     *
+     * <p>它刻意<b>只认紧挨着瓜茎的瓜</b>：那才是「茎自然长出来的」。
+     * 视野里其他地方的瓜（哪怕是玩家自己放的）不会被扫到 —— 这既避免误挖你摆的装饰，
+     * 也说明它<b>不是矿透（X-ray）</b>：它不透视、不高亮视野里的其它方块，
+     * 只顺着作物本身的生长结构去找收成。
+     */
+    public boolean melonHarvest = false;
+
+    /**
+     * 自定义要识别的方块（方块注册名列表，例如 {@code minecraft:melon}）。
+     *
+     * <p>瓜茎识别只覆盖西瓜 / 南瓜两种，所以留了这道口子：把你想要模组顺带
+     * 「挖掉收走」的方块加进来（别的模组的作物、或者特殊方块）。列表非空即生效，
+     * 扫描时凡注册名在名单里的方块都会被当成收割目标，挖掉即收、不补种。
+     *
+     * <p><b>只加农作物类的方块</b>：这些方块挖下来之后，产物会按「作物收获物」去
+     * 存放、归箱；加石头、矿物这类非作物方块，挖下来的东西对不上存放分类，
+     * 可能一直留在背包里、甚至把「补种 / 存箱」的流程卡住。所以界面在添加时会
+     * 专门提醒一次。同样地，本功能<b>不是矿透</b>：它只识别你手动加进名单、且
+     * 和作物相关的方块，不透视、不高亮任何你没指定的东西。
+     */
+    public List<String> customHarvestBlocks = new ArrayList<>();
+
     /**
      * 防踢模式：把整套「机器味」一次性抹掉（默认关闭）。
      *
@@ -802,6 +839,8 @@ public class AutoFarmConfig {
         if (failureCooldown) n++;
         if (verboseHud) n++;
         if (pickupDroppedItems) n++;
+        if (melonHarvest) n++;
+        if (customHarvestBlocks != null && !customHarvestBlocks.isEmpty()) n++;
         if (antiKickMode) n++;
         if (reactionDelay) n++;
         if (idleLookAround) n++;
@@ -865,6 +904,9 @@ public class AutoFarmConfig {
         c.verboseHud = this.verboseHud;
         c.pickupDroppedItems = this.pickupDroppedItems;
         c.pickupDelaySeconds = this.pickupDelaySeconds;
+        c.melonHarvest = this.melonHarvest;
+        c.customHarvestBlocks = this.customHarvestBlocks == null
+                ? new ArrayList<>() : new ArrayList<>(this.customHarvestBlocks);
         c.antiKickMode = this.antiKickMode;
         c.antiKickLevel = this.antiKickLevel;
         c.reactionDelay = this.reactionDelay;
@@ -980,6 +1022,15 @@ public class AutoFarmConfig {
 
         if (pickupDelaySeconds < 1) pickupDelaySeconds = 1;
         if (pickupDelaySeconds > 30) pickupDelaySeconds = 30;
+
+        // 自定义方块名单：去掉空串（手改 JSON 写坏了也不至于崩）。
+        // 名单里的名字认不出方块（模组被卸了、名字拼错了）不在这里过滤 ——
+        // 扫描时按名找不到方块自然就跳过，留在这里只是别让它把空串带进名单。
+        if (customHarvestBlocks == null) {
+            customHarvestBlocks = new ArrayList<>();
+        } else {
+            customHarvestBlocks.removeIf(id -> id == null || id.isBlank());
+        }
 
         // 防踢档位：0~3（具体的档位含义在 Humanizer 里）
         if (antiKickLevel < 0) antiKickLevel = 0;

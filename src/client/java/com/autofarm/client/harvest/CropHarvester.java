@@ -111,6 +111,16 @@ public final class CropHarvester {
      * 中途再问一次得到的是不同的答案。
      */
     private static CropRegistry.HarvestMode mode = CropRegistry.HarvestMode.SKIP;
+
+    /**
+     * 这次目标是不是「额外挖掉」（瓜 / 自定义方块）—— 挖掉就完事，不补种。
+     *
+     * <p>瓜挖掉之后茎还在、会接着长瓜；自定义方块通常也不是「收完要种回去」的作物。
+     * 所以这类目标走 {@link #startBreak}，只挖不种。普通作物仍是 {@code false}，
+     * 挖完按开关决定要不要补种。
+     */
+    private static boolean extraBreak;
+
     private static int ticks;
 
     /**
@@ -210,23 +220,12 @@ public final class CropHarvester {
      * 交给它一个别的坐标（早就被别人收走了、或者中途地被踩没了）就直接收工。
      */
     public static void start(ClientWorld world, BlockPos pos, AutoFarmConfig config) {
-        target = pos == null ? null : pos.toImmutable();
-        cropBlock = null;
-        mode = CropRegistry.HarvestMode.SKIP;
-        ticks = 0;
-        nextActionAt = 0;
-        harvested = false;
-        replanted = false;
-        picked = false;
-        planting = false;
-        planted = false;
-        missingSeed = false;
-        notice = null;
-
+        begin(pos);
         if (world == null || target == null) {
             stage = Stage.DONE;
             return;
         }
+        extraBreak = false;
 
         // 先问清楚「这一格该怎么收」，整段动作都照它走
         BlockState state = world.getBlockState(target);
@@ -253,12 +252,54 @@ public final class CropHarvester {
         }
     }
 
+    /**
+     * 挖掉一个<b>非作物</b>方块（瓜 / 自定义方块），挖掉即收、不补种。
+     *
+     * <p>入口和 {@link #start} 不同：那边要先问「这是不是成熟作物」，这边不需要 ——
+     * 瓜和自定义方块不是作物（没有 age、判不出成熟），直接按「挖掉」处理。
+     * 走同一个 {@link Stage#MINE} 阶段，但 {@code extraBreak} 为真，
+     * 挖到空气就算成功，且绝不再补种。
+     */
+    public static void startBreak(ClientWorld world, BlockPos pos) {
+        begin(pos);
+        if (world == null || target == null) {
+            stage = Stage.DONE;
+            return;
+        }
+        extraBreak = true;
+        // 已经被挖走了（别人挖的、或者本来就认错了）→ 直接算完成
+        if (world.getBlockState(target).isAir()) {
+            stage = Stage.DONE;
+            return;
+        }
+        mode = CropRegistry.HarvestMode.BREAK;
+        stage = Stage.MINE;
+    }
+
+    /** 两个入口（普通收割 / 额外挖掉）共用的字段初始化 */
+    private static void begin(BlockPos pos) {
+        target = pos == null ? null : pos.toImmutable();
+        cropBlock = null;
+        mode = CropRegistry.HarvestMode.SKIP;
+        extraBreak = false;
+        ticks = 0;
+        nextActionAt = 0;
+        harvested = false;
+        replanted = false;
+        picked = false;
+        planting = false;
+        planted = false;
+        missingSeed = false;
+        notice = null;
+    }
+
     /** 停手（退出世界、关掉开关时用） */
     public static void reset() {
         target = null;
         stage = Stage.DONE;
         cropBlock = null;
         mode = CropRegistry.HarvestMode.SKIP;
+        extraBreak = false;
         ticks = 0;
         nextActionAt = 0;
         harvested = false;
@@ -358,13 +399,22 @@ public final class CropHarvester {
     private static Stage mine(MinecraftClient client, ClientPlayerEntity player, AutoFarmConfig config) {
         BlockState before = client.world.getBlockState(target);
 
-        // 进来（或者上一 tick 之后）就已经不是成熟作物了：被别的玩家收走了，
-        // 或者本来就认错了 —— 两种情况都不该动它
-        if (CropRegistry.harvestMode(before) != CropRegistry.HarvestMode.BREAK) {
-            return Stage.DONE;
-        }
-        if (cropBlock == null) {
-            cropBlock = before.getBlock();
+        if (extraBreak) {
+            // 额外目标（瓜 / 自定义方块）：挖到空气就算成功，中途被挖走也直接算完成。
+            // 它没有「成熟」概念，所以判断标准就是「这一格还是不是那个方块」。
+            if (before.isAir()) {
+                harvested = true;
+                return Stage.DONE;
+            }
+        } else {
+            // 进来（或者上一 tick 之后）就已经不是成熟作物了：被别的玩家收走了，
+            // 或者本来就认错了 —— 两种情况都不该动它
+            if (CropRegistry.harvestMode(before) != CropRegistry.HarvestMode.BREAK) {
+                return Stage.DONE;
+            }
+            if (cropBlock == null) {
+                cropBlock = before.getBlock();
+            }
         }
 
         // 一边挖一边把准星压到作物上。步骤是「先对准、再挥镐子」——
@@ -380,6 +430,15 @@ public final class CropHarvester {
         if (++ticks > MINE_TIMEOUT_TICKS) {
             notice = "autofarm.notice.mine_timeout";
             return Stage.DONE;
+        }
+
+        if (extraBreak) {
+            // 挖掉了没有：这一格变空气了就算成功（瓜 / 自定义方块挖掉后不补种）
+            if (client.world.getBlockState(target).isAir()) {
+                harvested = true;
+                return Stage.DONE;
+            }
+            return Stage.MINE;
         }
 
         // 刚刚这一下把它挖掉了吗

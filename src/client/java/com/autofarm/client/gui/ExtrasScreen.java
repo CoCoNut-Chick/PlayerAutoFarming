@@ -1,6 +1,10 @@
 package com.autofarm.client.gui;
 
 import com.autofarm.client.config.AutoFarmConfig;
+import com.autofarm.client.scan.CropRegistry;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.tooltip.Tooltip;
@@ -9,6 +13,8 @@ import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.ArrayList;
@@ -26,7 +32,7 @@ import java.util.List;
  * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
  * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
  *
- * <h2>十段</h2>
+ * <h2>十一段</h2>
  * <ol>
  *   <li><b>战斗（高风险）</b> —— 自动打怪、目标范围、攻击间隔（输入框）、攻击距离、
  *       暴力模式与暴力程度。默认关闭、警示配色、开启与调高参数都要过风险确认屏，
@@ -40,7 +46,9 @@ import java.util.List;
  *   <li><b>生存自保</b> —— 危险撤退、受击反制、环境自救、掉线重连；</li>
  *   <li><b>工具维护</b> —— 工具耐久自动换新；</li>
  *   <li><b>容错与统计</b> —— 失败目标暂时拉黑、HUD 详细统计；</li>
- *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物。</li>
+ *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物；</li>
+ *   <li><b>瓜类与自定义作物</b> —— 瓜茎识别（收割茎旁自然长出的瓜）+ 自定义方块名单
+ *       （非矿透）。</li>
  * </ol>
  * 每个「功能开关」下面跟着的参数行（半径、周期、阈值……）都用循环按钮调，
  * 点一下换一档，不用滑块 —— 和主面板的「默认种子槽位」一个习惯。
@@ -119,8 +127,16 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int SEC_PICKUP_Y = SEC_MISC_Y + SEC_MISC_H + SECTION_GAP;
     private static final int SEC_PICKUP_H = ROW_FIRST + PICKUP_ROWS * ROW_GAP + 4;
 
+    /**
+     * 瓜类与自定义作物：瓜茎识别开关、添加注视方块、自定义方块列表 —— 3 行控件，
+     * 最后一行留给一句「非矿透」的自绘说明（见 renderContent）。
+     */
+    private static final int GOURD_ROWS = 4;
+    private static final int SEC_GOURD_Y = SEC_PICKUP_Y + SEC_PICKUP_H + SECTION_GAP;
+    private static final int SEC_GOURD_H = ROW_FIRST + GOURD_ROWS * ROW_GAP + 4;
+
     /** 最底下那句「默认全关」的总说明 */
-    private static final int NOTE_Y = SEC_PICKUP_Y + SEC_PICKUP_H + 8;
+    private static final int NOTE_Y = SEC_GOURD_Y + SEC_GOURD_H + 8;
     private static final int NOTE_H = 24;
 
     // ---------------- 循环档位（都含出厂默认值，见 AutoFarmConfig） ----------------
@@ -218,6 +234,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget reconnectButton;
     private ButtonWidget reconnectDelayButton;
     private ButtonWidget reconnectAttemptsButton;
+    private ButtonWidget melonHarvestButton;
+    private ButtonWidget addCustomBlockButton;
+    private ButtonWidget customBlocksButton;
 
     public ExtrasScreen(Screen parent, AutoFarmConfig sharedDraft) {
         super(parent, Text.translatable("autofarm.extras.title"));
@@ -552,6 +571,27 @@ public class ExtrasScreen extends ScrollPanelScreen {
         pickupDelayButton.setTooltip(Tooltip.of(Text.translatable("autofarm.pickup_delay.tip")));
         addScrolling(pickupDelayButton);
 
+        // ---- 瓜类与自定义作物 ----
+        // 瓜茎识别单独一个开关；自定义方块是「名单非空即生效」，没有布尔开关。
+        // 「添加」要过一道提醒屏（别加非作物方块、本功能不是矿透）。
+
+        this.melonHarvestButton = toggle("autofarm.option.melon_harvest",
+                draft.melonHarvest, value -> draft.melonHarvest = value,
+                "autofarm.melon_harvest.tip");
+        layout(melonHarvestButton, contentX, 0, fullW);
+
+        this.addCustomBlockButton = ButtonWidget.builder(
+                        Text.translatable("autofarm.option.add_custom_block"),
+                        b -> addLookedBlock())
+                .dimensions(subX, 0, subW, ROW_H).build();
+        addCustomBlockButton.setTooltip(Tooltip.of(Text.translatable("autofarm.add_custom_block.tip")));
+        addScrolling(addCustomBlockButton);
+
+        this.customBlocksButton = ButtonWidget.builder(customBlocksLabel(), b -> clearCustomBlocks())
+                .dimensions(subX, 0, subW, ROW_H).build();
+        customBlocksButton.setTooltip(Tooltip.of(Text.translatable("autofarm.custom_blocks.tip")));
+        addScrolling(customBlocksButton);
+
         // ---- 页脚 ----
         int btnW = (contentWidth - 8) / 3;
         addFooter(
@@ -779,6 +819,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.hit_reaction" -> draft.hitReactionEnabled;
             case "autofarm.option.self_rescue" -> draft.selfRescueEnabled;
             case "autofarm.option.auto_reconnect" -> draft.autoReconnectEnabled;
+            case "autofarm.option.melon_harvest" -> draft.melonHarvest;
             default -> false;
         };
     }
@@ -892,6 +933,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
         int pickup = originY + SEC_PICKUP_Y;
         setRowY(pickupDropsButton, pickup + ROW_FIRST);
         setRowY(pickupDelayButton, pickup + ROW_FIRST + ROW_GAP);
+
+        int gourd = originY + SEC_GOURD_Y;
+        setRowY(melonHarvestButton, gourd + ROW_FIRST);
+        setRowY(addCustomBlockButton, gourd + ROW_FIRST + ROW_GAP);
+        setRowY(customBlocksButton, gourd + ROW_FIRST + 2 * ROW_GAP);
     }
 
     // ================= 自绘 =================
@@ -932,6 +978,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
         drawSection(context, originY, SEC_PICKUP_Y, SEC_PICKUP_H);
         drawHeader(context, originY, SEC_PICKUP_Y, "autofarm.extras.section.pickup");
+
+        drawSection(context, originY, SEC_GOURD_Y, SEC_GOURD_H);
+        drawHeader(context, originY, SEC_GOURD_Y, "autofarm.extras.section.gourd");
+        // 最后一行自绘一句说明：只认茎旁的瓜和手动添加的方块，不是透视矿物的矿透
+        context.drawTextWithShadow(this.textRenderer,
+                Text.translatable("autofarm.gourd.hint"),
+                contentX + INDENT + 4, originY + SEC_GOURD_Y + ROW_FIRST + 3 * ROW_GAP + 5, COLOR_HINT);
 
         // 最底下那句总说明：强调「默认全关」，让第一次进来的人放心
         int shown = 0;
@@ -995,6 +1048,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.verboseHud = false;
         draft.pickupDroppedItems = false;
         draft.pickupDelaySeconds = 1;
+        draft.melonHarvest = false;
+        draft.customHarvestBlocks = new ArrayList<>();
         // 标签文字要跟着变，直接重建整页最省事
         rebuild();
     }
@@ -1052,6 +1107,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.verboseHud = old.verboseHud;
         draft.pickupDroppedItems = old.pickupDroppedItems;
         draft.pickupDelaySeconds = old.pickupDelaySeconds;
+        draft.melonHarvest = old.melonHarvest;
+        draft.customHarvestBlocks = new ArrayList<>(old.customHarvestBlocks);
         backToParent();
     }
 
@@ -1226,6 +1283,62 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 draft.reconnectMaxAttempts <= 0
                         ? Text.translatable("autofarm.reconnect_attempts.unlimited")
                         : Text.translatable("autofarm.value.count", draft.reconnectMaxAttempts));
+    }
+
+    /** 自定义方块名单那一行的标签：显示「已添加 N 个」 */
+    private Text customBlocksLabel() {
+        int n = draft.customHarvestBlocks == null ? 0 : draft.customHarvestBlocks.size();
+        return optionLabel("autofarm.option.custom_blocks",
+                Text.translatable("autofarm.value.count", n));
+    }
+
+    /** 把准星指向的那个方块加进自定义名单；加之前先弹一道提醒屏 */
+    private void addLookedBlock() {
+        if (this.client == null || this.client.world == null) {
+            return;
+        }
+        HitResult hit = this.client.crosshairTarget;
+        if (hit == null || hit.getType() != HitResult.Type.BLOCK) {
+            toast("autofarm.custom_block.no_target");
+            return;
+        }
+        BlockState state = this.client.world.getBlockState(((BlockHitResult) hit).getBlockPos());
+        Block block = state.getBlock();
+        if (block == Blocks.AIR) {
+            toast("autofarm.custom_block.no_target");
+            return;
+        }
+        String id = CropRegistry.idOf(block);
+        if (id == null) {
+            toast("autofarm.custom_block.no_target");
+            return;
+        }
+        if (draft.customHarvestBlocks == null) {
+            draft.customHarvestBlocks = new ArrayList<>();
+        }
+        if (draft.customHarvestBlocks.contains(id)) {
+            toast("autofarm.custom_block.duplicate");
+            return;
+        }
+        // 加之前提醒一句：只加农作物类方块，别加石头矿物（否则挖下来无法按作物存放）；
+        // 本功能也不是矿透。确认之后才真的写进名单。
+        confirmThen("autofarm.custom_block.warn.subtitle", () -> {
+            draft.customHarvestBlocks.add(id);
+            rebuild();
+        }, "autofarm.custom_block.warn.body1",
+                "autofarm.custom_block.warn.body2", "autofarm.custom_block.warn.body3");
+    }
+
+    /** 清空自定义名单；清空前也弹一道确认屏，免得误触一键清空 */
+    private void clearCustomBlocks() {
+        if (draft.customHarvestBlocks == null || draft.customHarvestBlocks.isEmpty()) {
+            toast("autofarm.custom_block.empty");
+            return;
+        }
+        confirmThen("autofarm.custom_block.clear.subtitle", () -> {
+            draft.customHarvestBlocks.clear();
+            rebuild();
+        }, "autofarm.custom_block.clear.body1");
     }
 
     /** 把玩家当前所在的那一格记成工作区域的一个点（圆形 = 中心，矩形 = 角点） */

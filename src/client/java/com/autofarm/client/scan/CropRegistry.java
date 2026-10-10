@@ -204,6 +204,17 @@ public final class CropRegistry {
     }
 
     /**
+     * 这一格是不是「瓜类方块」—— 西瓜块（{@link Blocks#MELON}）或南瓜块
+     * （{@link Blocks#PUMPKIN}）。瓜茎识别的收割目标。
+     *
+     * <p>注意它和 {@link #isHarvestCrop} 不是一回事：瓜茎是「作物」（茎会生长），
+     * 但瓜方块本身不带 age、不是作物 —— 它是<b>收成</b>，是瓜茎旁边该挖掉的那一格。
+     */
+    public static boolean isGourdBlock(Block block) {
+        return block == Blocks.MELON || block == Blocks.PUMPKIN;
+    }
+
+    /**
      * 这个掉落物算不算「农作物的产物」——附加功能「优先拾取掉落物」用它挑目标。
      *
      * <p>判据就两条，都不需要维护对照表：

@@ -2,10 +2,13 @@ package com.autofarm.client.scan;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.StemBlock;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -104,6 +107,64 @@ public final class CropScanner {
     public static List<BlockPos> findMatureCrops(ClientWorld world, BlockPos center, int radius) {
         return findMatureCrops(world, center, radius, DEFAULT_DOWN, DEFAULT_UP);
     }
+
+    // ================= 瓜茎识别 + 自定义方块 =================
+
+    /**
+     * 找「紧挨着瓜茎、由茎自然长出来的瓜方块」（西瓜块 / 南瓜块）。
+     *
+     * <p>遍历时盯的是<b>茎</b>（{@link StemBlock}，含连着瓜的 attached stem），
+     * 对每个茎看它东南西北四个水平方向，哪一格是瓜方块就把那一格收进结果。
+     * 这样「瓜是不是茎长出来的」这件事自然成立 —— 玩家自己摆在别处的瓜、
+     * 视野里的其它瓜，都不在结果里，因此这也不是「透视所有瓜」的矿透。
+     */
+    public static List<BlockPos> findGourdBlocks(ClientWorld world, BlockPos center, int radius,
+                                                 int down, int up) {
+        List<BlockPos> result = new ArrayList<>();
+        Set<BlockPos> seen = new HashSet<>();
+        forEachBlock(world, center, radius, down, up, (pos, state) -> {
+            if (!(state.getBlock() instanceof StemBlock)) {
+                return;
+            }
+            for (Direction dir : HORIZONTALS) {
+                BlockPos side = pos.offset(dir);
+                if (CropRegistry.isGourdBlock(world.getBlockState(side).getBlock())
+                        && seen.add(side.toImmutable())) {
+                    result.add(side.toImmutable());
+                }
+            }
+        });
+        return result;
+    }
+
+    /**
+     * 找「注册名在 ids 名单里」的方块（自定义要识别的东西）。
+     *
+     * <p>名单由玩家在面板上维护（见 {@code ExtrasScreen}）。这里只是逐格比对注册名，
+     * 命中就收进结果 —— 空气和认不出名字的方块一律跳过。
+     */
+    public static List<BlockPos> findCustomBlocks(ClientWorld world, BlockPos center, int radius,
+                                                  int down, int up, Set<String> ids) {
+        List<BlockPos> result = new ArrayList<>();
+        if (ids == null || ids.isEmpty()) {
+            return result;
+        }
+        forEachBlock(world, center, radius, down, up, (pos, state) -> {
+            if (state.isAir()) {
+                return;
+            }
+            String id = CropRegistry.idOf(state.getBlock());
+            if (id != null && ids.contains(id)) {
+                result.add(pos.toImmutable());
+            }
+        });
+        return result;
+    }
+
+    /** 瓜茎结瓜的四个水平方向 */
+    private static final Direction[] HORIZONTALS = {
+            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST
+    };
 
     // ================= 公共遍历 =================
 

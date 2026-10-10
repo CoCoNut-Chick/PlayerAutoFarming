@@ -115,6 +115,13 @@ public final class FarmTaskManager {
      */
     private static List<BlockPos> emptyFarmland = Collections.emptyList();
 
+    /**
+     * 额外收割目标：瓜茎旁的瓜（{@code melonHarvest}）+ 玩家自定义方块
+     * （{@code customHarvestBlocks}）。它们不是作物（没有 age、判不出成熟），
+     * 所以单独一个集合，收割时走「挖掉不补种」的 {@code CropHarvester.startBreak}。
+     */
+    private static final Set<BlockPos> extraTargets = new HashSet<>();
+
     private static long lastScanTick = Long.MIN_VALUE;
 
     /**
@@ -323,6 +330,11 @@ public final class FarmTaskManager {
         return emptyFarmland;
     }
 
+    /** 额外收割目标（瓜 / 自定义方块）。渲染层拿它画另一种颜色的框 */
+    public static List<BlockPos> getExtraTargets() {
+        return new ArrayList<>(extraTargets);
+    }
+
     /** 附近空耕地的格数（面板上显示，好知道它为什么要往空地跑） */
     public static int getFarmlandCount() {
         return emptyFarmland.size();
@@ -453,6 +465,7 @@ public final class FarmTaskManager {
         workTicks = 0;
         sessionTicks = 0;
         pickupTargets.clear();
+        extraTargets.clear();
         pickupWaitTicks = 0;
         pickupWaitPos = null;
         hesitatedAt = null;
@@ -515,6 +528,7 @@ public final class FarmTaskManager {
             humanizeDelay = 0;
             restRemaining = 0;
             pickupTargets.clear();
+            extraTargets.clear();
             pickupWaitTicks = 0;
             pickupWaitPos = null;
             hesitatedAt = null;
@@ -962,6 +976,26 @@ public final class FarmTaskManager {
             }
         }
 
+        // 附加功能「瓜茎识别 + 自定义方块」：找出瓜茎旁的瓜、以及玩家自定义的方块。
+        // 它们不是作物（没有 age、判不出成熟），所以不并进 matureCrops，而是单独一个
+        // 集合 —— 收割时走「挖掉不补种」那条路（见 drive 里的 startBreak）。
+        extraTargets.clear();
+        if (config.melonHarvest) {
+            extraTargets.addAll(CropScanner.findGourdBlocks(
+                    client.world, client.player.getBlockPos(),
+                    config.scanRadius, CropScanner.DEFAULT_DOWN, CropScanner.DEFAULT_UP));
+        }
+        if (config.customHarvestBlocks != null && !config.customHarvestBlocks.isEmpty()) {
+            Set<String> customIds = new HashSet<>(config.customHarvestBlocks);
+            extraTargets.addAll(CropScanner.findCustomBlocks(
+                    client.world, client.player.getBlockPos(),
+                    config.scanRadius, CropScanner.DEFAULT_DOWN, CropScanner.DEFAULT_UP, customIds));
+        }
+        if (config.workAreaEnabled && config.hasWorkArea() && !extraTargets.isEmpty()) {
+            extraTargets.removeIf(pos -> !config.insideWorkArea(
+                    pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
+        }
+
         // 附加功能「优先拾取掉落物」：顺手看看田里有没有掉在外面、还没进包的作物掉落物。
         // 得到的是「在哪一格」，下一步会排进路线最前面。
         pickupTargets.clear();
@@ -978,6 +1012,7 @@ public final class FarmTaskManager {
             Set<BlockPos> current = new HashSet<>(matureCrops);
             current.addAll(emptyFarmland);
             current.addAll(pickupTargets);
+            current.addAll(extraTargets);
             handled.retainAll(current);
         }
 
@@ -1046,6 +1081,14 @@ public final class FarmTaskManager {
         }
 
         for (BlockPos pos : matureCrops) {
+            if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
+                pending.add(pos);
+            }
+        }
+
+        // 附加功能「瓜茎识别 + 自定义方块」：额外目标（瓜 / 自定义方块）也排进同一条路线。
+        // 排在成熟作物之后 —— 先把正儿八经的庄稼收完，再挖瓜和自定义方块。
+        for (BlockPos pos : extraTargets) {
             if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
                 pending.add(pos);
             }
@@ -1202,7 +1245,12 @@ public final class FarmTaskManager {
             }
 
             supplyNotice = null; // 新的活开始了，上一次补给的那句话可以撤掉
-            CropHarvester.start(client.world, held, config);
+            // 额外目标（瓜 / 自定义方块）不是作物，走「挖掉不补种」；其余走正常收割
+            if (extraTargets.contains(held)) {
+                CropHarvester.startBreak(client.world, held);
+            } else {
+                CropHarvester.start(client.world, held, config);
+            }
         }
         boolean finished = CropHarvester.tick(client, config);
         state = CropHarvester.isReplanting() ? FarmState.REPLANTING : FarmState.HARVESTING;
@@ -1237,6 +1285,9 @@ public final class FarmTaskManager {
             }
             if (!emptyFarmland.isEmpty()) {
                 emptyFarmland.remove(held);
+            }
+            if (!extraTargets.isEmpty()) {
+                extraTargets.remove(held);
             }
             PathWalker.releaseTarget();
             drainResolved();
