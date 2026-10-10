@@ -441,5 +441,6 @@
   "autofarm.container.crop": "Crop Output (store harvest)",
   "autofarm.container.seed": "Seed Input (take seeds)",
   "autofarm.container.tool": "Tool Resupply (take tools / bone meal)",
-  "autofarm.container.junk": "Junk Storage (store non-crop items)"
+  "autofarm.container.junk": "Junk Storage (store non-crop items)",
+  "autofarm.notice.bone_meal_from_backpack": "Bone meal moved from backpack to hotbar"
 }

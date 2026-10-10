@@ -661,10 +661,15 @@ public final class CropHarvester {
             return Stage.DONE;
         }
 
-        // 快捷栏里得有骨粉。背包深处的不管 —— 那要占着一格快捷栏才能用，
-        // 不如把「没骨粉了」这件事交给「耗材自给」去补给点取一趟。
+        // 骨粉要先进快捷栏才能用。先看快捷栏，没有就深搜整个背包、找到换到快捷栏；
+        // 换手那一 tick 不撒，等下一 tick 确认手上真有骨粉。
         int slot = InventoryScanner.findBoneMealSlot(player);
         if (slot < 0) {
+            int deep = InventoryScanner.findBoneMealSlotDeep(player);
+            if (deep >= 0 && InventoryScanner.swapToHotbar(client, player, deep, 0)) {
+                notice = "autofarm.notice.bone_meal_from_backpack";
+                return Stage.BONE_MEAL;
+            }
             notice = "autofarm.notice.no_bone_meal";
             return Stage.DONE;
         }

@@ -365,6 +365,28 @@ public final class InventoryScanner {
     }
 
     /**
+     * <b>深搜整个背包</b>（快捷栏 9 格 + 主背包 27 格）找骨粉。
+     *
+     * <p>骨粉要在快捷栏里才能用（原版只用主手），所以这是「快捷栏没有骨粉」之后的
+     * 第二道防线：主背包深处还有骨粉时，把它找出来交给调用方换到快捷栏，
+     * 而不是像以前那样直接判「没骨粉」。
+     *
+     * @return 整个背包里都没有时返回 -1
+     */
+    public static int findBoneMealSlotDeep(ClientPlayerEntity player) {
+        if (player == null) {
+            return -1;
+        }
+        PlayerInventory inventory = player.getInventory();
+        for (int slot = 0; slot < INVENTORY_SLOTS; slot++) {
+            if (inventory.getStack(slot).isOf(Items.BONE_MEAL)) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    /**
      * 背包里还有几件「<b>还带一半以上余量</b>」的有耐久物品（工具、武器、鞘翅）。
      *
      * <p>给「备用工具自给」当判据用：只要还剩一把能用的，就不用去补给点跑这一趟。

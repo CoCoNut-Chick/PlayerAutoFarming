@@ -274,8 +274,11 @@ public final class BlockInteractor {
             return false;
         }
 
-        // 2. 把要用的东西换到主手
-        player.getInventory().selectedSlot = hotbarSlot;
+        // 2. 把要用的东西换到主手。走原版换位包（selectHotbarSlot），
+        // 而不是直接改 selectedSlot —— 那样本地换了、服务端还以为你拿着旧东西。
+        if (!InventoryScanner.selectHotbarSlot(client, player, hotbarSlot)) {
+            return false;
+        }
 
         // 3. 构造命中结果：击中的是那个邻居方块，击中的面朝向要放置的位置
         BlockPos neighbour = placePos.offset(attach);

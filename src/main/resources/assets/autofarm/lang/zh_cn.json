@@ -441,5 +441,6 @@
   "autofarm.container.crop": "农作物输出容器（存收获物）",
   "autofarm.container.seed": "种子输入容器（取种子）",
   "autofarm.container.tool": "工具补给容器（取工具 / 骨粉）",
-  "autofarm.container.junk": "杂物临时存储容器（存非农作物）"
+  "autofarm.container.junk": "杂物临时存储容器（存非农作物）",
+  "autofarm.notice.bone_meal_from_backpack": "骨粉催熟：骨粉已从背包换到快捷栏"
 }

@@ -1262,8 +1262,9 @@ public final class FarmTaskManager {
 
         // 附加功能「骨粉催熟」：排在所有收成目标之后。催熟是「有富余才做」的事，
         // 而收成放着不收会被别人抢走 —— 所以顺序上永远是收成优先。
-        // 手边没骨粉时干脆不排：跑过去也撒不了，白走一趟。
-        if (config.boneMealBoost && InventoryScanner.findBoneMealSlot(client.player) >= 0) {
+        // 手边没骨粉时干脆不排：跑过去也撒不了，白走一趟（深搜整个背包判断，
+        // 主背包深处有骨粉也算「有」，撒的时候再换到快捷栏）。
+        if (config.boneMealBoost && InventoryScanner.findBoneMealSlotDeep(client.player) >= 0) {
             for (BlockPos pos : boneMealTargets) {
                 if (!handled.contains(pos) && !failedUntil.containsKey(pos)) {
                     pending.add(pos);
