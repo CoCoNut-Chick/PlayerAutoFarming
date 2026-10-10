@@ -453,12 +453,18 @@ public final class CropHarvester {
                 }
             }
             case AutoFarmConfig.AIM_EFFICIENT -> {
-                // 效率：也转头，但只要视线已经命中这个方块就动手，不用压到正中心，
-                // 省掉每棵之间那一小段微调。转视角的几 tick 不计入超时。
-                BlockInteractor.aimAt(player, target);
-                if (!isCrosshairOn(client, target)
-                        || !BlockInteractor.isWithinReach(player, target, REACH)) {
+                // 效率：走路时 PathWalker 已经把头转向目标（落脚点就选在能看见目标的那一格），
+                // 所以到站后先<b>沿用这个朝向</b>，视线命中目标就直接挖，省掉 aimAt 那一小段微调；
+                // 没命中 —— 多半是目标前面隔着一株未成熟作物（或别的方块）挡住了视线 ——
+                // 才转正过去，绝不在视线被挡时盲挖。
+                if (!BlockInteractor.isWithinReach(player, target, REACH)) {
                     return Stage.MINE;
+                }
+                if (!isCrosshairOn(client, target)) {
+                    BlockInteractor.aimAt(player, target);
+                    if (!isCrosshairOn(client, target)) {
+                        return Stage.MINE; // 还在转，转的这几 tick 不计入超时
+                    }
                 }
             }
             default -> {
