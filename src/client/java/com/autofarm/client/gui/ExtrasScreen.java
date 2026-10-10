@@ -10,7 +10,6 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.hit.BlockHitResult;
@@ -21,39 +20,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 「附加功能」次级面板：一堆<b>默认全部关闭</b>的增强项，集中放在这里。
+ * 「附加功能」次级面板 —— 仿 Mod Menu 的<b>顶部大类 tab</b>布局。
  *
- * <h2>为什么要单开一页、而且默认全关</h2>
- * 主面板上的每一项都是「收割本身需要的东西」—— 扫描、寻路、补种、存放、安全。
- * 而这里放的是一层<b>可有可无的锦上添花</b>：有的改变动作节奏（拟人化、定时休息），
- * 有的改变安全边界（别的玩家靠近就停手），有的只是顺手多干点活
- * （工具快坏了换一把、失败的作物过会儿再试、HUD 多显示点数字）。
+ * <h2>为什么改成分类 tab</h2>
+ * 附加功能越加越多（现在十三个分区、几十个选项），一张无限长的滚动页要找半天。
+ * 改成顶部一排大类，点一下只看到那一类的几个开关，和 Mod Menu 的「分类 → 内容」一致。
  *
- * <p>它们共同的风险是「玩家没要，却擅自改变了行为」。所以默认**一个都不开**：
- * 不碰它们，模组的行为和以前一模一样。想用哪个再单独打开。
- *
- * <h2>十三段</h2>
+ * <p>五个大类：
  * <ol>
- *   <li><b>战斗（高风险）</b> —— 自动打怪、目标范围、攻击间隔（输入框）、攻击距离、
- *       暴力模式与暴力程度。默认关闭、警示配色、开启与调高参数都要过风险确认屏，
- *       而且必须先打开主面板的「自动收割」总开关；</li>
- *   <li><b>安全与隐蔽</b> —— 玩家接近停机、拟人化节奏、定时随机休息；</li>
- *   <li><b>防踢模式</b> —— 一整套「把机器味抹掉」的措施，带四档强度；</li>
- *   <li><b>行为真实感</b> —— 危险反应延迟、空闲时环顾四周、仅在指定时段工作；</li>
- *   <li><b>工作范围</b> —— 圈定自己那块地（圆形或两点矩形），区域外的目标不碰，
- *       人走出区域会自动走回来；</li>
- *   <li><b>环境与作息</b> —— 仅白天 / 仅晴天，以及「连续工作到上限就收工」的疲劳档；</li>
- *   <li><b>生存自保</b> —— 危险撤退、受击反制、环境自救、掉线重连；</li>
- *   <li><b>工具维护</b> —— 工具耐久自动换新；</li>
- *   <li><b>容错与统计</b> —— 失败目标暂时拉黑、HUD 详细统计；</li>
- *   <li><b>掉落物</b> —— 优先拾取散落在田里的作物掉落物；</li>
- *   <li><b>瓜类与自定义作物</b> —— 瓜茎识别（收割茎旁自然长出的瓜）+ 自定义方块名单
- *       （非矿透）。</li>
- *   <li><b>资源自给</b> —— 骨粉催熟，以及骨粉 / 备用工具从补给点自取；</li>
- *   <li><b>交互便利</b> —— 音效通知、桌面通知（开始 / 停止 / 异常）。</li>
+ *   <li><b>战斗</b> —— 自动打怪（高风险，警示配色 + 风险确认屏）；</li>
+ *   <li><b>隐蔽</b> —— 玩家接近停机、防踢模式、行为真实感；</li>
+ *   <li><b>范围</b> —— 圈定工作区域、环境与作息；</li>
+ *   <li><b>生存</b> —— 危险撤退、受击反制、环境自救、掉线重连、工具维护、容错统计、掉落物；</li>
+ *   <li><b>资源</b> —— 瓜类与自定义作物、资源自给、交互便利。</li>
  * </ol>
- * 每个「功能开关」下面跟着的参数行（半径、周期、阈值……）都用循环按钮调，
- * 点一下换一档，不用滑块 —— 和主面板的「默认种子槽位」一个习惯。
  *
  * <h2>和主面板的关系</h2>
  * 老规矩：它编辑的是主面板递进来的<b>同一个草稿</b>。点「完成」回主面板，
@@ -61,6 +41,16 @@ import java.util.List;
  * 恢复成进来之前的样子，不碰草稿里的其他设置。
  */
 public class ExtrasScreen extends ScrollPanelScreen {
+
+    // ---------------- tab 定义 ----------------
+    private static final int TAB_COMBAT = 0;
+    private static final int TAB_STEALTH = 1;
+    private static final int TAB_AREA = 2;
+    private static final int TAB_SURVIVAL = 3;
+    private static final int TAB_RESOURCE = 4;
+    private static final int TAB_COUNT = 5;
+    /** 顶部 tab 栏的高度（相对内容区顶部） */
+    private static final int TAB_BAR_H = 24;
 
     // ---------------- 内容区布局（相对内容区顶部） ----------------
     /** 分区内第一行相对分区顶部的 y（让开标题那一行） */
@@ -73,87 +63,59 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int INDENT = 8;
     /** 高风险分区专用的警示色：标题与开关文字都用它 */
     private static final int COLOR_DANGER = 0xFFFF5555;
-
-    /** 攻击间隔行的左侧标签宽度 / 输入框宽度 —— 右侧那段留给「范围提示」文字 */
+    /** 攻击间隔行的左侧标签宽度 / 输入框宽度 */
     private static final int INTERVAL_LABEL_W = 60;
     private static final int INTERVAL_FIELD_W = 56;
 
-    /** 战斗分区：6 行（打怪 / 间隔 / 距离 / 目标 / 暴力 / 暴力程度）+ 底部两行警示 */
+    // ---- 战斗（tab 0）----
     private static final int COMBAT_ROWS = 6;
     private static final int COMBAT_WARN_H = 26;
-    private static final int SEC_COMBAT_Y = 0;
+    private static final int SEC_COMBAT_Y = TAB_BAR_H;
     private static final int SEC_COMBAT_H = ROW_FIRST + COMBAT_ROWS * ROW_GAP + COMBAT_WARN_H;
 
+    // ---- 隐蔽（tab 1）----
     private static final int STEALTH_ROWS = 6;
-    private static final int SEC_STEALTH_Y = SEC_COMBAT_H + SECTION_GAP;
+    private static final int SEC_STEALTH_Y = TAB_BAR_H;
     private static final int SEC_STEALTH_H = ROW_FIRST + STEALTH_ROWS * ROW_GAP + 4;
-
     private static final int ANTIKICK_ROWS = 2;
     private static final int SEC_ANTIKICK_Y = SEC_STEALTH_Y + SEC_STEALTH_H + SECTION_GAP;
     private static final int SEC_ANTIKICK_H = ROW_FIRST + ANTIKICK_ROWS * ROW_GAP + 4;
-
     private static final int BEHAVIOR_ROWS = 6;
     private static final int SEC_BEHAVIOR_Y = SEC_ANTIKICK_Y + SEC_ANTIKICK_H + SECTION_GAP;
     private static final int SEC_BEHAVIOR_H = ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 4;
 
-    /**
-     * 工作范围：开关、方式、参数（圆形 = 半径 + 记录中心；矩形 = 记录 A + 记录 B），
-     * 最后一行留给一句自绘说明。两种方式的参数行共占同样两行，用显隐切换。
-     */
+    // ---- 范围（tab 2）----
     private static final int WORKAREA_ROWS = 5;
-    private static final int SEC_WORKAREA_Y = SEC_BEHAVIOR_Y + SEC_BEHAVIOR_H + SECTION_GAP;
+    private static final int SEC_WORKAREA_Y = TAB_BAR_H;
     private static final int SEC_WORKAREA_H = ROW_FIRST + WORKAREA_ROWS * ROW_GAP + 4;
-
-    /** 环境与作息：仅白天、仅晴天、疲劳收工 + 两个参数行 */
     private static final int ENV_ROWS = 5;
     private static final int SEC_ENV_Y = SEC_WORKAREA_Y + SEC_WORKAREA_H + SECTION_GAP;
     private static final int SEC_ENV_H = ROW_FIRST + ENV_ROWS * ROW_GAP + 4;
 
-    /**
-     * 生存自保（C 组）：危险撤退（开关 + 血量 + 距离）、受击反制（开关 + 时长）、
-     * 环境自救（开关）、掉线重连（开关 + 延迟 + 次数）—— 共 9 行。
-     */
+    // ---- 生存（tab 3）----
     private static final int SURVIVAL_ROWS = 9;
-    private static final int SEC_SURVIVAL_Y = SEC_ENV_Y + SEC_ENV_H + SECTION_GAP;
+    private static final int SEC_SURVIVAL_Y = TAB_BAR_H;
     private static final int SEC_SURVIVAL_H = ROW_FIRST + SURVIVAL_ROWS * ROW_GAP + 4;
-
     private static final int TOOL_ROWS = 2;
     private static final int SEC_TOOL_Y = SEC_SURVIVAL_Y + SEC_SURVIVAL_H + SECTION_GAP;
     private static final int SEC_TOOL_H = ROW_FIRST + TOOL_ROWS * ROW_GAP + 4;
-
     private static final int MISC_ROWS = 3;
     private static final int SEC_MISC_Y = SEC_TOOL_Y + SEC_TOOL_H + SECTION_GAP;
     private static final int SEC_MISC_H = ROW_FIRST + MISC_ROWS * ROW_GAP + 4;
-
     private static final int PICKUP_ROWS = 2;
     private static final int SEC_PICKUP_Y = SEC_MISC_Y + SEC_MISC_H + SECTION_GAP;
     private static final int SEC_PICKUP_H = ROW_FIRST + PICKUP_ROWS * ROW_GAP + 4;
 
-    /**
-     * 瓜类与自定义作物：瓜茎识别开关、添加注视方块、自定义方块列表 —— 3 行控件，
-     * 最后一行留给一句「非矿透」的自绘说明（见 renderContent）。
-     */
+    // ---- 资源（tab 4）----
     private static final int GOURD_ROWS = 4;
-    private static final int SEC_GOURD_Y = SEC_PICKUP_Y + SEC_PICKUP_H + SECTION_GAP;
+    private static final int SEC_GOURD_Y = TAB_BAR_H;
     private static final int SEC_GOURD_H = ROW_FIRST + GOURD_ROWS * ROW_GAP + 4;
-
-    /**
-     * 资源自给（D 组）：骨粉催熟（开关 + 单株上限）、耗材自给（开关 + 骨粉下限）、
-     * 备用工具自给（开关）—— 共 5 行。两个参数行都是各自开关的子项，靠
-     * {@link #relayout()} 里的 visible 切换。
-     */
     private static final int SUPPLY_ROWS = 5;
     private static final int SEC_SUPPLY_Y = SEC_GOURD_Y + SEC_GOURD_H + SECTION_GAP;
     private static final int SEC_SUPPLY_H = ROW_FIRST + SUPPLY_ROWS * ROW_GAP + 4;
-
-    /** 交互便利（F 组）：音效通知、桌面通知 —— 共 2 行 */
     private static final int NOTIFY_ROWS = 2;
     private static final int SEC_NOTIFY_Y = SEC_SUPPLY_Y + SEC_SUPPLY_H + SECTION_GAP;
     private static final int SEC_NOTIFY_H = ROW_FIRST + NOTIFY_ROWS * ROW_GAP + 4;
-
-    /** 最底下那句「默认全关」的总说明 */
-    private static final int NOTE_Y = SEC_NOTIFY_Y + SEC_NOTIFY_H + 8;
-    private static final int NOTE_H = 24;
 
     // ---------------- 循环档位（都含出厂默认值，见 AutoFarmConfig） ----------------
     private static final int[] RADIUS_CHOICES = {8, 12, 16, 24, 32};
@@ -162,37 +124,21 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] DURABILITY_CHOICES = {5, 10, 15, 20, 30};
     private static final int[] COOLDOWN_CHOICES = {5, 10, 15, 30, 60};
     private static final int[] PICKUP_DELAY_CHOICES = {1, 2, 3, 5};
-    /** 战斗：攻击距离（格）。超过原版 3.0 的档位要先过风险确认屏才生效 */
     private static final double[] ATTACK_RANGE_CHOICES = {2.5, 2.9, 3.5, 4.5, 6.0};
-    /** 战斗：暴力程度档位（和 AutoFarmConfig 的 VIOLENCE_* 常量一致） */
     private static final int[] VIOLENCE_CHOICES = {0, 1, 2};
-    /** 防踢档位：0 = 关闭、1 = 轻度、2 = 中度、3 = 强力（和 Humanizer 的常量一致） */
     private static final int[] ANTIKICK_LEVEL_CHOICES = {0, 1, 2, 3};
-    /** 行为真实感：反应延迟时长（tick，1 秒 = 20 tick） */
     private static final int[] REACTION_CHOICES = {4, 10, 20, 30};
-    /** 工作时段：0~23 整点（循环按钮在这 24 档之间轮换） */
     private static final int[] HOUR_CHOICES = buildHours();
-    /** 工作范围：范围方式的档位（0 = 圆形、1 = 两点矩形，和 AutoFarmConfig 的常量一致） */
     private static final int[] AREA_MODE_CHOICES = {0, 1};
-    /** 工作范围：半径档位（格） */
     private static final int[] WORK_AREA_RADIUS_CHOICES = {8, 12, 16, 24, 32, 48};
-    /** 疲劳收工：连续工作上限的档位（分钟） */
     private static final int[] FATIGUE_WORK_CHOICES = {15, 30, 60, 120, 240};
-    /** 疲劳收工：休息时长的档位（分钟）；0 = 手动恢复 */
     private static final int[] FATIGUE_REST_CHOICES = {0, 5, 10, 15, 30, 60};
-    /** 生存自保：撤退血量门槛（心） */
     private static final int[] RETREAT_HEALTH_CHOICES = {3, 4, 5, 6, 8, 10};
-    /** 生存自保：撤退距离（格） */
     private static final int[] RETREAT_DISTANCE_CHOICES = {8, 12, 16, 24, 32};
-    /** 生存自保：受击反制时长（秒） */
     private static final int[] HIT_REACTION_CHOICES = {1, 2, 3, 5};
-    /** 生存自保：掉线后重连延迟（秒） */
     private static final int[] RECONNECT_DELAY_CHOICES = {5, 10, 20, 30, 60};
-    /** 生存自保：最多重连次数；0 = 不限 */
     private static final int[] RECONNECT_ATTEMPT_CHOICES = {0, 3, 5, 10, 20};
-    /** 资源自给：同一株作物最多撒几次骨粉 */
     private static final int[] BONE_MEAL_LIMIT_CHOICES = {1, 2, 4, 6, 10};
-    /** 资源自给：骨粉少于多少个就去补给点补一趟 */
     private static final int[] BONE_MEAL_THRESHOLD_CHOICES = {8, 16, 32, 64};
 
     private static int[] buildHours() {
@@ -206,6 +152,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private final AutoFarmConfig draft;
     /** 进来时的快照，「取消」时用它还原附加功能这几项 */
     private final AutoFarmConfig old;
+
+    private int currentTab = TAB_COMBAT;
+    private ButtonWidget[] tabButtons = new ButtonWidget[TAB_COUNT];
 
     private ButtonWidget combatButton;
     private TextFieldWidget attackIntervalField;
@@ -273,32 +222,91 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
     @Override
     protected int contentHeight() {
-        return NOTE_Y + NOTE_H;
+        return switch (currentTab) {
+            case TAB_COMBAT -> SEC_COMBAT_Y + SEC_COMBAT_H + 8;
+            case TAB_STEALTH -> SEC_BEHAVIOR_Y + SEC_BEHAVIOR_H + 8;
+            case TAB_AREA -> SEC_ENV_Y + SEC_ENV_H + 8;
+            case TAB_SURVIVAL -> SEC_PICKUP_Y + SEC_PICKUP_H + 8;
+            case TAB_RESOURCE -> SEC_NOTIFY_Y + SEC_NOTIFY_H + 8;
+            default -> TAB_BAR_H + 8;
+        };
     }
 
     // ================= 建控件 =================
 
     @Override
     protected void buildContent() {
+        buildTabBar();
+        switch (currentTab) {
+            case TAB_COMBAT -> buildCombatTab();
+            case TAB_STEALTH -> buildStealthTab();
+            case TAB_AREA -> buildAreaTab();
+            case TAB_SURVIVAL -> buildSurvivalTab();
+            case TAB_RESOURCE -> buildResourceTab();
+            default -> {
+            }
+        }
+
+        int btnW = (contentWidth - 8) / 3;
+        addFooter(
+                ButtonWidget.builder(Text.translatable("autofarm.extras.reset"), b -> resetAllOff())
+                        .dimensions(contentX, 0, btnW, ROW_H).build(),
+                ButtonWidget.builder(Text.translatable("autofarm.button.cancel"), b -> onCancel())
+                        .dimensions(contentX + btnW + 4, 0, btnW, ROW_H).build(),
+                ButtonWidget.builder(Text.translatable("autofarm.highlight.done"), b -> backToParent())
+                        .dimensions(contentX + 2 * (btnW + 4), 0, btnW, ROW_H).build()
+        );
+    }
+
+    /** 顶部那条大类 tab 栏 */
+    private void buildTabBar() {
+        int tabW = (contentWidth - (TAB_COUNT - 1) * 2) / TAB_COUNT;
+        for (int i = 0; i < TAB_COUNT; i++) {
+            final int tab = i;
+            ButtonWidget btn = ButtonWidget.builder(tabLabel(tab), b -> switchTab(tab))
+                    .dimensions(contentX + i * (tabW + 2), 0, tabW, ROW_H).build();
+            addScrolling(btn);
+            tabButtons[i] = btn;
+        }
+    }
+
+    private void switchTab(int tab) {
+        if (tab == currentTab) {
+            return;
+        }
+        // 切 tab = 换一页：重建内容（滚动回到顶部是合理的），草稿原样保留
+        if (this.client != null) {
+            ExtrasScreen next = new ExtrasScreen(this.parent, draft);
+            next.currentTab = tab;
+            this.client.setScreen(next);
+        }
+    }
+
+    private static Text tabLabel(int tab) {
+        return Text.translatable("autofarm.extras.tab." + switch (tab) {
+            case TAB_STEALTH -> "stealth";
+            case TAB_AREA -> "area";
+            case TAB_SURVIVAL -> "survival";
+            case TAB_RESOURCE -> "resource";
+            default -> "combat";
+        });
+    }
+
+    // ---- 各 tab 的控件创建 ----
+
+    private void buildCombatTab() {
         int fullW = contentWidth;
         int subX = contentX + INDENT;
         int subW = contentWidth - INDENT;
-
-        // ---- 战斗（高风险）----
-        // 全模组唯一会「替玩家出手攻击」的一组，所以从里到外都跟别的分区不一样：
-        // 标题和开关文字标红、打开要先过一道风险确认屏、暴力模式还要等主子项开了才出现。
 
         this.combatButton = dangerToggle("autofarm.option.auto_attack",
                 draft.autoAttack, value -> draft.autoAttack = value,
                 "autofarm.auto_attack.tip");
         layout(combatButton, contentX, 0, fullW);
 
-        // 攻击间隔：一个填空（不是循环按钮）。选项名画在左边，输入框摆中间，
-        // 右边留给「范围 50–5000 毫秒」那段提示 —— 见 drawCombatExtras。
         this.attackIntervalField = intervalField(contentX + INTERVAL_LABEL_W);
         addScrolling(attackIntervalField);
 
-        // 攻击距离：循环按钮，但超过原版 3.0 的档位要先过风险确认屏（onRangeClicked）
         this.attackRangeButton = ButtonWidget.builder(attackRangeLabel(), b -> onRangeClicked())
                 .dimensions(subX, 0, subW, ROW_H).build();
         attackRangeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.attack_range.tip")));
@@ -311,19 +319,21 @@ public class ExtrasScreen extends ScrollPanelScreen {
         attackTargetButton.setTooltip(Tooltip.of(Text.translatable("autofarm.attack_target.tip")));
         addScrolling(attackTargetButton);
 
-        // 二级开关：主子项关着时它整个不显示（原位留一行灰字），打开之后才「弹」出来
         this.violentButton = dangerToggle("autofarm.option.auto_attack_violent",
                 draft.autoAttackViolent, value -> draft.autoAttackViolent = value,
                 "autofarm.auto_attack_violent.tip");
         layout(violentButton, subX, 0, subW);
 
-        // 二级参数：暴力程度。只在「暴力模式」打开后才出现，提高档位要过确认屏
         this.violenceLevelButton = ButtonWidget.builder(violenceLabel(), b -> onViolenceClicked())
                 .dimensions(subX, 0, subW, ROW_H).build();
         violenceLevelButton.setTooltip(Tooltip.of(Text.translatable("autofarm.attack_violence.tip")));
         addScrolling(violenceLevelButton);
+    }
 
-        // ---- 安全与隐蔽 ----
+    private void buildStealthTab() {
+        int fullW = contentWidth;
+        int subX = contentX + INDENT;
+        int subW = contentWidth - INDENT;
 
         this.pausePlayerButton = toggle("autofarm.option.pause_player",
                 draft.pauseWhenPlayerNear, value -> draft.pauseWhenPlayerNear = value,
@@ -361,8 +371,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         restDurationButton.setTooltip(Tooltip.of(Text.translatable("autofarm.rest_duration.tip")));
         addScrolling(restDurationButton);
 
-        // ---- 防踢模式 ----
-
         this.antiKickButton = toggle("autofarm.option.antikick",
                 draft.antiKickMode, value -> draft.antiKickMode = value,
                 "autofarm.antikick.tip");
@@ -374,8 +382,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         antiKickLevelButton.setTooltip(Tooltip.of(Text.translatable("autofarm.antikick_level.tip")));
         addScrolling(antiKickLevelButton);
-
-        // ---- 行为真实感 ----
 
         this.reactionDelayButton = toggle("autofarm.option.reaction_delay",
                 draft.reactionDelay, value -> draft.reactionDelay = value,
@@ -412,11 +418,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         scheduleEndButton.setTooltip(Tooltip.of(Text.translatable("autofarm.schedule_end.tip")));
         addScrolling(scheduleEndButton);
+    }
 
-        // ---- 工作范围 ----
-        // 两种圈法：圆形（中心 + 半径）和两点矩形（角点 A + 角点 B）。
-        // 两种方式的参数行共用同样两行，靠 relayout() 里的 visible 切换 ——
-        // 这样分区的行数不随方式变，滚动手感稳定。
+    private void buildAreaTab() {
+        int fullW = contentWidth;
+        int subX = contentX + INDENT;
+        int subW = contentWidth - INDENT;
 
         this.workAreaButton = toggle("autofarm.option.work_area",
                 draft.workAreaEnabled, value -> draft.workAreaEnabled = value,
@@ -425,8 +432,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
         this.workAreaModeButton = ButtonWidget.builder(workAreaModeLabel(), b -> {
             draft.workAreaMode = nextChoice(AREA_MODE_CHOICES, draft.workAreaMode);
-            // 换方式要重建整页：半径行和角点行的显隐跟着变，标签也得重算
-            rebuild();
+            b.setMessage(workAreaModeLabel());
+            // 半径/角点行的显隐和标签跟着变，但<b>不重建整页</b>（否则滚动位置会丢回顶部）
+            workAreaRadiusButton.setMessage(workAreaRadiusLabel());
+            workAreaCenterButton.setMessage(workAreaCenterLabel());
+            workAreaCornerAButton.setMessage(workAreaCornerALabel());
+            workAreaCornerBButton.setMessage(workAreaCornerBLabel());
+            relayout();
         }).dimensions(subX, 0, subW, ROW_H).build();
         workAreaModeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.work_area_mode.tip")));
         addScrolling(workAreaModeButton);
@@ -462,8 +474,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         workAreaCornerBButton.setTooltip(Tooltip.of(Text.translatable("autofarm.work_area.corner_b.tip")));
         addScrolling(workAreaCornerBButton);
 
-        // ---- 环境与作息 ----
-
         this.daylightButton = toggle("autofarm.option.daylight",
                 draft.workDaylightOnly, value -> draft.workDaylightOnly = value,
                 "autofarm.daylight.tip");
@@ -492,9 +502,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         fatigueRestButton.setTooltip(Tooltip.of(Text.translatable("autofarm.fatigue_rest.tip")));
         addScrolling(fatigueRestButton);
+    }
 
-        // ---- 生存自保（C 组）----
-        // 这一组管的是「别把号玩没了」：危险撤退、受击反制、环境自救、掉线重连。
+    private void buildSurvivalTab() {
+        int fullW = contentWidth;
+        int subX = contentX + INDENT;
+        int subW = contentWidth - INDENT;
 
         this.retreatButton = toggle("autofarm.option.retreat",
                 draft.retreatEnabled, value -> draft.retreatEnabled = value,
@@ -551,8 +564,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         reconnectAttemptsButton.setTooltip(Tooltip.of(Text.translatable("autofarm.reconnect_attempts.tip")));
         addScrolling(reconnectAttemptsButton);
 
-        // ---- 工具维护 ----
-
         this.replaceToolButton = toggle("autofarm.option.replace_tool",
                 draft.autoReplaceTool, value -> draft.autoReplaceTool = value,
                 "autofarm.replace_tool.tip");
@@ -564,8 +575,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         durabilityButton.setTooltip(Tooltip.of(Text.translatable("autofarm.durability.tip")));
         addScrolling(durabilityButton);
-
-        // ---- 容错与统计 ----
 
         this.failureCooldownButton = toggle("autofarm.option.failure_cooldown",
                 draft.failureCooldown, value -> draft.failureCooldown = value,
@@ -584,8 +593,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.verbose_hud.tip");
         layout(verboseHudButton, contentX, 0, fullW);
 
-        // ---- 掉落物 ----
-
         this.pickupDropsButton = toggle("autofarm.option.pickup_drops",
                 draft.pickupDroppedItems, value -> draft.pickupDroppedItems = value,
                 "autofarm.pickup_drops.tip");
@@ -597,10 +604,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         pickupDelayButton.setTooltip(Tooltip.of(Text.translatable("autofarm.pickup_delay.tip")));
         addScrolling(pickupDelayButton);
+    }
 
-        // ---- 瓜类与自定义作物 ----
-        // 瓜茎识别单独一个开关；自定义方块是「名单非空即生效」，没有布尔开关。
-        // 「添加」要过一道提醒屏（别加非作物方块、本功能不是矿透）。
+    private void buildResourceTab() {
+        int fullW = contentWidth;
+        int subX = contentX + INDENT;
+        int subW = contentWidth - INDENT;
 
         this.melonHarvestButton = toggle("autofarm.option.melon_harvest",
                 draft.melonHarvest, value -> draft.melonHarvest = value,
@@ -618,10 +627,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 .dimensions(subX, 0, subW, ROW_H).build();
         customBlocksButton.setTooltip(Tooltip.of(Text.translatable("autofarm.custom_blocks.tip")));
         addScrolling(customBlocksButton);
-
-        // ---- 资源自给 ----
-        // 让模组把骨粉、备用工具这两样也自己接上：骨粉催熟 / 耗材自给 / 备用工具自给。
-        // 两个参数行分别是各自开关的子项，靠 relayout() 切换显隐。
 
         this.boneMealBoostButton = toggle("autofarm.option.bone_meal",
                 draft.boneMealBoost, value -> draft.boneMealBoost = value,
@@ -653,8 +658,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.auto_fetch_tool.tip");
         layout(autoFetchToolButton, contentX, 0, fullW);
 
-        // ---- 交互便利（F 组）----
-
         this.notifySoundsButton = toggle("autofarm.option.notify_sounds",
                 draft.notifySounds, value -> draft.notifySounds = value,
                 "autofarm.notify_sounds.tip");
@@ -664,17 +667,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 draft.notifyToasts, value -> draft.notifyToasts = value,
                 "autofarm.notify_toasts.tip");
         layout(notifyToastsButton, contentX, 0, fullW);
-
-        // ---- 页脚 ----
-        int btnW = (contentWidth - 8) / 3;
-        addFooter(
-                ButtonWidget.builder(Text.translatable("autofarm.extras.reset"), b -> resetAllOff())
-                        .dimensions(contentX, 0, btnW, ROW_H).build(),
-                ButtonWidget.builder(Text.translatable("autofarm.button.cancel"), b -> onCancel())
-                        .dimensions(contentX + btnW + 4, 0, btnW, ROW_H).build(),
-                ButtonWidget.builder(Text.translatable("autofarm.highlight.done"), b -> backToParent())
-                        .dimensions(contentX + 2 * (btnW + 4), 0, btnW, ROW_H).build()
-        );
     }
 
     /** 一个开关按钮的样板：点一下翻转，标签跟着变 */
@@ -689,18 +681,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
         return button;
     }
 
-    /**
-     * 高风险开关：文字标红，而且「打开」这一步被拆成两次 ——
-     * 点开关只负责弹风险确认屏，真正写回草稿要等那边点过「确认」。
-     * 「关闭」不设门槛：关掉一个危险功能不需要再被劝一次。
-     */
+    /** 高风险开关：文字标红，打开要先过风险确认屏 */
     private ButtonWidget dangerToggle(String optionKey, boolean value,
                                       java.util.function.Consumer<Boolean> setter, String tipKey) {
         ButtonWidget button = ButtonWidget.builder(dangerLabel(optionKey, value), b -> {
             if (currentToggle(optionKey)) {
                 setter.accept(false);
-                // 自动打怪关掉时，它的二级项（暴力模式 / 暴力程度）也一并收掉，
-                // 免得留下一个「主子项关着、暴力标记还亮着」的状态
                 if ("autofarm.option.auto_attack".equals(optionKey)) {
                     draft.autoAttackViolent = false;
                     draft.attackViolence = AutoFarmConfig.VIOLENCE_LIGHT;
@@ -708,13 +694,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 b.setMessage(dangerLabel(optionKey, false));
                 return;
             }
-            // 「自动打怪」不能脱离「自动收割」总开关单独开启 —— 否则就成了纯粹的作弊，
-            // 与这个模组的定位不符（关掉则永远允许，不设门槛）。
             if ("autofarm.option.auto_attack".equals(optionKey) && !draft.enabled) {
                 toast("autofarm.combat.warn.master_off");
                 return;
             }
-            // 打开：先不落实，交给确认屏；确认之后那边会重建这一页
             openDangerConfirm(setter);
         }).dimensions(contentX, 0, contentWidth, ROW_H).build();
         button.setTooltip(Tooltip.of(Text.translatable(tipKey)));
@@ -730,7 +713,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
         field.setText(Integer.toString(draft.attackIntervalMs));
         field.setChangedListener(text -> {
             if (text == null || text.isEmpty()) {
-                return; // 清空时保持原值，等下一个合法数字
+                return;
             }
             try {
                 draft.attackIntervalMs = Integer.parseInt(text);
@@ -742,7 +725,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         return field;
     }
 
-    /** 攻击距离：循环下一档；超过原版交互距离时先弹风险确认屏，确认后才写回 */
     private void onRangeClicked() {
         double next = nextChoice(ATTACK_RANGE_CHOICES, draft.attackRange);
         if (next > AutoFarmConfig.ATTACK_RANGE_VANILLA) {
@@ -756,7 +738,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         attackRangeButton.setMessage(attackRangeLabel());
     }
 
-    /** 暴力程度：循环下一档；提高档位时先弹确认屏（降低不需要） */
     private void onViolenceClicked() {
         int next = nextChoice(VIOLENCE_CHOICES, draft.attackViolence);
         if (next > draft.attackViolence) {
@@ -770,7 +751,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         violenceLevelButton.setMessage(violenceLabel());
     }
 
-    /** 弹一块自定义文案的风险确认屏；点确认后执行 apply（通常顺带重建本页） */
     private void confirmThen(String subtitleKey, Runnable apply, String... bodyKeys) {
         if (this.client == null) {
             return;
@@ -779,20 +759,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.danger.title", subtitleKey, bodyKeys));
     }
 
-    /** 重建本页（草稿原样带过去）。用于标签文字变了、或者某几行要显隐切换的时候 */
+    /** 重建本页（草稿原样带过去）。用于需要「整页重排」的动作 */
     private void rebuild() {
         if (this.client != null) {
             this.client.setScreen(new ExtrasScreen(this.parent, draft));
         }
     }
 
-    /**
-     * 战斗分区底部的警示行（最多显示两条）。
-     *
-     * <p>三条触发条件：总开关没开（这时打怪根本不会生效）、出手间隔过低、
-     * 攻击距离超过原版。它们都画成红色，作为「风险确认屏」之外的持续提醒 ——
-     * 确认屏只在你动手改参数时出现，而这几行只要参数处在危险区间就一直亮着。
-     */
     private List<Text> combatWarnings() {
         List<Text> out = new ArrayList<>();
         if (!draft.enabled) {
@@ -809,7 +782,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         return out;
     }
 
-    /** 弹出风险确认屏；确认后写回草稿并重建本页（暴力行的显隐要跟着变） */
     private void openDangerConfirm(java.util.function.Consumer<Boolean> setter) {
         if (this.client == null) {
             return;
@@ -820,22 +792,15 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }));
     }
 
-    /** 高风险分区的小标题：用警示色而不是通用标题色 */
     private void drawDangerHeader(DrawContext context, int originY, int relY) {
         context.drawTextWithShadow(this.textRenderer,
                 Text.translatable("autofarm.extras.section.combat"),
                 contentX + 6, originY + relY + 4, COLOR_DANGER);
     }
 
-    /**
-     * 战斗分区里那几段「不属于按钮」的自绘内容：
-     * 攻击间隔左侧的选项名与右侧的范围提示、暴力行未解锁时的灰字、
-     * 以及底部的红色警示行。
-     */
     private void drawCombatExtras(DrawContext context, int originY) {
         int combat = originY + SEC_COMBAT_Y;
 
-        // 攻击间隔：左边写选项名（输入框摆在中段，见 buildContent），右边写范围提示
         int intervalRow = combat + ROW_FIRST + ROW_GAP;
         context.drawTextWithShadow(this.textRenderer,
                 Text.translatable("autofarm.option.attack_interval"),
@@ -845,14 +810,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
                         AutoFarmConfig.ATTACK_INTERVAL_MIN_MS, AutoFarmConfig.ATTACK_INTERVAL_MAX_MS),
                 contentX + INTERVAL_LABEL_W + INTERVAL_FIELD_W + 8, intervalRow + 5, COLOR_HINT);
 
-        // 暴力开关 / 暴力程度没解锁：把接下来两行的位置留给一句灰字说明
         if (!draft.autoAttack) {
             context.drawTextWithShadow(this.textRenderer,
                     Text.translatable("autofarm.extras.violent_locked"),
                     contentX + INDENT + 4, combat + ROW_FIRST + 4 * ROW_GAP + 5, COLOR_HINT);
         }
 
-        // 底部警示：总开关没开 / 参数进入危险区间时标红（最多两条）
         List<Text> warnings = combatWarnings();
         int warnY = combat + ROW_FIRST + COMBAT_ROWS * ROW_GAP + 2;
         for (int i = 0; i < warnings.size() && i < 2; i++) {
@@ -861,14 +824,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }
     }
 
-    /** 「选项：开/关」，但选项名染成红色 */
     private static Text dangerLabel(String optionKey, boolean value) {
         return Text.translatable("autofarm.toggle",
                 Text.translatable(optionKey).formatted(Formatting.RED),
                 Text.translatable(value ? "autofarm.on" : "autofarm.off"));
     }
 
-    /** 从 draft 里读回当前开关值 —— 用来做「翻转」，保证和草稿永远一致 */
     private boolean currentToggle(String optionKey) {
         return switch (optionKey) {
             case "autofarm.option.auto_attack" -> draft.autoAttack;
@@ -909,23 +870,16 @@ public class ExtrasScreen extends ScrollPanelScreen {
         addScrolling(widget);
     }
 
-    /**
-     * 覆写：在通用的「滚出可视区就隐藏」之上，再叠一条本页自己的规则 ——
-     * 暴力模式是二级开关，主子项关着时它整个不该出现（原位留一行灰字说明）。
-     */
     @Override
     protected void relayout() {
         super.relayout();
         if (violentButton != null) {
             violentButton.visible = violentButton.visible && draft.autoAttack;
         }
-        // 暴力程度是「暴力模式」的子项：暴力模式没开时它也不该出现
         if (violenceLevelButton != null) {
             violenceLevelButton.visible = violenceLevelButton.visible
                     && draft.autoAttack && draft.autoAttackViolent;
         }
-        // 工作范围的两种圈法共用同样两行：圆形显示「半径 / 记录中心」，
-        // 矩形显示「记录角点 A / 记录角点 B」，同一时刻只让一套露出来
         boolean box = draft.workAreaMode == AutoFarmConfig.AREA_MODE_BOX;
         if (workAreaRadiusButton != null) {
             workAreaRadiusButton.visible = workAreaRadiusButton.visible && !box;
@@ -939,7 +893,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         if (workAreaCornerBButton != null) {
             workAreaCornerBButton.visible = workAreaCornerBButton.visible && box;
         }
-        // 资源自给的两个参数行同样是子项：主子项关着时它们不该出现
         if (boneMealLimitButton != null) {
             boneMealLimitButton.visible = boneMealLimitButton.visible && draft.boneMealBoost;
         }
@@ -951,6 +904,24 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
     @Override
     protected void positionContent(int originY) {
+        // tab 栏
+        int tabY = 2;
+        for (int i = 0; i < TAB_COUNT; i++) {
+            setRowY(tabButtons[i], originY + tabY);
+        }
+
+        switch (currentTab) {
+            case TAB_COMBAT -> positionCombat(originY);
+            case TAB_STEALTH -> positionStealth(originY);
+            case TAB_AREA -> positionArea(originY);
+            case TAB_SURVIVAL -> positionSurvival(originY);
+            case TAB_RESOURCE -> positionResource(originY);
+            default -> {
+            }
+        }
+    }
+
+    private void positionCombat(int originY) {
         int combat = originY + SEC_COMBAT_Y;
         setRowY(combatButton, combat + ROW_FIRST);
         setRowY(attackIntervalField, combat + ROW_FIRST + ROW_GAP);
@@ -958,7 +929,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(attackTargetButton, combat + ROW_FIRST + 3 * ROW_GAP);
         setRowY(violentButton, combat + ROW_FIRST + 4 * ROW_GAP);
         setRowY(violenceLevelButton, combat + ROW_FIRST + 5 * ROW_GAP);
+    }
 
+    private void positionStealth(int originY) {
         int stealth = originY + SEC_STEALTH_Y;
         setRowY(pausePlayerButton, stealth + ROW_FIRST);
         setRowY(radiusButton, stealth + ROW_FIRST + ROW_GAP);
@@ -978,14 +951,14 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(scheduleButton, behavior + ROW_FIRST + 3 * ROW_GAP);
         setRowY(scheduleStartButton, behavior + ROW_FIRST + 4 * ROW_GAP);
         setRowY(scheduleEndButton, behavior + ROW_FIRST + 5 * ROW_GAP);
+    }
 
+    private void positionArea(int originY) {
         int work = originY + SEC_WORKAREA_Y;
         setRowY(workAreaButton, work + ROW_FIRST);
         setRowY(workAreaModeButton, work + ROW_FIRST + ROW_GAP);
-        // 第 3 行：圆形 = 半径，矩形 = 角点 A（同一行，用 visible 二选一）
         setRowY(workAreaRadiusButton, work + ROW_FIRST + 2 * ROW_GAP);
         setRowY(workAreaCornerAButton, work + ROW_FIRST + 2 * ROW_GAP);
-        // 第 4 行：圆形 = 记录中心，矩形 = 角点 B
         setRowY(workAreaCenterButton, work + ROW_FIRST + 3 * ROW_GAP);
         setRowY(workAreaCornerBButton, work + ROW_FIRST + 3 * ROW_GAP);
 
@@ -995,7 +968,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(fatigueButton, env + ROW_FIRST + 2 * ROW_GAP);
         setRowY(fatigueWorkButton, env + ROW_FIRST + 3 * ROW_GAP);
         setRowY(fatigueRestButton, env + ROW_FIRST + 4 * ROW_GAP);
+    }
 
+    private void positionSurvival(int originY) {
         int survival = originY + SEC_SURVIVAL_Y;
         setRowY(retreatButton, survival + ROW_FIRST);
         setRowY(retreatHealthButton, survival + ROW_FIRST + ROW_GAP);
@@ -1019,7 +994,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
         int pickup = originY + SEC_PICKUP_Y;
         setRowY(pickupDropsButton, pickup + ROW_FIRST);
         setRowY(pickupDelayButton, pickup + ROW_FIRST + ROW_GAP);
+    }
 
+    private void positionResource(int originY) {
         int gourd = originY + SEC_GOURD_Y;
         setRowY(melonHarvestButton, gourd + ROW_FIRST);
         setRowY(addCustomBlockButton, gourd + ROW_FIRST + ROW_GAP);
@@ -1041,70 +1018,69 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
     @Override
     protected void renderContent(DrawContext context, int originY, int mouseX, int mouseY, float delta) {
-        drawSection(context, originY, SEC_COMBAT_Y, SEC_COMBAT_H);
-        drawDangerHeader(context, originY, SEC_COMBAT_Y);
-        drawCombatExtras(context, originY);
-
-        drawSection(context, originY, SEC_STEALTH_Y, SEC_STEALTH_H);
-        drawHeader(context, originY, SEC_STEALTH_Y, "autofarm.extras.section.stealth");
-
-        drawSection(context, originY, SEC_ANTIKICK_Y, SEC_ANTIKICK_H);
-        drawHeader(context, originY, SEC_ANTIKICK_Y, "autofarm.extras.section.antikick");
-
-        drawSection(context, originY, SEC_BEHAVIOR_Y, SEC_BEHAVIOR_H);
-        drawHeader(context, originY, SEC_BEHAVIOR_Y, "autofarm.extras.section.behavior");
-
-        drawSection(context, originY, SEC_WORKAREA_Y, SEC_WORKAREA_H);
-        drawHeader(context, originY, SEC_WORKAREA_Y, "autofarm.extras.section.workarea");
-        // 最后一行自绘一句说明：区域外的目标不收、人走出去会自动返回
-        context.drawTextWithShadow(this.textRenderer,
-                Text.translatable("autofarm.work_area.hint"),
-                contentX + INDENT + 4, originY + SEC_WORKAREA_Y + ROW_FIRST + 4 * ROW_GAP + 5, COLOR_HINT);
-
-        drawSection(context, originY, SEC_ENV_Y, SEC_ENV_H);
-        drawHeader(context, originY, SEC_ENV_Y, "autofarm.extras.section.environment");
-
-        drawSection(context, originY, SEC_SURVIVAL_Y, SEC_SURVIVAL_H);
-        drawHeader(context, originY, SEC_SURVIVAL_Y, "autofarm.extras.section.survival");
-
-        drawSection(context, originY, SEC_TOOL_Y, SEC_TOOL_H);
-        drawHeader(context, originY, SEC_TOOL_Y, "autofarm.extras.section.tool");
-
-        drawSection(context, originY, SEC_MISC_Y, SEC_MISC_H);
-        drawHeader(context, originY, SEC_MISC_Y, "autofarm.extras.section.misc");
-
-        drawSection(context, originY, SEC_PICKUP_Y, SEC_PICKUP_H);
-        drawHeader(context, originY, SEC_PICKUP_Y, "autofarm.extras.section.pickup");
-
-        drawSection(context, originY, SEC_GOURD_Y, SEC_GOURD_H);
-        drawHeader(context, originY, SEC_GOURD_Y, "autofarm.extras.section.gourd");
-        // 最后一行自绘一句说明：只认茎旁的瓜和手动添加的方块，不是透视矿物的矿透
-        context.drawTextWithShadow(this.textRenderer,
-                Text.translatable("autofarm.gourd.hint"),
-                contentX + INDENT + 4, originY + SEC_GOURD_Y + ROW_FIRST + 3 * ROW_GAP + 5, COLOR_HINT);
-
-        drawSection(context, originY, SEC_SUPPLY_Y, SEC_SUPPLY_H);
-        drawHeader(context, originY, SEC_SUPPLY_Y, "autofarm.extras.section.supply");
-
-        drawSection(context, originY, SEC_NOTIFY_Y, SEC_NOTIFY_H);
-        drawHeader(context, originY, SEC_NOTIFY_Y, "autofarm.extras.section.notify");
-
-        // 最底下那句总说明：强调「默认全关」，让第一次进来的人放心
-        int shown = 0;
-        for (OrderedText line : this.textRenderer.wrapLines(
-                Text.translatable("autofarm.extras.note"), contentWidth - 8)) {
-            if (shown >= 2) {
-                break;
+        // tab 栏底下的分隔线 + 当前 tab 高亮
+        context.fill(contentX, originY + TAB_BAR_H, contentX + contentWidth, originY + TAB_BAR_H + 1, 0x30FFFFFF);
+        for (int i = 0; i < TAB_COUNT; i++) {
+            if (i == currentTab) {
+                ButtonWidget btn = tabButtons[i];
+                if (btn != null) {
+                    context.fill(btn.getX(), btn.getY() + btn.getHeight() - 1,
+                            btn.getX() + btn.getWidth(), btn.getY() + btn.getHeight(), COLOR_HEADER);
+                }
             }
-            context.drawTextWithShadow(this.textRenderer, line,
-                    contentX + 4, originY + NOTE_Y + shown * 11, COLOR_HINT);
-            shown++;
+        }
+
+        switch (currentTab) {
+            case TAB_COMBAT -> {
+                drawSection(context, originY, SEC_COMBAT_Y, SEC_COMBAT_H);
+                drawDangerHeader(context, originY, SEC_COMBAT_Y);
+                drawCombatExtras(context, originY);
+            }
+            case TAB_STEALTH -> {
+                drawSection(context, originY, SEC_STEALTH_Y, SEC_STEALTH_H);
+                drawHeader(context, originY, SEC_STEALTH_Y, "autofarm.extras.section.stealth");
+                drawSection(context, originY, SEC_ANTIKICK_Y, SEC_ANTIKICK_H);
+                drawHeader(context, originY, SEC_ANTIKICK_Y, "autofarm.extras.section.antikick");
+                drawSection(context, originY, SEC_BEHAVIOR_Y, SEC_BEHAVIOR_H);
+                drawHeader(context, originY, SEC_BEHAVIOR_Y, "autofarm.extras.section.behavior");
+            }
+            case TAB_AREA -> {
+                drawSection(context, originY, SEC_WORKAREA_Y, SEC_WORKAREA_H);
+                drawHeader(context, originY, SEC_WORKAREA_Y, "autofarm.extras.section.workarea");
+                context.drawTextWithShadow(this.textRenderer,
+                        Text.translatable("autofarm.work_area.hint"),
+                        contentX + INDENT + 4, originY + SEC_WORKAREA_Y + ROW_FIRST + 4 * ROW_GAP + 5, COLOR_HINT);
+                drawSection(context, originY, SEC_ENV_Y, SEC_ENV_H);
+                drawHeader(context, originY, SEC_ENV_Y, "autofarm.extras.section.environment");
+            }
+            case TAB_SURVIVAL -> {
+                drawSection(context, originY, SEC_SURVIVAL_Y, SEC_SURVIVAL_H);
+                drawHeader(context, originY, SEC_SURVIVAL_Y, "autofarm.extras.section.survival");
+                drawSection(context, originY, SEC_TOOL_Y, SEC_TOOL_H);
+                drawHeader(context, originY, SEC_TOOL_Y, "autofarm.extras.section.tool");
+                drawSection(context, originY, SEC_MISC_Y, SEC_MISC_H);
+                drawHeader(context, originY, SEC_MISC_Y, "autofarm.extras.section.misc");
+                drawSection(context, originY, SEC_PICKUP_Y, SEC_PICKUP_H);
+                drawHeader(context, originY, SEC_PICKUP_Y, "autofarm.extras.section.pickup");
+            }
+            case TAB_RESOURCE -> {
+                drawSection(context, originY, SEC_GOURD_Y, SEC_GOURD_H);
+                drawHeader(context, originY, SEC_GOURD_Y, "autofarm.extras.section.gourd");
+                context.drawTextWithShadow(this.textRenderer,
+                        Text.translatable("autofarm.gourd.hint"),
+                        contentX + INDENT + 4, originY + SEC_GOURD_Y + ROW_FIRST + 3 * ROW_GAP + 5, COLOR_HINT);
+                drawSection(context, originY, SEC_SUPPLY_Y, SEC_SUPPLY_H);
+                drawHeader(context, originY, SEC_SUPPLY_Y, "autofarm.extras.section.supply");
+                drawSection(context, originY, SEC_NOTIFY_Y, SEC_NOTIFY_H);
+                drawHeader(context, originY, SEC_NOTIFY_Y, "autofarm.extras.section.notify");
+            }
+            default -> {
+            }
         }
     }
 
     // ================= 行为 =================
 
-    /** 「恢复默认」＝把附加功能全部关掉（出厂就是全关） */
     private void resetAllOff() {
         draft.autoAttack = false;
         draft.autoAttackViolent = false;
@@ -1122,7 +1098,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.scheduleEnabled = false;
         draft.scheduleStartHour = 8;
         draft.scheduleEndHour = 23;
-        // 工作范围：只把开关和参数复原，坐标留着 —— 那是玩家亲手记的，不该被「全部关闭」抹掉
         draft.workAreaEnabled = false;
         draft.workAreaMode = AutoFarmConfig.AREA_MODE_RADIUS;
         draft.workAreaRadius = 24;
@@ -1160,13 +1135,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.autoFetchTool = false;
         draft.notifySounds = false;
         draft.notifyToasts = false;
-        // 标签文字要跟着变，直接重建整页最省事
         rebuild();
     }
 
     @Override
     protected void onCancel() {
-        // 只还原附加功能这几项，草稿里的其他设置（扫描半径、存放策略……）保持不动
         draft.autoAttack = old.autoAttack;
         draft.autoAttackViolent = old.autoAttackViolent;
         draft.attackViolence = old.attackViolence;
@@ -1240,7 +1213,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         return choices[0];
     }
 
-    /** 小数版的循环取下一档（攻击距离用）。比较带一点容差，免得浮点误差选不中 */
     private static double nextChoice(double[] choices, double current) {
         for (int i = 0; i < choices.length; i++) {
             if (Math.abs(choices[i] - current) < 1e-6) {
@@ -1250,7 +1222,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         return choices[0];
     }
 
-    /** 「选项：值」的通用拼法 */
     private static Text optionLabel(String optionKey, Text value) {
         return Text.translatable("autofarm.toggle", Text.translatable(optionKey), value);
     }
@@ -1302,7 +1273,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 Text.translatable("autofarm.attack_violence.level." + violenceKey(draft.attackViolence)));
     }
 
-    /** 暴力程度档位 → 语言键后缀。认不出来的一律当「轻度」显示 */
     private static String violenceKey(int level) {
         return switch (level) {
             case 1 -> "medium";
@@ -1358,7 +1328,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         return Text.translatable("autofarm.work_area.record_b", coordText(draft.workAreaSecondText()));
     }
 
-    /** 坐标文本：没记过就显示「未设置」 */
     private static Text coordText(String text) {
         return text == null ? Text.translatable("autofarm.work_area.none") : Text.literal(text);
     }
@@ -1402,26 +1371,22 @@ public class ExtrasScreen extends ScrollPanelScreen {
                         : Text.translatable("autofarm.value.count", draft.reconnectMaxAttempts));
     }
 
-    /** 自定义方块名单那一行的标签：显示「已添加 N 个」 */
     private Text customBlocksLabel() {
         int n = draft.customHarvestBlocks == null ? 0 : draft.customHarvestBlocks.size();
         return optionLabel("autofarm.option.custom_blocks",
                 Text.translatable("autofarm.value.count", n));
     }
 
-    /** 骨粉催熟：同一株最多撒几次 */
     private Text boneMealLimitLabel() {
         return optionLabel("autofarm.option.bone_meal_limit",
                 Text.translatable("autofarm.value.count", draft.boneMealLimit));
     }
 
-    /** 耗材自给：骨粉低于多少个就去补给点补一趟 */
     private Text boneMealThresholdLabel() {
         return optionLabel("autofarm.option.bone_meal_threshold",
                 Text.translatable("autofarm.value.count", draft.boneMealThreshold));
     }
 
-    /** 把准星指向的那个方块加进自定义名单；加之前先弹一道提醒屏 */
     private void addLookedBlock() {
         if (this.client == null || this.client.world == null) {
             return;
@@ -1449,8 +1414,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
             toast("autofarm.custom_block.duplicate");
             return;
         }
-        // 加之前提醒一句：只加农作物类方块，别加石头矿物（否则挖下来无法按作物存放）；
-        // 本功能也不是矿透。确认之后才真的写进名单。
         confirmThen("autofarm.custom_block.warn.subtitle", () -> {
             draft.customHarvestBlocks.add(id);
             rebuild();
@@ -1458,7 +1421,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.custom_block.warn.body2", "autofarm.custom_block.warn.body3");
     }
 
-    /** 清空自定义名单；清空前也弹一道确认屏，免得误触一键清空 */
     private void clearCustomBlocks() {
         if (draft.customHarvestBlocks == null || draft.customHarvestBlocks.isEmpty()) {
             toast("autofarm.custom_block.empty");
@@ -1470,7 +1432,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }, "autofarm.custom_block.clear.body1");
     }
 
-    /** 把玩家当前所在的那一格记成工作区域的一个点（圆形 = 中心，矩形 = 角点） */
     private void recordCurrentPos(boolean second) {
         if (this.client == null || this.client.player == null) {
             return;
@@ -1483,7 +1444,6 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }
     }
 
-    /** 档位数字 → 语言键后缀。认不出来的档位一律当「关闭」显示 */
     private static String levelKey(int level) {
         return switch (level) {
             case 1 -> "light";

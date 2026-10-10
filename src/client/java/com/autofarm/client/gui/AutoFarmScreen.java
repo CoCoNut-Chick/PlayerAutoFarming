@@ -29,16 +29,16 @@ public class AutoFarmScreen extends ScrollPanelScreen {
 
     // ---------------- 内容区布局（相对内容区顶部） ----------------
     private static final int SEC_STATUS_Y = 0, SEC_STATUS_H = 62;
-    private static final int SEC_HARVEST_Y = 66, SEC_HARVEST_H = 136;
-    private static final int SEC_PATH_Y = 206, SEC_PATH_H = 180;
-    private static final int SEC_DISPLAY_Y = 390, SEC_DISPLAY_H = 76;
-    private static final int SEC_SUPPLY_Y = 470, SEC_SUPPLY_H = 118;
+    private static final int SEC_HARVEST_Y = 66, SEC_HARVEST_H = 156;
+    private static final int SEC_PATH_Y = 226, SEC_PATH_H = 180;
+    private static final int SEC_DISPLAY_Y = 410, SEC_DISPLAY_H = 76;
+    private static final int SEC_SUPPLY_Y = 490, SEC_SUPPLY_H = 118;
     /** 安全与提示：HUD、低血量停机、敌对生物停机 —— 三项都追加在最后，前面的分区不用挪 */
-    private static final int SEC_SAFETY_Y = 592, SEC_SAFETY_H = 76;
+    private static final int SEC_SAFETY_Y = 612, SEC_SAFETY_H = 76;
     /** 作物与筛选：补种空耕地 + 进次级面板挑作物。同样追加在最后 */
-    private static final int SEC_CROP_Y = 674, SEC_CROP_H = 64;
+    private static final int SEC_CROP_Y = 694, SEC_CROP_H = 64;
     /** 附加功能：默认全关的增强项，单独一页。统计面板也放这里，追加在最后 */
-    private static final int SEC_EXTRAS_Y = 742, SEC_EXTRAS_H = 64;
+    private static final int SEC_EXTRAS_Y = 762, SEC_EXTRAS_H = 64;
 
     private static final int ROW_ENABLED = 82;
     private static final int ROW_RADIUS = 102;
@@ -46,36 +46,37 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private static final int ROW_REPLANT = 142;
     private static final int ROW_REFILL = 162;
     private static final int ROW_DEPOSIT = 182;
-    private static final int ROW_OPTIMIZE = 222;
-    private static final int ROW_SHOW_PATH = 242;
-    private static final int ROW_LOCK_SPRINT = 262;
-    private static final int ROW_AUTO_EAT = 282;
-    private static final int ROW_EAT_FULL = 302;
-    private static final int ROW_ALLOW_MINE = 322;
-    private static final int ROW_AUTO_TOOL = 342;
-    private static final int ROW_ALLOW_PLACE = 362;
-    private static final int ROW_VISUAL = 406;
-    private static final int ROW_THROUGH_WALLS = 426;
-    private static final int ROW_FREECAM = 446;
+    private static final int ROW_EFFICIENCY = 202;
+    private static final int ROW_OPTIMIZE = 242;
+    private static final int ROW_SHOW_PATH = 262;
+    private static final int ROW_LOCK_SPRINT = 282;
+    private static final int ROW_AUTO_EAT = 302;
+    private static final int ROW_EAT_FULL = 322;
+    private static final int ROW_ALLOW_MINE = 342;
+    private static final int ROW_AUTO_TOOL = 362;
+    private static final int ROW_ALLOW_PLACE = 382;
+    private static final int ROW_VISUAL = 426;
+    private static final int ROW_THROUGH_WALLS = 446;
+    private static final int ROW_FREECAM = 466;
     /** 补给点分区：先一行状态提示，再两个选项，最后坐标输入和按钮 */
-    private static final int ROW_SUPPLY_HINT = 486;
-    private static final int ROW_DEFAULT_SEED = 502;
-    private static final int ROW_STORAGE_POLICY = 522;
-    private static final int ROW_FIELDS = 542;
-    private static final int ROW_SUPPLY_BTN = 564;
+    private static final int ROW_SUPPLY_HINT = 506;
+    private static final int ROW_DEFAULT_SEED = 522;
+    private static final int ROW_STORAGE_POLICY = 542;
+    private static final int ROW_FIELDS = 562;
+    private static final int ROW_SUPPLY_BTN = 584;
 
     /** 安全与提示分区的三行 */
-    private static final int ROW_SHOW_HUD = 608;
-    private static final int ROW_LOW_HEALTH = 628;
-    private static final int ROW_MOBS_NEAR = 648;
+    private static final int ROW_SHOW_HUD = 628;
+    private static final int ROW_LOW_HEALTH = 648;
+    private static final int ROW_MOBS_NEAR = 668;
 
     /** 作物与筛选分区的两行 */
-    private static final int ROW_FILL_EMPTY = 690;
-    private static final int ROW_CROP_FILTER = 710;
+    private static final int ROW_FILL_EMPTY = 710;
+    private static final int ROW_CROP_FILTER = 730;
 
     /** 附加功能分区的两行：附加功能、统计 */
-    private static final int ROW_EXTRAS = 758;
-    private static final int ROW_STATS = 778;
+    private static final int ROW_EXTRAS = 778;
+    private static final int ROW_STATS = 798;
 
     private static final int AXIS_LABEL_W = 14;
     private static final int ICON_SIZE = ROW_H;
@@ -90,6 +91,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private ButtonWidget replantButton;
     private ButtonWidget refillButton;
     private ButtonWidget depositButton;
+    private ButtonWidget efficiencyButton;
     private ButtonWidget optimizeButton;
     private ButtonWidget showPathButton;
     private ButtonWidget lockSprintButton;
@@ -178,6 +180,16 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         }).dimensions(contentX, 0, fullW, ROW_H).build();
         depositButton.setTooltip(Tooltip.of(Text.translatable("autofarm.deposit.tip")));
         addScrolling(depositButton);
+
+        // 效率模式：跳过「转到位再动手」，只要准星落在作物上就在范围内直接收。
+        // 和防踢模式矛盾，这里不拦（留给玩家自己判断），只在提示里说清楚。
+        this.efficiencyButton = ButtonWidget.builder(
+                toggleLabel("autofarm.option.efficiency", draft.efficiencyMode), b -> {
+                    draft.efficiencyMode = !draft.efficiencyMode;
+                    b.setMessage(toggleLabel("autofarm.option.efficiency", draft.efficiencyMode));
+                }).dimensions(contentX, 0, fullW, ROW_H).build();
+        efficiencyButton.setTooltip(Tooltip.of(Text.translatable("autofarm.efficiency.tip")));
+        addScrolling(efficiencyButton);
 
         // ---- 路径规划 ----
         this.optimizeButton = ButtonWidget.builder(toggleLabel("autofarm.option.optimize", draft.optimizePath), b -> {
@@ -406,6 +418,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         setRowY(replantButton, originY + ROW_REPLANT);
         setRowY(refillButton, originY + ROW_REFILL);
         setRowY(depositButton, originY + ROW_DEPOSIT);
+        setRowY(efficiencyButton, originY + ROW_EFFICIENCY);
         setRowY(optimizeButton, originY + ROW_OPTIMIZE);
         setRowY(showPathButton, originY + ROW_SHOW_PATH);
         setRowY(lockSprintButton, originY + ROW_LOCK_SPRINT);

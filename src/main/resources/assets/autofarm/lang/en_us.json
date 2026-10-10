@@ -420,5 +420,12 @@
   "autofarm.notify_toasts.tip": "Show a vanilla toast in the top-right on start, stop and errors. More reliable than sound when you're AFK.",
   "autofarm.notify.start": "AutoFarm started",
   "autofarm.notify.stop": "AutoFarm stopped",
-  "autofarm.notify.issue": "AutoFarm hit an error"
+  "autofarm.notify.issue": "AutoFarm hit an error",
+  "autofarm.option.efficiency": "Efficiency Mode",
+  "autofarm.efficiency.tip": "Harvest as soon as the crosshair is on the crop and within reach, without waiting for the view to turn. Faster, but more visible — don't combine it with anti-kick.",
+  "autofarm.extras.tab.combat": "Combat",
+  "autofarm.extras.tab.stealth": "Stealth",
+  "autofarm.extras.tab.area": "Area",
+  "autofarm.extras.tab.survival": "Survival",
+  "autofarm.extras.tab.resource": "Resource"
 }

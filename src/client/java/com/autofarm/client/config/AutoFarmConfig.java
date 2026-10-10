@@ -29,6 +29,18 @@ public class AutoFarmConfig {
     /** 收割后是否补种 */
     public boolean replant = true;
 
+    /**
+     * 效率模式：只要准星已经落在作物上、且在挖掘范围内就直接收，不等视角转到位。
+     *
+     * <p>默认行为是「先限速转头、把准星精确压到作物中心（8 度以内）才动手」——
+     * 更稳、更像真人；效率模式跳过这一步，只要准星已经<b>落在方块上</b>（视线已经
+     * 穿过它）就动手，省掉每棵之间那一小段转视角的时间，收得明显更快。
+     *
+     * <p>代价是「人还没转过去、手已经动了」，在防踢的语境里这更显眼 ——
+     * 所以它和防踢模式是矛盾的，两者别一起开。
+     */
+    public boolean efficiencyMode = false;
+
     /** 种子不够时是否自动前往补给点取种子 */
     public boolean refillSeeds = true;
 
@@ -956,6 +968,7 @@ public class AutoFarmConfig {
         c.scanRadius = this.scanRadius;
         c.scanIntervalTicks = this.scanIntervalTicks;
         c.replant = this.replant;
+        c.efficiencyMode = this.efficiencyMode;
         c.refillSeeds = this.refillSeeds;
         c.depositWhenFull = this.depositWhenFull;
         c.optimizePath = this.optimizePath;

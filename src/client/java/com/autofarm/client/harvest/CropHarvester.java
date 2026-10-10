@@ -12,6 +12,8 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 
 /**
@@ -443,9 +445,18 @@ public final class CropHarvester {
         // 一边挖一边把准星压到作物上。步骤是「先对准、再挥镐子」——
         // 视角还在转就先不动手，否则会出现「头还没转过去，方块先碎了」，
         // 服务端拿到的方块朝向也会和真实朝向对不上。
-        BlockInteractor.aimAt(player, target);
-        if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
-            return Stage.MINE; // 转视角很快（几 tick），所以这段时间不计入超时
+        // 效率模式例外：只要准星已经落在这格方块上、而且在挖掘范围内，就直接挖，
+        // 省掉每棵之间那一小段转视角的时间（代价是「人没转过去、手先动了」）。
+        if (config.efficiencyMode) {
+            if (!isCrosshairOn(client, target)
+                    || !BlockInteractor.isWithinReach(player, target, REACH)) {
+                return Stage.MINE;
+            }
+        } else {
+            BlockInteractor.aimAt(player, target);
+            if (!BlockInteractor.isAimedAt(player, target, AIM_TOLERANCE)) {
+                return Stage.MINE; // 转视角很快（几 tick），所以这段时间不计入超时
+            }
         }
 
         BlockInteractor.mineTick(client, target);
@@ -473,6 +484,20 @@ public final class CropHarvester {
             return config.replant ? Stage.REPLANT : Stage.DONE;
         }
         return Stage.MINE;
+    }
+
+    /**
+     * 准星（视线）现在是不是已经<b>落在这个方块上</b>。
+     *
+     * <p>效率模式用它代替「对准中心」：它只看视线有没有穿过这格方块，不要求准星
+     * 压在方块几何中心上 —— 所以只要角色大致面朝这格，就能跳过转头直接动手。
+     */
+    private static boolean isCrosshairOn(MinecraftClient client, BlockPos pos) {
+        if (client == null || pos == null || client.crosshairTarget == null) {
+            return false;
+        }
+        return client.crosshairTarget.getType() == HitResult.Type.BLOCK
+                && ((BlockHitResult) client.crosshairTarget).getBlockPos().equals(pos);
     }
 
     private static Stage replant(MinecraftClient client, ClientPlayerEntity player, AutoFarmConfig config) {

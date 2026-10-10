@@ -420,5 +420,12 @@
   "autofarm.notify_toasts.tip": "开始、停止、异常时在右上角弹一个原版 toast，留几秒。挂机时比音效更靠得住。",
   "autofarm.notify.start": "AutoFarm 已开始",
   "autofarm.notify.stop": "AutoFarm 已停止",
-  "autofarm.notify.issue": "AutoFarm 出现异常"
+  "autofarm.notify.issue": "AutoFarm 出现异常",
+  "autofarm.option.efficiency": "效率模式",
+  "autofarm.efficiency.tip": "只要准星已经落在作物上、且在挖掘范围内就直接收，不等视角转到位。收得更快，但「人没转过去、手先动了」在防踢语境里更显眼，别和防踢模式一起开。",
+  "autofarm.extras.tab.combat": "战斗",
+  "autofarm.extras.tab.stealth": "隐蔽",
+  "autofarm.extras.tab.area": "范围",
+  "autofarm.extras.tab.survival": "生存",
+  "autofarm.extras.tab.resource": "资源"
 }
