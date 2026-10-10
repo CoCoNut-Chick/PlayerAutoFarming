@@ -521,6 +521,10 @@ public class AutoFarmConfig {
      * <p>打开它有几层代价，都在风险确认屏里写了：它属于作弊级功能，
      * 在多人服务器使用可能被封；「非暴力」只是降低被识别的概率，
      * 并不保证安全，而且因为出手慢，角色本身仍有被怪打死的风险。
+     *
+     * <p><b>它不能脱离 {@link #enabled}（自动收割总开关）单独开启</b>：
+     * 总开关关着时，本项会被 {@link #clamp()} 强制收掉 ——
+     * 这个模组是「自动收菜」，而不是一台纯粹的杀戮光环。
      */
     public boolean autoAttack = false;
 
@@ -542,6 +546,11 @@ public class AutoFarmConfig {
      *
      * <p>无论哪种模式，实际间隔都会在这附近随机浮动（约 ±20%），
      * 免得每一下都精确等时 —— 那是节拍器，不是人。
+     *
+     * <p>面板上是一个<b>输入框</b>（不是循环按钮），合法区间见
+     * {@link #ATTACK_INTERVAL_MIN_MS}~{@link #ATTACK_INTERVAL_MAX_MS}；低于
+     * {@link #ATTACK_INTERVAL_SAFE_MS} 会在面板上标红警示 ——
+     * 出手频率异常是最容易被反作弊盯上的特征之一。
      */
     public int attackIntervalMs = 800;
 
@@ -555,14 +564,55 @@ public class AutoFarmConfig {
      */
     public boolean attackHostileOnly = true;
 
+    // ---- 战斗：可调的「暴力」参数（改动都要过风险确认屏） ----
+
+    /** 攻击间隔的合法区间（毫秒） */
+    public static final int ATTACK_INTERVAL_MIN_MS = 50;
+    public static final int ATTACK_INTERVAL_MAX_MS = 5000;
+
+    /** 攻击间隔的「安全下限」：低于它会在面板上标红，提示出手频率异常 */
+    public static final int ATTACK_INTERVAL_SAFE_MS = 300;
+
+    /** 攻击距离的合法区间（格） */
+    public static final double ATTACK_RANGE_MIN = 2.0;
+    public static final double ATTACK_RANGE_MAX = 6.0;
+
     /**
-     * 自动打怪的最大攻击距离（格）。
-     *
-     * <p>固定值、不开放给面板：原版实体交互距离就是 3.0 格，
-     * 超过这个数的攻击包服务端会直接拒收（等于白发一次），
-     * 还可能被记进「攻击距离异常」。这里再往内收一点留余量。
+     * 原版实体交互距离（格）。攻击距离超过它，服务端的攻击包多半会被拒收，
+     * 还可能被记进「攻击距离异常」。调到它之上要先过风险确认屏。
      */
-    public static final double ATTACK_RANGE = 2.9;
+    public static final double ATTACK_RANGE_VANILLA = 3.0;
+
+    /** 暴力程度档位 */
+    public static final int VIOLENCE_LIGHT = 0;
+    public static final int VIOLENCE_MEDIUM = 1;
+    public static final int VIOLENCE_LIFESAVER = 2;
+    /** 档位总数（面板循环按钮用） */
+    public static final int VIOLENCE_COUNT = 3;
+
+    /**
+     * 自动打怪的最大攻击距离（格）。出厂 2.9 —— 原版实体交互距离是 3.0，
+     * 往里收一点留余量。
+     *
+     * <p><b>可调</b>：在「附加功能 → 战斗」里能往上调，但超过
+     * {@link #ATTACK_RANGE_VANILLA} 会先弹风险确认屏 ——
+     * 超距的攻击包服务端通常会拒收，还可能被记进「攻击距离异常」。
+     */
+    public double attackRange = 2.9;
+
+    /**
+     * 暴力程度：只在 {@link #autoAttackViolent} 打开时生效，越高越凶。
+     *
+     * <ul>
+     *   <li>{@link #VIOLENCE_LIGHT}（默认）—— 高危怪（末影人、爆炸/远程类）
+     *       无视出手间隔优先打；</li>
+     *   <li>{@link #VIOLENCE_MEDIUM} —— 上面全部 + 所有目标出手间隔减半；</li>
+     *   <li>{@link #VIOLENCE_LIFESAVER} —— 上面全部 + 所有目标都无视间隔
+     *       （每个 tick 都能出手），以最快速度清掉威胁，尽量让角色不被怪打死。
+     *       这也是风险最高的一档。</li>
+     * </ul>
+     */
+    public int attackViolence = VIOLENCE_LIGHT;
 
     /** 当前启用了几个附加功能（主面板摘要行用） */
     public int extrasEnabledCount() {
@@ -641,6 +691,8 @@ public class AutoFarmConfig {
         c.autoAttackViolent = this.autoAttackViolent;
         c.attackIntervalMs = this.attackIntervalMs;
         c.attackHostileOnly = this.attackHostileOnly;
+        c.attackRange = this.attackRange;
+        c.attackViolence = this.attackViolence;
         // 数组 / 列表都要深拷贝：不然「取消」时把草稿改回去，会把原配置一起改掉
         c.storageKeep = this.storageKeep == null ? null : this.storageKeep.clone();
         c.cropFilter = this.cropFilter == null ? new ArrayList<>() : new ArrayList<>(this.cropFilter);
@@ -734,13 +786,29 @@ public class AutoFarmConfig {
         if (scheduleEndHour < 0) scheduleEndHour = 0;
         if (scheduleEndHour > 23) scheduleEndHour = 23;
 
-        // 战斗：间隔拉回合理区间（比这更快就是在刷 CPS，比这更慢等于站着挨打）
-        if (attackIntervalMs < 300) attackIntervalMs = 300;
-        if (attackIntervalMs > 3000) attackIntervalMs = 3000;
-        // 暴力模式是「自动打怪」的子开关：主子项关着时它没有意义，一并收掉，
+        // 战斗：间隔 / 距离都拉回合法区间。注意下界放得很低（50ms）——
+        // 「保命」档本来就要尽量快，所以这里只做「能不能填」的兜底，
+        // 「该不该这么快」交给面板上的红色警示和风险确认屏去提醒。
+        if (attackIntervalMs < ATTACK_INTERVAL_MIN_MS) attackIntervalMs = ATTACK_INTERVAL_MIN_MS;
+        if (attackIntervalMs > ATTACK_INTERVAL_MAX_MS) attackIntervalMs = ATTACK_INTERVAL_MAX_MS;
+        if (attackRange < ATTACK_RANGE_MIN) attackRange = ATTACK_RANGE_MIN;
+        if (attackRange > ATTACK_RANGE_MAX) attackRange = ATTACK_RANGE_MAX;
+        if (attackViolence < VIOLENCE_LIGHT) attackViolence = VIOLENCE_LIGHT;
+        if (attackViolence >= VIOLENCE_COUNT) attackViolence = VIOLENCE_COUNT - 1;
+
+        // 暴力模式与暴力程度都是「自动打怪」的子项：主子项关着时它们没有意义，一并收掉，
         // 免得出现「自动打怪关着、暴力标记却留着」这种会让面板显示错乱的状态
         if (!autoAttack) {
             autoAttackViolent = false;
+            attackViolence = VIOLENCE_LIGHT;
+        }
+        // 「自动打怪」不能脱离「自动收割」总开关单独开启。规则是双向的：
+        // 面板上开不了（见 ExtrasScreen），配置层面也强制收掉 ——
+        // 手改 JSON、或者先开打怪再关总开关的，都会被这一步拉回一致状态。
+        if (!enabled) {
+            autoAttack = false;
+            autoAttackViolent = false;
+            attackViolence = VIOLENCE_LIGHT;
         }
     }
 

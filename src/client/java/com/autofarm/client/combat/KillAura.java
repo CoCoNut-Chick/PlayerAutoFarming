@@ -7,8 +7,13 @@ import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.mob.AbstractSkeletonEntity;
+import net.minecraft.entity.mob.BlazeEntity;
+import net.minecraft.entity.mob.CreeperEntity;
+import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
+import net.minecraft.entity.mob.WitchEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Box;
@@ -40,11 +45,14 @@ import java.util.concurrent.ThreadLocalRandom;
  * <ul>
  *   <li><b>不打玩家</b>：目标是玩家时一律跳过。打玩家属于 PVP 作弊，
  *       和「保护自己收菜」是两件事，这条不开放；</li>
- *   <li><b>不超距</b>：攻击距离卡在原版实体交互距离（3.0 格）之内，
- *       超出的攻击包服务端本来就拒收，多发只会留下异常记录；</li>
  *   <li><b>不走位、不追怪</b>：只打「自己走进攻击距离」的目标，
  *       不会为了杀一只怪跑出田外。</li>
  * </ul>
+ *
+ * <h2>攻击距离与暴力程度</h2>
+ * 两者的出厂值都很保守：距离 {@code attackRange}（2.9 格）卡在原版实体交互距离
+ * （3.0 格）之内，暴力程度默认「轻度」。它们都能在面板上调高，但都要先过一道
+ * 风险确认屏 —— 超距的攻击包服务端多半拒收，「无视间隔」的出手频率则最招反作弊。
  */
 public final class KillAura {
 
@@ -88,7 +96,8 @@ public final class KillAura {
         }
 
         ClientPlayerEntity player = client.player;
-        double rangeSq = AutoFarmConfig.ATTACK_RANGE * AutoFarmConfig.ATTACK_RANGE;
+        double reach = Math.max(AutoFarmConfig.ATTACK_RANGE_MIN, config.attackRange);
+        double rangeSq = reach * reach;
 
         // 先看锁定的目标还值不值得打；不行就重新挑一个最近的
         if (!isTargetable(client, config, locked, rangeSq)) {
@@ -121,7 +130,7 @@ public final class KillAura {
         // 暴力模式下没有前面的转头那一步，于是就成了「挥手即命中」。
         client.interactionManager.attackEntity(player, target);
         player.swingHand(Hand.MAIN_HAND);
-        cooldown = attackIntervalTicks(config);
+        cooldown = attackIntervalTicks(config, target);
         return true;
     }
 
@@ -175,7 +184,8 @@ public final class KillAura {
     private static LivingEntity findTarget(MinecraftClient client, AutoFarmConfig config,
                                            double rangeSq) {
         Vec3d eye = client.player.getEyePos();
-        Box box = client.player.getBoundingBox().expand(AutoFarmConfig.ATTACK_RANGE);
+        Box box = client.player.getBoundingBox().expand(Math.max(AutoFarmConfig.ATTACK_RANGE_MIN,
+                config.attackRange));
         LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
         for (LivingEntity entity : client.world.getEntitiesByClass(LivingEntity.class, box,
@@ -190,14 +200,55 @@ public final class KillAura {
     }
 
     /**
-     * 下一次出手的间隔（tick）。
+     * 下一次出手的间隔（tick）。返回 0 表示「无视间隔」——下一 tick 就能再打。
      *
-     * <p>在 {@link AutoFarmConfig#attackIntervalMs} 上下浮动约 ±20%：
+     * <p>平时在 {@link AutoFarmConfig#attackIntervalMs} 上下浮动约 ±20%：
      * 每一下都精确等时，是最容易被抓的「节拍器」特征。
+     *
+     * <p>暴力模式会按 {@link AutoFarmConfig#attackViolence} 收紧它：
+     * <ul>
+     *   <li><b>轻度</b>：只有 {@link #isHighThreat 高危怪}（末影人、爆炸/远程类）
+     *       无视间隔 —— 它们能在你出手前先打到你，慢一拍就是拿命换；</li>
+     *   <li><b>中度</b>：上面全部，外加所有目标的间隔减半；</li>
+     *   <li><b>保命</b>：上面全部，外加所有目标都无视间隔（每个 tick 出手一次）。</li>
+     * </ul>
      */
-    private static int attackIntervalTicks(AutoFarmConfig config) {
-        int base = Math.max(200, config.attackIntervalMs);
+    private static int attackIntervalTicks(AutoFarmConfig config, LivingEntity target) {
+        boolean violent = config.autoAttackViolent;
+        int level = config.attackViolence;
+        int base = Math.max(AutoFarmConfig.ATTACK_INTERVAL_MIN_MS, config.attackIntervalMs);
+
+        if (violent) {
+            // 保命档：不分目标，全部按最快出手
+            if (level >= AutoFarmConfig.VIOLENCE_LIFESAVER) {
+                return 0;
+            }
+            // 高危怪：只要开着暴力就无视间隔（这就是「末影人这种手长的」那条）
+            if (isHighThreat(target)) {
+                return 0;
+            }
+            // 中度档：整体间隔减半
+            if (level >= AutoFarmConfig.VIOLENCE_MEDIUM) {
+                base = Math.max(AutoFarmConfig.ATTACK_INTERVAL_MIN_MS, base / 2);
+            }
+        }
+
         double jitter = 0.8 + ThreadLocalRandom.current().nextDouble() * 0.4; // 0.8 ~ 1.2
-        return Math.max(4, (int) Math.round(base * jitter / 50.0)); // 毫秒 → tick（1 tick = 50ms）
+        return Math.max(1, (int) Math.round(base * jitter / 50.0)); // 毫秒 → tick（1 tick = 50ms）
+    }
+
+    /**
+     * 「手长」或者说高危的生物 —— 它们能赶在你把准星转过去之前先打到你。
+     *
+     * <p>认的是几个原版里最典型的：末影人（长手、瞬移贴脸）、苦力怕（爆炸，一刀没打死就完了）、
+     * 骷髅一系（远程射箭）、烈焰人（远程火球）、女巫（远程药水）。
+     * 暴力模式下它们会被优先、且无视间隔地打掉。
+     */
+    private static boolean isHighThreat(Entity entity) {
+        return entity instanceof EndermanEntity
+                || entity instanceof CreeperEntity
+                || entity instanceof AbstractSkeletonEntity
+                || entity instanceof BlazeEntity
+                || entity instanceof WitchEntity;
     }
 }

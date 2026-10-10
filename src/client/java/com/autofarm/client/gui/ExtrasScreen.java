@@ -5,9 +5,13 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 「附加功能」次级面板：一堆<b>默认全部关闭</b>的增强项，集中放在这里。
@@ -23,7 +27,9 @@ import net.minecraft.util.Formatting;
  *
  * <h2>七段</h2>
  * <ol>
- *   <li><b>战斗（高风险）</b> —— 自动打怪，默认关闭、警示配色、开启要过确认屏；</li>
+ *   <li><b>战斗（高风险）</b> —— 自动打怪、目标范围、攻击间隔（输入框）、攻击距离、
+ *       暴力模式与暴力程度。默认关闭、警示配色、开启与调高参数都要过风险确认屏，
+ *       而且必须先打开主面板的「自动收割」总开关；</li>
  *   <li><b>安全与隐蔽</b> —— 玩家接近停机、拟人化节奏、定时随机休息；</li>
  *   <li><b>防踢模式</b> —— 一整套「把机器味抹掉」的措施，带四档强度；</li>
  *   <li><b>行为真实感</b> —— 危险反应延迟、空闲时环顾四周、仅在指定时段工作；</li>
@@ -53,9 +59,15 @@ public class ExtrasScreen extends ScrollPanelScreen {
     /** 高风险分区专用的警示色：标题与开关文字都用它 */
     private static final int COLOR_DANGER = 0xFFFF5555;
 
-    private static final int COMBAT_ROWS = 4;
+    /** 攻击间隔行的左侧标签宽度 / 输入框宽度 —— 右侧那段留给「范围提示」文字 */
+    private static final int INTERVAL_LABEL_W = 60;
+    private static final int INTERVAL_FIELD_W = 56;
+
+    /** 战斗分区：6 行（打怪 / 间隔 / 距离 / 目标 / 暴力 / 暴力程度）+ 底部两行警示 */
+    private static final int COMBAT_ROWS = 6;
+    private static final int COMBAT_WARN_H = 26;
     private static final int SEC_COMBAT_Y = 0;
-    private static final int SEC_COMBAT_H = ROW_FIRST + COMBAT_ROWS * ROW_GAP + 4;
+    private static final int SEC_COMBAT_H = ROW_FIRST + COMBAT_ROWS * ROW_GAP + COMBAT_WARN_H;
 
     private static final int STEALTH_ROWS = 6;
     private static final int SEC_STEALTH_Y = SEC_COMBAT_H + SECTION_GAP;
@@ -92,8 +104,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] DURABILITY_CHOICES = {5, 10, 15, 20, 30};
     private static final int[] COOLDOWN_CHOICES = {5, 10, 15, 30, 60};
     private static final int[] PICKUP_DELAY_CHOICES = {1, 2, 3, 5};
-    /** 战斗：两次出手的间隔（毫秒） */
-    private static final int[] ATTACK_INTERVAL_CHOICES = {400, 600, 800, 1200};
+    /** 战斗：攻击距离（格）。超过原版 3.0 的档位要先过风险确认屏才生效 */
+    private static final double[] ATTACK_RANGE_CHOICES = {2.5, 2.9, 3.5, 4.5, 6.0};
+    /** 战斗：暴力程度档位（和 AutoFarmConfig 的 VIOLENCE_* 常量一致） */
+    private static final int[] VIOLENCE_CHOICES = {0, 1, 2};
     /** 防踢档位：0 = 关闭、1 = 轻度、2 = 中度、3 = 强力（和 Humanizer 的常量一致） */
     private static final int[] ANTIKICK_LEVEL_CHOICES = {0, 1, 2, 3};
     /** 行为真实感：反应延迟时长（tick，1 秒 = 20 tick） */
@@ -114,9 +128,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private final AutoFarmConfig old;
 
     private ButtonWidget combatButton;
-    private ButtonWidget attackIntervalButton;
+    private TextFieldWidget attackIntervalField;
+    private ButtonWidget attackRangeButton;
     private ButtonWidget attackTargetButton;
     private ButtonWidget violentButton;
+    private ButtonWidget violenceLevelButton;
     private ButtonWidget pausePlayerButton;
     private ButtonWidget radiusButton;
     private ButtonWidget humanizeButton;
@@ -167,12 +183,16 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.auto_attack.tip");
         layout(combatButton, contentX, 0, fullW);
 
-        this.attackIntervalButton = ButtonWidget.builder(attackIntervalLabel(), b -> {
-            draft.attackIntervalMs = nextChoice(ATTACK_INTERVAL_CHOICES, draft.attackIntervalMs);
-            b.setMessage(attackIntervalLabel());
-        }).dimensions(subX, 0, subW, ROW_H).build();
-        attackIntervalButton.setTooltip(Tooltip.of(Text.translatable("autofarm.attack_interval.tip")));
-        addScrolling(attackIntervalButton);
+        // 攻击间隔：一个填空（不是循环按钮）。选项名画在左边，输入框摆中间，
+        // 右边留给「范围 50–5000 毫秒」那段提示 —— 见 drawCombatExtras。
+        this.attackIntervalField = intervalField(contentX + INTERVAL_LABEL_W);
+        addScrolling(attackIntervalField);
+
+        // 攻击距离：循环按钮，但超过原版 3.0 的档位要先过风险确认屏（onRangeClicked）
+        this.attackRangeButton = ButtonWidget.builder(attackRangeLabel(), b -> onRangeClicked())
+                .dimensions(subX, 0, subW, ROW_H).build();
+        attackRangeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.attack_range.tip")));
+        addScrolling(attackRangeButton);
 
         this.attackTargetButton = ButtonWidget.builder(attackTargetLabel(), b -> {
             draft.attackHostileOnly = !draft.attackHostileOnly;
@@ -186,6 +206,12 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 draft.autoAttackViolent, value -> draft.autoAttackViolent = value,
                 "autofarm.auto_attack_violent.tip");
         layout(violentButton, subX, 0, subW);
+
+        // 二级参数：暴力程度。只在「暴力模式」打开后才出现，提高档位要过确认屏
+        this.violenceLevelButton = ButtonWidget.builder(violenceLabel(), b -> onViolenceClicked())
+                .dimensions(subX, 0, subW, ROW_H).build();
+        violenceLevelButton.setTooltip(Tooltip.of(Text.translatable("autofarm.attack_violence.tip")));
+        addScrolling(violenceLevelButton);
 
         // ---- 安全与隐蔽 ----
 
@@ -358,12 +384,19 @@ public class ExtrasScreen extends ScrollPanelScreen {
         ButtonWidget button = ButtonWidget.builder(dangerLabel(optionKey, value), b -> {
             if (currentToggle(optionKey)) {
                 setter.accept(false);
-                // 自动打怪关掉时，它的二级开关（暴力模式）也一并收掉，
+                // 自动打怪关掉时，它的二级项（暴力模式 / 暴力程度）也一并收掉，
                 // 免得留下一个「主子项关着、暴力标记还亮着」的状态
                 if ("autofarm.option.auto_attack".equals(optionKey)) {
                     draft.autoAttackViolent = false;
+                    draft.attackViolence = AutoFarmConfig.VIOLENCE_LIGHT;
                 }
                 b.setMessage(dangerLabel(optionKey, false));
+                return;
+            }
+            // 「自动打怪」不能脱离「自动收割」总开关单独开启 —— 否则就成了纯粹的作弊，
+            // 与这个模组的定位不符（关掉则永远允许，不设门槛）。
+            if ("autofarm.option.auto_attack".equals(optionKey) && !draft.enabled) {
+                toast("autofarm.combat.warn.master_off");
                 return;
             }
             // 打开：先不落实，交给确认屏；确认之后那边会重建这一页
@@ -371,6 +404,94 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(contentX, 0, contentWidth, ROW_H).build();
         button.setTooltip(Tooltip.of(Text.translatable(tipKey)));
         return button;
+    }
+
+    /** 攻击间隔的填空：只收数字，改动实时写进草稿，越界由 clamp() 兜底 */
+    private TextFieldWidget intervalField(int x) {
+        TextFieldWidget field = new TextFieldWidget(this.textRenderer, x, 0,
+                INTERVAL_FIELD_W, ROW_H, Text.empty());
+        field.setMaxLength(4);
+        field.setTextPredicate(s -> s.isEmpty() || s.matches("\\d{1,4}"));
+        field.setText(Integer.toString(draft.attackIntervalMs));
+        field.setChangedListener(text -> {
+            if (text == null || text.isEmpty()) {
+                return; // 清空时保持原值，等下一个合法数字
+            }
+            try {
+                draft.attackIntervalMs = Integer.parseInt(text);
+            } catch (NumberFormatException ignored) {
+                // 理论上进不来（上面已经限定了只收数字），保险起见吞掉
+            }
+        });
+        field.setTooltip(Tooltip.of(Text.translatable("autofarm.attack_interval.tip")));
+        return field;
+    }
+
+    /** 攻击距离：循环下一档；超过原版交互距离时先弹风险确认屏，确认后才写回 */
+    private void onRangeClicked() {
+        double next = nextChoice(ATTACK_RANGE_CHOICES, draft.attackRange);
+        if (next > AutoFarmConfig.ATTACK_RANGE_VANILLA) {
+            confirmThen("autofarm.danger.range.subtitle", () -> {
+                draft.attackRange = next;
+                rebuild();
+            }, "autofarm.danger.range.body1", "autofarm.danger.range.body2");
+            return;
+        }
+        draft.attackRange = next;
+        attackRangeButton.setMessage(attackRangeLabel());
+    }
+
+    /** 暴力程度：循环下一档；提高档位时先弹确认屏（降低不需要） */
+    private void onViolenceClicked() {
+        int next = nextChoice(VIOLENCE_CHOICES, draft.attackViolence);
+        if (next > draft.attackViolence) {
+            confirmThen("autofarm.danger.violence.subtitle", () -> {
+                draft.attackViolence = next;
+                rebuild();
+            }, "autofarm.danger.violence.body1", "autofarm.danger.violence.body2");
+            return;
+        }
+        draft.attackViolence = next;
+        violenceLevelButton.setMessage(violenceLabel());
+    }
+
+    /** 弹一块自定义文案的风险确认屏；点确认后执行 apply（通常顺带重建本页） */
+    private void confirmThen(String subtitleKey, Runnable apply, String... bodyKeys) {
+        if (this.client == null) {
+            return;
+        }
+        this.client.setScreen(new DangerConfirmScreen(this, apply,
+                "autofarm.danger.title", subtitleKey, bodyKeys));
+    }
+
+    /** 重建本页（草稿原样带过去）。用于标签文字变了、或者某几行要显隐切换的时候 */
+    private void rebuild() {
+        if (this.client != null) {
+            this.client.setScreen(new ExtrasScreen(this.parent, draft));
+        }
+    }
+
+    /**
+     * 战斗分区底部的警示行（最多显示两条）。
+     *
+     * <p>三条触发条件：总开关没开（这时打怪根本不会生效）、出手间隔过低、
+     * 攻击距离超过原版。它们都画成红色，作为「风险确认屏」之外的持续提醒 ——
+     * 确认屏只在你动手改参数时出现，而这几行只要参数处在危险区间就一直亮着。
+     */
+    private List<Text> combatWarnings() {
+        List<Text> out = new ArrayList<>();
+        if (!draft.enabled) {
+            out.add(Text.translatable("autofarm.combat.warn.master_off"));
+        }
+        if (draft.autoAttack) {
+            if (draft.attackIntervalMs < AutoFarmConfig.ATTACK_INTERVAL_SAFE_MS) {
+                out.add(Text.translatable("autofarm.combat.warn.interval_low"));
+            }
+            if (draft.attackRange > AutoFarmConfig.ATTACK_RANGE_VANILLA) {
+                out.add(Text.translatable("autofarm.combat.warn.range_far"));
+            }
+        }
+        return out;
     }
 
     /** 弹出风险确认屏；确认后写回草稿并重建本页（暴力行的显隐要跟着变） */
@@ -389,6 +510,40 @@ public class ExtrasScreen extends ScrollPanelScreen {
         context.drawTextWithShadow(this.textRenderer,
                 Text.translatable("autofarm.extras.section.combat"),
                 contentX + 6, originY + relY + 4, COLOR_DANGER);
+    }
+
+    /**
+     * 战斗分区里那几段「不属于按钮」的自绘内容：
+     * 攻击间隔左侧的选项名与右侧的范围提示、暴力行未解锁时的灰字、
+     * 以及底部的红色警示行。
+     */
+    private void drawCombatExtras(DrawContext context, int originY) {
+        int combat = originY + SEC_COMBAT_Y;
+
+        // 攻击间隔：左边写选项名（输入框摆在中段，见 buildContent），右边写范围提示
+        int intervalRow = combat + ROW_FIRST + ROW_GAP;
+        context.drawTextWithShadow(this.textRenderer,
+                Text.translatable("autofarm.option.attack_interval"),
+                contentX + 4, intervalRow + 5, COLOR_DANGER);
+        context.drawTextWithShadow(this.textRenderer,
+                Text.translatable("autofarm.attack_interval.hint",
+                        AutoFarmConfig.ATTACK_INTERVAL_MIN_MS, AutoFarmConfig.ATTACK_INTERVAL_MAX_MS),
+                contentX + INTERVAL_LABEL_W + INTERVAL_FIELD_W + 8, intervalRow + 5, COLOR_HINT);
+
+        // 暴力开关 / 暴力程度没解锁：把接下来两行的位置留给一句灰字说明
+        if (!draft.autoAttack) {
+            context.drawTextWithShadow(this.textRenderer,
+                    Text.translatable("autofarm.extras.violent_locked"),
+                    contentX + INDENT + 4, combat + ROW_FIRST + 4 * ROW_GAP + 5, COLOR_HINT);
+        }
+
+        // 底部警示：总开关没开 / 参数进入危险区间时标红（最多两条）
+        List<Text> warnings = combatWarnings();
+        int warnY = combat + ROW_FIRST + COMBAT_ROWS * ROW_GAP + 2;
+        for (int i = 0; i < warnings.size() && i < 2; i++) {
+            context.drawTextWithShadow(this.textRenderer, warnings.get(i),
+                    contentX + 4, warnY + i * 11, COLOR_DANGER);
+        }
     }
 
     /** 「选项：开/关」，但选项名染成红色 */
@@ -435,15 +590,22 @@ public class ExtrasScreen extends ScrollPanelScreen {
         if (violentButton != null) {
             violentButton.visible = violentButton.visible && draft.autoAttack;
         }
+        // 暴力程度是「暴力模式」的子项：暴力模式没开时它也不该出现
+        if (violenceLevelButton != null) {
+            violenceLevelButton.visible = violenceLevelButton.visible
+                    && draft.autoAttack && draft.autoAttackViolent;
+        }
     }
 
     @Override
     protected void positionContent(int originY) {
         int combat = originY + SEC_COMBAT_Y;
         setRowY(combatButton, combat + ROW_FIRST);
-        setRowY(attackIntervalButton, combat + ROW_FIRST + ROW_GAP);
-        setRowY(attackTargetButton, combat + ROW_FIRST + 2 * ROW_GAP);
-        setRowY(violentButton, combat + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(attackIntervalField, combat + ROW_FIRST + ROW_GAP);
+        setRowY(attackRangeButton, combat + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(attackTargetButton, combat + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(violentButton, combat + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(violenceLevelButton, combat + ROW_FIRST + 5 * ROW_GAP);
 
         int stealth = originY + SEC_STEALTH_Y;
         setRowY(pausePlayerButton, stealth + ROW_FIRST);
@@ -485,13 +647,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     protected void renderContent(DrawContext context, int originY, int mouseX, int mouseY, float delta) {
         drawSection(context, originY, SEC_COMBAT_Y, SEC_COMBAT_H);
         drawDangerHeader(context, originY, SEC_COMBAT_Y);
-        if (!draft.autoAttack) {
-            // 暴力开关没解锁：那一行放一句灰字说明，替掉按钮的位置
-            context.drawTextWithShadow(this.textRenderer,
-                    Text.translatable("autofarm.extras.violent_locked"),
-                    contentX + INDENT + 4, originY + SEC_COMBAT_Y + ROW_FIRST + 3 * ROW_GAP + 5,
-                    COLOR_HINT);
-        }
+        drawCombatExtras(context, originY);
 
         drawSection(context, originY, SEC_STEALTH_Y, SEC_STEALTH_H);
         drawHeader(context, originY, SEC_STEALTH_Y, "autofarm.extras.section.stealth");
@@ -530,7 +686,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private void resetAllOff() {
         draft.autoAttack = false;
         draft.autoAttackViolent = false;
+        draft.attackViolence = AutoFarmConfig.VIOLENCE_LIGHT;
         draft.attackIntervalMs = 800;
+        draft.attackRange = 2.9;
         draft.attackHostileOnly = true;
         draft.pauseWhenPlayerNear = false;
         draft.playerNearRadius = 16;
@@ -554,9 +712,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.pickupDroppedItems = false;
         draft.pickupDelaySeconds = 1;
         // 标签文字要跟着变，直接重建整页最省事
-        if (this.client != null) {
-            this.client.setScreen(new ExtrasScreen(this.parent, draft));
-        }
+        rebuild();
     }
 
     @Override
@@ -564,7 +720,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
         // 只还原附加功能这几项，草稿里的其他设置（扫描半径、存放策略……）保持不动
         draft.autoAttack = old.autoAttack;
         draft.autoAttackViolent = old.autoAttackViolent;
+        draft.attackViolence = old.attackViolence;
         draft.attackIntervalMs = old.attackIntervalMs;
+        draft.attackRange = old.attackRange;
         draft.attackHostileOnly = old.attackHostileOnly;
         draft.pauseWhenPlayerNear = old.pauseWhenPlayerNear;
         draft.playerNearRadius = old.playerNearRadius;
@@ -595,6 +753,16 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static int nextChoice(int[] choices, int current) {
         for (int i = 0; i < choices.length; i++) {
             if (choices[i] == current) {
+                return choices[(i + 1) % choices.length];
+            }
+        }
+        return choices[0];
+    }
+
+    /** 小数版的循环取下一档（攻击距离用）。比较带一点容差，免得浮点误差选不中 */
+    private static double nextChoice(double[] choices, double current) {
+        for (int i = 0; i < choices.length; i++) {
+            if (Math.abs(choices[i] - current) < 1e-6) {
                 return choices[(i + 1) % choices.length];
             }
         }
@@ -636,9 +804,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 Text.translatable("autofarm.value.seconds", draft.pickupDelaySeconds));
     }
 
-    private Text attackIntervalLabel() {
-        return optionLabel("autofarm.option.attack_interval",
-                Text.translatable("autofarm.value.millis", draft.attackIntervalMs));
+    private Text attackRangeLabel() {
+        return optionLabel("autofarm.option.attack_range",
+                Text.translatable("autofarm.value.blocks", String.format("%.1f", draft.attackRange)));
     }
 
     private Text attackTargetLabel() {
@@ -646,6 +814,20 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 Text.translatable(draft.attackHostileOnly
                         ? "autofarm.attack_target.hostile"
                         : "autofarm.attack_target.all"));
+    }
+
+    private Text violenceLabel() {
+        return optionLabel("autofarm.option.attack_violence",
+                Text.translatable("autofarm.attack_violence.level." + violenceKey(draft.attackViolence)));
+    }
+
+    /** 暴力程度档位 → 语言键后缀。认不出来的一律当「轻度」显示 */
+    private static String violenceKey(int level) {
+        return switch (level) {
+            case 1 -> "medium";
+            case 2 -> "lifesaver";
+            default -> "light";
+        };
     }
 
     private Text antiKickLevelLabel() {

@@ -10,10 +10,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 「高风险功能」的二次确认屏 —— 目前只有「自动打怪」会用到它。
+ * 「高风险功能」的二次确认屏 —— 战斗组里几个会把风险抬高的动作都会用到它：
+ * 打开「自动打怪」、把攻击距离调到原版之上、提高「暴力程度」。
  *
  * <h2>为什么要有这么一道</h2>
- * 附加功能里其他每一项最多只是「让角色怪一点」；自动打怪不一样，
+ * 附加功能里其他每一项最多只是「让角色怪一点」；战斗组不一样，
  * 它替玩家出手攻击生物，等价于常见的杀戮光环，是会让账号被封的那一类功能。
  * 开关藏在面板里、点一下就生效，太容易误开 ——
  * 所以把「打开」这个动作拆成两步：先在面板上点开关，再在这块屏上明确点一次确认。
@@ -39,6 +40,9 @@ public class DangerConfirmScreen extends Screen {
 
     private final Screen parent;
     private final Runnable onConfirm;
+    /** 副标题与正文的翻译键：不同风险点（开打怪 / 调距离 / 提暴力程度）各用各的 */
+    private final String subtitleKey;
+    private final String[] bodyKeys;
 
     /** 自动换行之后的正文行；null 表示一个空行（段落之间的间隔） */
     private List<OrderedText> bodyLines = new ArrayList<>();
@@ -48,10 +52,26 @@ public class DangerConfirmScreen extends Screen {
     private int panelW;
     private int panelH;
 
+    /** 「自动打怪」自己那套风险文案 */
     public DangerConfirmScreen(Screen parent, Runnable onConfirm) {
-        super(Text.translatable("autofarm.danger.title"));
+        this(parent, onConfirm, "autofarm.danger.title", "autofarm.danger.subtitle",
+                "autofarm.danger.body1", "autofarm.danger.body2", "autofarm.danger.body3");
+    }
+
+    /**
+     * 自定义文案的版本 —— 给「攻击距离」「暴力程度」这类调整用。
+     *
+     * @param titleKey    顶部标题的翻译键
+     * @param subtitleKey 副标题（一句「我们为什么不推荐」）的翻译键
+     * @param bodyKeys    正文段落，一段一个键（段间自动留空行）
+     */
+    public DangerConfirmScreen(Screen parent, Runnable onConfirm, String titleKey,
+                               String subtitleKey, String... bodyKeys) {
+        super(Text.translatable(titleKey));
         this.parent = parent;
         this.onConfirm = onConfirm;
+        this.subtitleKey = subtitleKey;
+        this.bodyKeys = bodyKeys;
     }
 
     @Override
@@ -62,17 +82,12 @@ public class DangerConfirmScreen extends Screen {
         // 正文分三段（各自自动换行，段间留一个空行）——
         // 拆段是为了换行计算简单，也是为了让「功能性质 / 模式局限 / 建议」三层意思分开
         this.bodyLines = new ArrayList<>();
-        String[] paragraphKeys = {
-                "autofarm.danger.body1",
-                "autofarm.danger.body2",
-                "autofarm.danger.body3"
-        };
-        for (int i = 0; i < paragraphKeys.length; i++) {
+        for (int i = 0; i < bodyKeys.length; i++) {
             if (i > 0) {
                 this.bodyLines.add(null);
             }
             this.bodyLines.addAll(this.textRenderer.wrapLines(
-                    Text.translatable(paragraphKeys[i]), textW));
+                    Text.translatable(bodyKeys[i]), textW));
         }
 
         this.panelH = PAD + 14 + 14 + bodyLines.size() * LINE_H + 12 + BTN_H + PAD;
@@ -96,9 +111,9 @@ public class DangerConfirmScreen extends Screen {
         context.fill(left, top, left + panelW, top + panelH, COLOR_PANEL);
         drawRectOutline(context, left, top, left + panelW, top + panelH, COLOR_EDGE);
 
-        context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("autofarm.danger.title"),
+        context.drawCenteredTextWithShadow(this.textRenderer, this.title,
                 left + panelW / 2, top + PAD, COLOR_TITLE);
-        context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("autofarm.danger.subtitle"),
+        context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable(this.subtitleKey),
                 left + panelW / 2, top + PAD + 14, COLOR_SUBTITLE);
 
         int y = top + PAD + 14 + 14;
