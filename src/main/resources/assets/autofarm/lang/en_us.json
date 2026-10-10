@@ -396,5 +396,20 @@
   "autofarm.notice.bone_meal_limit": "Bone meal: this plant already hit the limit",
   "autofarm.notice.no_bone_meal": "Bone meal: no bone meal in the hotbar",
   "autofarm.notice.bone_meal_stuck": "Bone meal: it still isn't ripe after many tries",
-  "autofarm.notice.supply_no_supply": "No supplies or tools to fetch at the supply point"
+  "autofarm.notice.supply_no_supply": "No supplies or tools to fetch at the supply point",
+  "autofarm.option.stats": "Statistics",
+  "autofarm.stats.tip": "View this-session and lifetime statistics, plus the issue-log count. Doesn't change any behavior.",
+  "autofarm.stats.title": "Statistics",
+  "autofarm.stats.session": "This Session",
+  "autofarm.stats.total": "Lifetime",
+  "autofarm.stats.harvested": "Harvested",
+  "autofarm.stats.planted": "Planted",
+  "autofarm.stats.picked_up": "Picked up",
+  "autofarm.stats.bone_meal": "Bone meal",
+  "autofarm.stats.supply_runs": "Supply runs",
+  "autofarm.stats.work_time": "Work time",
+  "autofarm.stats.issues": "Issues",
+  "autofarm.stats.clear": "Reset Totals",
+  "autofarm.stats.clear_log": "Clear Log",
+  "autofarm.stats.done": "Done"
 }

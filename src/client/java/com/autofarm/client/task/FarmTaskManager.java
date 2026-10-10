@@ -20,6 +20,7 @@ import com.autofarm.client.path.PathWalker;
 import com.autofarm.client.scan.CropFilter;
 import com.autofarm.client.scan.CropRegistry;
 import com.autofarm.client.scan.CropScanner;
+import com.autofarm.client.stats.StatsManager;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.ItemEntity;
@@ -221,6 +222,9 @@ public final class FarmTaskManager {
      * 只能靠盯着世界里的方块变化猜。
      */
     private static int harvestedCount;
+
+    /** 累计统计的低频落盘计时器（tick）：数满就写一次盘，不用等退出世界才落盘 */
+    private static int statsSaveTicks;
 
     /** 这一轮往空耕地上种了几格（只有开了「补种空耕地」才可能不为 0） */
     private static int plantedCount;
@@ -491,6 +495,8 @@ public final class FarmTaskManager {
         humanizeDelay = 0;
         restRemaining = 0;
         workTicks = 0;
+        // 累计统计：把本轮干活时长并入累计再清空（退出世界 = 这一轮结束）
+        StatsManager.get().addWorkSeconds(sessionTicks / 20);
         sessionTicks = 0;
         pickupTargets.clear();
         extraTargets.clear();
@@ -517,6 +523,8 @@ public final class FarmTaskManager {
         IdleLook.reset();
         RescueHelper.reset();
         KillAura.reset();
+        // 统计写盘：退出世界是「收工」的明确时机，趁机把累计落盘
+        StatsManager.get().save();
     }
 
     /**
@@ -577,6 +585,10 @@ public final class FarmTaskManager {
             RescueHelper.reset();
             KillAura.reset();
             state = FarmState.IDLE;
+            // 关掉开关 = 这一轮结束：把干活时长并入累计并落盘
+            StatsManager.get().addWorkSeconds(sessionTicks / 20);
+            sessionTicks = 0;
+            StatsManager.get().save();
         } else {
             // 打开 → 假装「刚进入这个世界」：清空记忆、下一 tick 立刻重扫
             handled.clear();
@@ -618,6 +630,13 @@ public final class FarmTaskManager {
         // 防踢模式：推进一次内部随机量（转向速度、瞄准微颤、疾跑节奏）。
         // 放在最前面，是为了保证「同一 tick 里不管谁读它，读到的都是同一个值」。
         Humanizer.beginTick();
+
+        // 累计统计的低频落盘：脏了才真正写（见 StatsManager.save），所以这里只是定个节拍，
+        // 让它不用等退出世界才写盘，中途崩了也不至于把整局统计全丢。
+        if (++statsSaveTicks >= 1200) {
+            statsSaveTicks = 0;
+            StatsManager.get().save();
+        }
 
         AutoFarmConfig config = ConfigManager.get();
         if (!config.enabled && !config.visualize) {
@@ -1266,6 +1285,7 @@ public final class FarmTaskManager {
                 return;
             }
             pickupWaitPos = null;
+            StatsManager.get().recordPickup();
             PathWalker.releaseTarget();
             drainResolved();
             state = PathWalker.isActive() ? FarmState.MOVING : FarmState.IDLE;
@@ -1327,10 +1347,12 @@ public final class FarmTaskManager {
             // 统计：真的收到了才算数（判定「这格不该动」时 wasHarvested 是 false）
             if (CropHarvester.wasHarvested()) {
                 harvestedCount++;
+                StatsManager.get().recordHarvest();
             }
             // 空地补种单独记一笔 —— 它没「收」到任何东西，但确实干了活
             if (CropHarvester.wasPlanted()) {
                 plantedCount++;
+                StatsManager.get().recordPlant();
             }
 
             // 没种子补种 → 记下缺的是哪种，等这条路线走完就去补给点取
@@ -1369,6 +1391,12 @@ public final class FarmTaskManager {
             // 记个到期时间，到点自然会重新排进路线，不用你手动关开一次。
             boolean failed = !CropHarvester.wasHarvested() && !CropHarvester.wasPlanted()
                     && CropHarvester.getNotice() != null;
+            // 附加功能「异常日志」：没干成、又给了原因，就记一条 —— 不用管「失败拉黑」开没开，
+            // 日志和拉黑是两回事：拉黑影响重试，日志只负责「记下来给人看」
+            if (failed && held != null) {
+                StatsManager.get().logIssue("harvest failed (" + CropHarvester.getNotice()
+                        + ") at " + held.getX() + "," + held.getY() + "," + held.getZ());
+            }
             if (config.failureCooldown && failed && held != null) {
                 failedUntil.put(held.toImmutable(),
                         client.world.getTime() + config.failureCooldownSeconds * 20L);
@@ -1555,6 +1583,14 @@ public final class FarmTaskManager {
         }
         // 补给点的结果是「一趟才有一次」的事，直接播报一条就够了
         announceEvent(client, supplyNotice);
+
+        // 附加功能「异常日志 / 统计」：这一趟办成了记一笔补给；办砸了记一条异常
+        if (result == ContainerTransfer.Result.FAILED && supplyNotice != null) {
+            StatsManager.get().logIssue("supply failed: " + supplyNotice);
+        } else if (ContainerTransfer.getTakenStacks() > 0
+                || ContainerTransfer.getDepositedStacks() > 0) {
+            StatsManager.get().recordSupplyRun();
+        }
 
         // 「要办的事一件都没办成」（箱子满了、箱子里没种子/没骨粉/没工具）→ 歇一会儿再去，
         // 否则下一 tick 条件照样成立，它会立刻掉头再跑一趟，变成两个点之间横跳

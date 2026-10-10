@@ -396,5 +396,20 @@
   "autofarm.notice.bone_meal_limit": "骨粉催熟：这一株已经撒够次数了",
   "autofarm.notice.no_bone_meal": "骨粉催熟：快捷栏里没有骨粉",
   "autofarm.notice.bone_meal_stuck": "骨粉催熟：撒了很久它也没熟",
-  "autofarm.notice.supply_no_supply": "补给点里没有可取的耗材或工具"
+  "autofarm.notice.supply_no_supply": "补给点里没有可取的耗材或工具",
+  "autofarm.option.stats": "统计",
+  "autofarm.stats.tip": "查看本轮与累计的统计，以及异常日志条数。不影响任何行为。",
+  "autofarm.stats.title": "统计",
+  "autofarm.stats.session": "本轮",
+  "autofarm.stats.total": "累计",
+  "autofarm.stats.harvested": "收割",
+  "autofarm.stats.planted": "补种",
+  "autofarm.stats.picked_up": "拾取掉落物",
+  "autofarm.stats.bone_meal": "骨粉",
+  "autofarm.stats.supply_runs": "补给趟数",
+  "autofarm.stats.work_time": "干活时长",
+  "autofarm.stats.issues": "异常次数",
+  "autofarm.stats.clear": "清零累计",
+  "autofarm.stats.clear_log": "清空日志",
+  "autofarm.stats.done": "完成"
 }

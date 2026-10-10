@@ -5,6 +5,7 @@ import com.autofarm.client.human.Humanizer;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.InventoryScanner;
 import com.autofarm.client.scan.CropRegistry;
+import com.autofarm.client.stats.StatsManager;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
@@ -140,9 +141,6 @@ public final class CropHarvester {
     /** 这一株已经撒了几次骨粉 —— 受配置的 {@code boneMealLimit} 约束 */
     private static int boneMealUsed;
 
-    /** 这一趟是不是因为快捷栏里没有骨粉才没干成（任务大脑据此决定去补给点取） */
-    private static boolean missingBoneMeal;
-
     private static int ticks;
 
     /**
@@ -159,9 +157,6 @@ public final class CropHarvester {
 
     /** 这一次是不是「接上果实摘走的」（甜浆果、发光浆果），给状态栏用 */
     private static boolean picked;
-
-    /** 这一次是不是「往空耕地上种」（而不是收割之后的补种），给状态栏用 */
-    private static boolean planting;
 
     /** 空地补种到底种上了没有 */
     private static boolean planted;
@@ -187,15 +182,6 @@ public final class CropHarvester {
         return stage == Stage.REPLANT || stage == Stage.PLANT;
     }
 
-    /** 现在是不是「往空耕地上种」（而不是收割后补种） */
-    public static boolean isPlanting() {
-        return stage == Stage.PLANT;
-    }
-
-    public static BlockPos getTarget() {
-        return target;
-    }
-
     /** 上一次的异常说明（翻译键），null 表示一切正常 */
     public static String getNotice() {
         return notice;
@@ -217,11 +203,6 @@ public final class CropHarvester {
     /** 这一次是不是「摘」下来的（甜浆果、发光浆果），而不是挖下来的 */
     public static boolean wasPicked() {
         return picked;
-    }
-
-    /** 这一次是不是「往空耕地上种」的（而不是收割） */
-    public static boolean wasPlanting() {
-        return planting;
     }
 
     /** 空地补种有没有真的种上 */
@@ -265,7 +246,6 @@ public final class CropHarvester {
                 // 就当成补种目标；否则按老规矩跳过
                 if (config != null && config.fillEmptyFarmland
                         && CropRegistry.isPlantingSpot(world, target)) {
-                    planting = true;
                     stage = Stage.PLANT;
                 } else {
                     stage = Stage.DONE;
@@ -306,13 +286,11 @@ public final class CropHarvester {
         extraBreak = false;
         boneMeal = false;
         boneMealUsed = 0;
-        missingBoneMeal = false;
         ticks = 0;
         nextActionAt = 0;
         harvested = false;
         replanted = false;
         picked = false;
-        planting = false;
         planted = false;
         missingSeed = false;
         notice = null;
@@ -342,11 +320,6 @@ public final class CropHarvester {
                 : Stage.DONE;
     }
 
-    /** 这一趟是不是因为快捷栏里没有骨粉才没干成 —— 任务大脑据此决定去补给点取一趟 */
-    public static boolean needsBoneMeal() {
-        return missingBoneMeal;
-    }
-
     /** 停手（退出世界、关掉开关时用） */
     public static void reset() {
         target = null;
@@ -356,13 +329,11 @@ public final class CropHarvester {
         extraBreak = false;
         boneMeal = false;
         boneMealUsed = 0;
-        missingBoneMeal = false;
         ticks = 0;
         nextActionAt = 0;
         harvested = false;
         replanted = false;
         picked = false;
-        planting = false;
         planted = false;
         missingSeed = false;
         notice = null;
@@ -645,7 +616,6 @@ public final class CropHarvester {
         int slot = InventoryScanner.findBoneMealSlot(player);
         if (slot < 0) {
             notice = "autofarm.notice.no_bone_meal";
-            missingBoneMeal = true;
             return Stage.DONE;
         }
         if (player.getInventory().selectedSlot != slot) {
@@ -665,6 +635,7 @@ public final class CropHarvester {
         if (BlockInteractor.isWithinReach(player, target, REACH) && ticks >= nextActionAt) {
             BlockInteractor.useBlock(client, target);
             boneMealUsed++;
+            StatsManager.get().recordBoneMeal();
             nextActionAt = ticks + Humanizer.gap(BONE_MEAL_RETRY_INTERVAL);
         }
         ticks++;

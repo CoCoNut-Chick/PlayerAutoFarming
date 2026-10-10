@@ -6,6 +6,7 @@ import com.autofarm.client.keybind.AutoFarmKeybinds;
 import com.autofarm.client.net.ReconnectManager;
 import com.autofarm.client.render.AutoFarmHud;
 import com.autofarm.client.render.CropHighlighter;
+import com.autofarm.client.stats.StatsManager;
 import com.autofarm.client.task.FarmTaskManager;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -27,6 +28,8 @@ public class AutoFarmClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ConfigManager.load();
+        // 累计统计与异常日志（E 组）：启动时读回来，之后由任务大脑在关键事件点记录
+        StatsManager.get().load();
         AutoFarmKeybinds.register();
         // 世界里高亮成熟作物的线框（纯客户端渲染）
         CropHighlighter.register();

@@ -37,8 +37,8 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private static final int SEC_SAFETY_Y = 592, SEC_SAFETY_H = 76;
     /** 作物与筛选：补种空耕地 + 进次级面板挑作物。同样追加在最后 */
     private static final int SEC_CROP_Y = 674, SEC_CROP_H = 64;
-    /** 附加功能：默认全关的增强项，单独一页。追加在最后 */
-    private static final int SEC_EXTRAS_Y = 742, SEC_EXTRAS_H = 44;
+    /** 附加功能：默认全关的增强项，单独一页。统计面板也放这里，追加在最后 */
+    private static final int SEC_EXTRAS_Y = 742, SEC_EXTRAS_H = 64;
 
     private static final int ROW_ENABLED = 82;
     private static final int ROW_RADIUS = 102;
@@ -73,8 +73,9 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private static final int ROW_FILL_EMPTY = 690;
     private static final int ROW_CROP_FILTER = 710;
 
-    /** 附加功能分区的一行 */
+    /** 附加功能分区的两行：附加功能、统计 */
     private static final int ROW_EXTRAS = 758;
+    private static final int ROW_STATS = 778;
 
     private static final int AXIS_LABEL_W = 14;
     private static final int ICON_SIZE = ROW_H;
@@ -108,6 +109,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private ButtonWidget fillEmptyButton;
     private ButtonWidget cropFilterButton;
     private ButtonWidget extrasButton;
+    private ButtonWidget statsButton;
     private PaletteIconButton paletteButton;
 
     private TextFieldWidget fieldX;
@@ -379,6 +381,14 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         extrasButton.setTooltip(Tooltip.of(Text.translatable("autofarm.extras.tip")));
         addScrolling(extrasButton);
 
+        // 统计面板（E 组）：不是改配置，只是看一轮「收了多少、干了多久、出过几次岔子」，
+        // 以及累计到现在的账本。和附加功能并排放在最后。
+        this.statsButton = ButtonWidget.builder(
+                Text.translatable("autofarm.option.stats"), b -> openStats())
+                .dimensions(contentX, 0, fullW, ROW_H).build();
+        statsButton.setTooltip(Tooltip.of(Text.translatable("autofarm.stats.tip")));
+        addScrolling(statsButton);
+
         // ---- 页脚（固定在面板底部，不参与滚动） ----
         addFooter(
                 ButtonWidget.builder(Text.translatable("autofarm.button.save"), b -> onSave())
@@ -421,6 +431,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         setRowY(fillEmptyButton, originY + ROW_FILL_EMPTY);
         setRowY(cropFilterButton, originY + ROW_CROP_FILTER);
         setRowY(extrasButton, originY + ROW_EXTRAS);
+        setRowY(statsButton, originY + ROW_STATS);
     }
 
     private TextFieldWidget coordField(int x, int width, Integer value) {
@@ -648,6 +659,13 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         draft.supplyZ = parseOrNull(fieldZ);
         if (this.client != null) {
             this.client.setScreen(new ExtrasScreen(this, draft));
+        }
+    }
+
+    /** 进「统计」面板。它不编辑 draft —— 只是看本轮和累计的账本 */
+    private void openStats() {
+        if (this.client != null) {
+            this.client.setScreen(new StatsScreen(this));
         }
     }
 

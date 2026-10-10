@@ -139,7 +139,6 @@ public final class ContainerTransfer {
 
     private static int ticks;
     private static int clickCooldown;
-    private static int openedAttempts;
     private static int clicks;
     private static int refillStacks;
 
@@ -191,7 +190,6 @@ public final class ContainerTransfer {
         active = target != null;
         ticks = 0;
         clickCooldown = 0;
-        openedAttempts = 0;
         clicks = 0;
         refillStacks = 0;
         lastSlot = -1;
@@ -232,11 +230,6 @@ public final class ContainerTransfer {
     /** 失败原因（翻译键），正常结束是 null */
     public static String getFailure() {
         return failure;
-    }
-
-    /** 我们进过箱子界面吗（用来区分「没够着」和「开不了」） */
-    public static boolean wasOpened() {
-        return openedAttempts > 0;
     }
 
     /**
@@ -290,9 +283,7 @@ public final class ContainerTransfer {
 
         // 准星对准了、间隔到了，就右键一次
         if (ticks % OPEN_RETRY_INTERVAL == 1) {
-            if (BlockInteractor.useBlock(client, target)) {
-                openedAttempts++;
-            }
+            BlockInteractor.useBlock(client, target);
         } else {
             BlockInteractor.aimAt(player, target);
         }
