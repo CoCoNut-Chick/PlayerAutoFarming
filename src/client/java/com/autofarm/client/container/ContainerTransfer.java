@@ -4,6 +4,7 @@ import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.InventoryScanner;
+import com.autofarm.client.inventory.ItemCategory;
 import com.autofarm.client.scan.CropRegistry;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
@@ -122,6 +123,14 @@ public final class ContainerTransfer {
     private static boolean wantDeposit;
     private static boolean wantRefill;
     /**
+     * 这一趟「存」的是<b>杂物</b>（非农作物物品）还是<b>作物产物</b>。
+     *
+     * <p>{@code true} = 杂物临时存储（石头、泥土、骨头这类非作物物品单独存一个箱子，
+     * 腾背包空间，和「存放策略」的 keepFor 无关、一律全存）；
+     * {@code false} = 常规作物产物存储（按 keepFor 的额度存）。</p>
+     */
+    private static boolean depositJunk;
+    /**
      * 这一趟要不要顺带取<b>耗材</b>（目前就是骨粉）。
      *
      * <p>它是「耗材自给」那一项的需求：骨粉催熟开着、而手边的骨粉快见底时，
@@ -173,14 +182,16 @@ public final class ContainerTransfer {
      * @param seeds    优先要取的种子（空集合表示「箱子里的作物种子都拿」）
      * @param supplies 这一趟要不要顺带取耗材（骨粉）
      * @param tool     这一趟要不要顺带取一件有耐久的工具
+     * @param junk     这一趟存的是不是「杂物」（非农作物物品）——见 {@link #depositJunk}
      */
     public static void begin(BlockPos pos, boolean deposit, boolean refill, Collection<Block> seeds,
-                             boolean supplies, boolean tool) {
+                             boolean supplies, boolean tool, boolean junk) {
         target = pos == null ? null : pos.toImmutable();
         wantDeposit = deposit;
         wantRefill = refill;
         wantSupplies = supplies;
         wantTool = tool;
+        depositJunk = junk;
         wantedSeeds.clear();
         if (seeds != null) {
             wantedSeeds.addAll(seeds);
@@ -500,7 +511,16 @@ public final class ContainerTransfer {
                 if (stack.isEmpty()) {
                     continue;
                 }
-                int budget = InventoryScanner.depositKeepBudget(stack, config);
+                // 作物 / 杂物分流：一趟只搬一类，另一类跳过
+                boolean cropRelated = isCropRelated(ItemCategory.classify(stack));
+                if (cropRelated == depositJunk) {
+                    continue; // 存杂物时跳过作物，存作物时跳过杂物
+                }
+                // 杂物临时存储不看「存放策略」的额度，一律全存腾空间；
+                // 作物产物仍按 keepFor 的额度存。
+                int budget = depositJunk
+                        ? ItemCategory.STORE_ALL
+                        : InventoryScanner.depositKeepBudget(stack, config);
                 if (budget < 0) {
                     continue; // 不该存的，连数都不用数
                 }
@@ -512,6 +532,11 @@ public final class ContainerTransfer {
             }
         }
         return -1;
+    }
+
+    /** 这一类算不算「作物相关」（该存到农作物输出容器，而不是杂物容器） */
+    private static boolean isCropRelated(ItemCategory category) {
+        return category != null && category.isCropRelated();
     }
 
     /**

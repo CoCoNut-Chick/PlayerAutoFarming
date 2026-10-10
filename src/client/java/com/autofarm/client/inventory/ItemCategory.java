@@ -173,6 +173,16 @@ public enum ItemCategory {
     }
 
     /**
+     * 这一类算不算「作物相关」（该进农作物输出容器，而不是杂物容器）。
+     *
+     * <p>种子、收获物即种子、纯收获物、收获食物都算作物相关；
+     * 食物、方块、工具则算「杂物」，走杂物临时存储容器。
+     */
+    public boolean isCropRelated() {
+        return this == SEED || this == SELF_SEED || this == PRODUCE || this == HARVEST_FOOD;
+    }
+
+    /**
      * 这个物品属于哪一类。<b>空栈返回 null</b>。
      *
      * @see ItemCategory 顶部的判定顺序

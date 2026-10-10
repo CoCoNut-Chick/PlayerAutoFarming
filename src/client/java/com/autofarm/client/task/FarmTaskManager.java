@@ -13,6 +13,7 @@ import com.autofarm.client.human.RescueHelper;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.AutoEater;
 import com.autofarm.client.inventory.InventoryScanner;
+import com.autofarm.client.inventory.ItemCategory;
 import com.autofarm.client.path.BlockNavigator;
 import com.autofarm.client.path.PathPlanner;
 import com.autofarm.client.path.PathStep;
@@ -23,6 +24,7 @@ import com.autofarm.client.scan.CropScanner;
 import com.autofarm.client.stats.StatsManager;
 import net.minecraft.block.Block;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.toast.SystemToast;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
@@ -30,6 +32,8 @@ import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.item.ItemStack;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
@@ -169,11 +173,27 @@ public final class FarmTaskManager {
         TRANSFERRING
     }
 
+    /** 补给的目的 —— 决定用哪个专用容器（没设/禁用时退回默认补给点） */
+    private enum SupplyPurpose {
+        /** 存作物产物 → 农作物输出容器 */
+        DEPOSIT_CROP,
+        /** 存杂物（非农作物物品）→ 杂物临时存储容器 */
+        DEPOSIT_JUNK,
+        /** 取种子 → 种子输入容器 */
+        REFILL_SEED,
+        /** 取工具 / 骨粉 → 工具补给容器 */
+        FETCH_TOOL
+    }
+
     private static SupplyPhase supplyPhase = SupplyPhase.NONE;
     /** 这一趟要不要存东西 */
     private static boolean supplyDeposit;
     /** 这一趟要不要取种子 */
     private static boolean supplyRefill;
+    /** 这一趟存的是不是「杂物」（非农作物物品，见 {@code ContainerTransfer.depositJunk}） */
+    private static boolean supplyDepositJunk;
+    /** 这一趟的补给目的 —— 决定用哪个专用容器（输出 / 种子 / 工具 / 杂物） */
+    private static SupplyPurpose supplyPurpose = SupplyPurpose.DEPOSIT_CROP;
 
     /**
      * 这一趟要顺带取<b>骨粉</b>（附加功能「耗材自给」）。
@@ -498,6 +518,8 @@ public final class FarmTaskManager {
         supplyPhase = SupplyPhase.NONE;
         supplyDeposit = false;
         supplyRefill = false;
+        supplyDepositJunk = false;
+        supplyPurpose = SupplyPurpose.DEPOSIT_CROP;
         suppliesWanted = false;
         toolWanted = false;
         refillWanted = false;
@@ -578,6 +600,8 @@ public final class FarmTaskManager {
             supplyPhase = SupplyPhase.NONE;
             supplyDeposit = false;
             supplyRefill = false;
+            supplyDepositJunk = false;
+            supplyPurpose = SupplyPurpose.DEPOSIT_CROP;
             suppliesWanted = false;
             toolWanted = false;
             refillWanted = false;
@@ -662,7 +686,9 @@ public final class FarmTaskManager {
         }
 
         AutoFarmConfig config = ConfigManager.get();
-        if (!config.enabled && !config.visualize) {
+        // 「自动收割」关了就整个停手，连高亮也不扫 —— 关掉开关就该什么都不显示，
+        // 而不是留着描边让人误以为还在工作。
+        if (!config.enabled) {
             reset();
             return;
         }
@@ -1164,17 +1190,33 @@ public final class FarmTaskManager {
         toolWanted = config.autoFetchTool
                 && InventoryScanner.countUsableTools(client.player) == 0;
 
-        // 3a. 背包快满了 → 先去存一趟
+        // 3a. 背包快满了 → 先存作物产物
         if (shouldGoDeposit(client, config)
-                && startSupplyRun(client, config, true, refillWanted)) {
+                && startSupplyRun(client, config, true, refillWanted, SupplyPurpose.DEPOSIT_CROP)) {
             return;
         }
 
-        // 3b. 缺种子 / 缺骨粉 / 没备用工具 → 去取一趟（一趟顺路办完，别跑三趟）
-        boolean wantSeeds = refillWanted && config.refillSeeds;
-        if ((wantSeeds || suppliesWanted || toolWanted) && config.hasSupplyPoint()
+        // 3a2. 杂物临时存储（可选）：背包满了 + 杂物容器启用 + 真有杂物 → 单独存一趟
+        if (config.outJunkEnabled && config.hasJunkOut()
                 && supplyCooldown == 0
-                && startSupplyRun(client, config, false, wantSeeds)) {
+                && InventoryScanner.isNearlyFull(client.player, INVENTORY_RESERVE)
+                && hasDepositableJunk(client.player)
+                && startSupplyRun(client, config, true, false, SupplyPurpose.DEPOSIT_JUNK)) {
+            return;
+        }
+
+        // 3b. 缺种子 → 取种子
+        boolean wantSeeds = refillWanted && config.refillSeeds;
+        if (wantSeeds && supplyCooldown == 0
+                && containerFor(config, SupplyPurpose.REFILL_SEED) != null
+                && startSupplyRun(client, config, false, true, SupplyPurpose.REFILL_SEED)) {
+            return;
+        }
+
+        // 3c. 缺骨粉 / 没备用工具 → 取工具（和种子可能在不同容器，分开跑）
+        if ((suppliesWanted || toolWanted) && supplyCooldown == 0
+                && containerFor(config, SupplyPurpose.FETCH_TOOL) != null
+                && startSupplyRun(client, config, false, false, SupplyPurpose.FETCH_TOOL)) {
             return;
         }
 
@@ -1513,7 +1555,7 @@ public final class FarmTaskManager {
     /** 「背包快满了，而且真有东西可以存」→ 该跑一趟 */
     private static boolean shouldGoDeposit(MinecraftClient client, AutoFarmConfig config) {
         return config.depositWhenFull
-                && config.hasSupplyPoint()
+                && containerFor(config, SupplyPurpose.DEPOSIT_CROP) != null
                 && supplyCooldown == 0
                 && InventoryScanner.isNearlyFull(client.player, INVENTORY_RESERVE)
                 && InventoryScanner.hasDepositableItems(client.player, config);
@@ -1537,7 +1579,27 @@ public final class FarmTaskManager {
         if (!InventoryScanner.hasDepositableItems(client.player, config)) {
             return false;
         }
-        return ContainerCompat.findContainer(client.world, supplyPos(config)) == null;
+        return ContainerCompat.findContainer(client.world,
+                containerFor(config, SupplyPurpose.DEPOSIT_CROP)) == null;
+    }
+
+    /** 背包里有没有「非作物相关」的杂物（食物 / 方块 / 工具），杂物临时存储用它判 */
+    private static boolean hasDepositableJunk(ClientPlayerEntity player) {
+        if (player == null) {
+            return false;
+        }
+        PlayerInventory inv = player.getInventory();
+        for (int i = 0; i < InventoryScanner.INVENTORY_SLOTS; i++) {
+            ItemStack stack = inv.getStack(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            ItemCategory category = ItemCategory.classify(stack);
+            if (category != null && !category.isCropRelated()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1549,8 +1611,8 @@ public final class FarmTaskManager {
      * @return 有没有真的开始（没设补给点、附近没有容器、旁边站不住人都算失败）
      */
     private static boolean startSupplyRun(MinecraftClient client, AutoFarmConfig config,
-                                          boolean deposit, boolean refill) {
-        BlockPos wanted = supplyPos(config);
+                                          boolean deposit, boolean refill, SupplyPurpose purpose) {
+        BlockPos wanted = containerFor(config, purpose);
         if (wanted == null) {
             return false;
         }
@@ -1570,6 +1632,8 @@ public final class FarmTaskManager {
         supplyContainer = container;
         supplyDeposit = deposit;
         supplyRefill = refill;
+        supplyDepositJunk = purpose == SupplyPurpose.DEPOSIT_JUNK;
+        supplyPurpose = purpose;
         supplyPhase = SupplyPhase.GOING;
         state = FarmState.TO_SUPPLY;
 
@@ -1600,7 +1664,7 @@ public final class FarmTaskManager {
         supplyPhase = SupplyPhase.TRANSFERRING;
         state = FarmState.TRANSFERRING;
         ContainerTransfer.begin(container, supplyDeposit, supplyRefill, missingSeeds,
-                suppliesWanted, toolWanted);
+                suppliesWanted, toolWanted, supplyDepositJunk);
     }
 
     /**
@@ -1614,7 +1678,8 @@ public final class FarmTaskManager {
             return supplyContainer;
         }
         MinecraftClient client = MinecraftClient.getInstance();
-        return client == null ? null : ContainerCompat.findContainer(client.world, supplyPos(config));
+        return client == null ? null
+                : ContainerCompat.findContainer(client.world, containerFor(config, supplyPurpose));
     }
 
     /** 每 tick 推进一步：要么在走过去，要么在开箱搬东西 */
@@ -1695,6 +1760,8 @@ public final class FarmTaskManager {
         supplyPhase = SupplyPhase.NONE;
         supplyDeposit = false;
         supplyRefill = false;
+        supplyDepositJunk = false;
+        supplyPurpose = SupplyPurpose.DEPOSIT_CROP;
         suppliesWanted = false;
         toolWanted = false;
         refillWanted = false;
@@ -1713,6 +1780,8 @@ public final class FarmTaskManager {
         supplyPhase = SupplyPhase.NONE;
         supplyDeposit = false;
         supplyRefill = false;
+        supplyDepositJunk = false;
+        supplyPurpose = SupplyPurpose.DEPOSIT_CROP;
         suppliesWanted = false;
         toolWanted = false;
         refillWanted = false;
@@ -1729,6 +1798,30 @@ public final class FarmTaskManager {
         return config.hasSupplyPoint()
                 ? new BlockPos(config.supplyX, config.supplyY, config.supplyZ)
                 : null;
+    }
+
+    /**
+     * 按补给目的选容器坐标。
+     *
+     * <p>专用容器（输出 / 种子 / 工具 / 杂物）启用了、且坐标齐全就用它；
+     * 没设或禁用了就退回默认补给点。杂物容器特殊：没设/禁用时<b>不存杂物</b>（返回 null），
+     * 而不是把杂物和作物混进同一个默认箱子。
+     */
+    private static BlockPos containerFor(AutoFarmConfig config, SupplyPurpose purpose) {
+        BlockPos dedicated = switch (purpose) {
+            case DEPOSIT_CROP -> config.outCropEnabled && config.hasCropOut()
+                    ? new BlockPos(config.outCropX, config.outCropY, config.outCropZ) : null;
+            case DEPOSIT_JUNK -> config.outJunkEnabled && config.hasJunkOut()
+                    ? new BlockPos(config.outJunkX, config.outJunkY, config.outJunkZ) : null;
+            case REFILL_SEED -> config.inSeedEnabled && config.hasSeedIn()
+                    ? new BlockPos(config.inSeedX, config.inSeedY, config.inSeedZ) : null;
+            case FETCH_TOOL -> config.inToolEnabled && config.hasToolIn()
+                    ? new BlockPos(config.inToolX, config.inToolY, config.inToolZ) : null;
+        };
+        if (dedicated != null) {
+            return dedicated;
+        }
+        return purpose == SupplyPurpose.DEPOSIT_JUNK ? null : supplyPos(config);
     }
 
     // ================= 安全保护 =================

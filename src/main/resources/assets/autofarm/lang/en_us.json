@@ -433,5 +433,13 @@
   "autofarm.aim_mode.extreme": "Extreme",
   "autofarm.danger.aim_extreme.subtitle": "Extreme aim: dig regardless of crosshair",
   "autofarm.danger.aim_extreme.body1": "Extreme mode never turns your view and ignores whether the crosshair is on target — it digs as soon as you're in range. The server sees a player facing away while blocks break, one of the most flag-prone behaviors.",
-  "autofarm.danger.aim_extreme.body2": "Using this on a multiplayer server is very likely to get you detected or banned. Confirm you understand the risk before enabling."
+  "autofarm.danger.aim_extreme.body2": "Using this on a multiplayer server is very likely to get you detected or banned. Confirm you understand the risk before enabling.",
+  "autofarm.container.title": "Storage & Supply",
+  "autofarm.container.tip": "Assign a dedicated chest to each purpose — crop output, seed input, tool resupply, junk storage — each with its own on/off. Unset containers fall back to the default supply point (junk is simply not stored when disabled).",
+  "autofarm.option.containers": "Containers",
+  "autofarm.option.container_enabled": "Enabled",
+  "autofarm.container.crop": "Crop Output (store harvest)",
+  "autofarm.container.seed": "Seed Input (take seeds)",
+  "autofarm.container.tool": "Tool Resupply (take tools / bone meal)",
+  "autofarm.container.junk": "Junk Storage (store non-crop items)"
 }

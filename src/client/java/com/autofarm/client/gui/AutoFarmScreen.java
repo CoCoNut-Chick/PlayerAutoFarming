@@ -32,13 +32,13 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private static final int SEC_HARVEST_Y = 66, SEC_HARVEST_H = 156;
     private static final int SEC_PATH_Y = 226, SEC_PATH_H = 180;
     private static final int SEC_DISPLAY_Y = 410, SEC_DISPLAY_H = 76;
-    private static final int SEC_SUPPLY_Y = 490, SEC_SUPPLY_H = 118;
+    private static final int SEC_SUPPLY_Y = 490, SEC_SUPPLY_H = 138;
     /** 安全与提示：HUD、低血量停机、敌对生物停机 —— 三项都追加在最后，前面的分区不用挪 */
-    private static final int SEC_SAFETY_Y = 612, SEC_SAFETY_H = 76;
+    private static final int SEC_SAFETY_Y = 632, SEC_SAFETY_H = 76;
     /** 作物与筛选：补种空耕地 + 进次级面板挑作物。同样追加在最后 */
-    private static final int SEC_CROP_Y = 694, SEC_CROP_H = 64;
+    private static final int SEC_CROP_Y = 714, SEC_CROP_H = 64;
     /** 附加功能：默认全关的增强项，单独一页。统计面板也放这里，追加在最后 */
-    private static final int SEC_EXTRAS_Y = 762, SEC_EXTRAS_H = 64;
+    private static final int SEC_EXTRAS_Y = 782, SEC_EXTRAS_H = 64;
 
     private static final int ROW_ENABLED = 82;
     private static final int ROW_RADIUS = 102;
@@ -62,21 +62,23 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private static final int ROW_SUPPLY_HINT = 506;
     private static final int ROW_DEFAULT_SEED = 522;
     private static final int ROW_STORAGE_POLICY = 542;
-    private static final int ROW_FIELDS = 562;
-    private static final int ROW_SUPPLY_BTN = 584;
+    /** 扩展存储与补给：进专用容器配置菜单 */
+    private static final int ROW_CONTAINERS = 562;
+    private static final int ROW_FIELDS = 582;
+    private static final int ROW_SUPPLY_BTN = 604;
 
     /** 安全与提示分区的三行 */
-    private static final int ROW_SHOW_HUD = 628;
-    private static final int ROW_LOW_HEALTH = 648;
-    private static final int ROW_MOBS_NEAR = 668;
+    private static final int ROW_SHOW_HUD = 648;
+    private static final int ROW_LOW_HEALTH = 668;
+    private static final int ROW_MOBS_NEAR = 688;
 
     /** 作物与筛选分区的两行 */
-    private static final int ROW_FILL_EMPTY = 710;
-    private static final int ROW_CROP_FILTER = 730;
+    private static final int ROW_FILL_EMPTY = 730;
+    private static final int ROW_CROP_FILTER = 750;
 
     /** 附加功能分区的两行：附加功能、统计 */
-    private static final int ROW_EXTRAS = 778;
-    private static final int ROW_STATS = 798;
+    private static final int ROW_EXTRAS = 798;
+    private static final int ROW_STATS = 818;
 
     private static final int AXIS_LABEL_W = 14;
     private static final int ICON_SIZE = ROW_H;
@@ -105,6 +107,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
     private ButtonWidget freecamButton;
     private ButtonWidget defaultSeedButton;
     private ButtonWidget storagePolicyButton;
+    private ButtonWidget containersButton;
     private ButtonWidget showHudButton;
     private ButtonWidget lowHealthButton;
     private ButtonWidget mobsNearButton;
@@ -306,6 +309,13 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         storagePolicyButton.setTooltip(Tooltip.of(Text.translatable("autofarm.storage.tip")));
         addScrolling(storagePolicyButton);
 
+        // 扩展存储与补给：四个专用容器（输出 / 种子 / 工具 / 杂物）各自的坐标与开关
+        this.containersButton = ButtonWidget.builder(
+                Text.translatable("autofarm.option.containers"), b -> openContainers())
+                .dimensions(contentX, 0, fullW, ROW_H).build();
+        containersButton.setTooltip(Tooltip.of(Text.translatable("autofarm.container.tip")));
+        addScrolling(containersButton);
+
         // ---- 补给点坐标 ----
         int colW = Math.max(56, (fullW - 12) / 3);
         for (int i = 0; i < 3; i++) {
@@ -429,6 +439,7 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         setRowY(freecamButton, originY + ROW_FREECAM);
         setRowY(defaultSeedButton, originY + ROW_DEFAULT_SEED);
         setRowY(storagePolicyButton, originY + ROW_STORAGE_POLICY);
+        setRowY(containersButton, originY + ROW_CONTAINERS);
         setRowY(fieldX, originY + ROW_FIELDS);
         setRowY(fieldY, originY + ROW_FIELDS);
         setRowY(fieldZ, originY + ROW_FIELDS);
@@ -636,6 +647,16 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         draft.supplyZ = parseOrNull(fieldZ);
         if (this.client != null) {
             this.client.setScreen(new StoragePolicyScreen(this, draft));
+        }
+    }
+
+    /** 进「扩展存储与补给」次级面板：四个专用容器的坐标与开关 */
+    private void openContainers() {
+        draft.supplyX = parseOrNull(fieldX);
+        draft.supplyY = parseOrNull(fieldY);
+        draft.supplyZ = parseOrNull(fieldZ);
+        if (this.client != null) {
+            this.client.setScreen(new ContainerConfigScreen(this, draft));
         }
     }
 

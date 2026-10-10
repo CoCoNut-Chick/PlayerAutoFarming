@@ -181,7 +181,7 @@ public class AutoFarmConfig {
 
     /**
      * 是否在世界中高亮显示扫描到的成熟作物。
-     * 打开后即使「自动收割」是关的，也会持续扫描，方便你先看清它到底认出了哪些方块。
+     * 只在「自动收割」开启时生效 —— 关掉总开关就连高亮一起停，不会留着一片描边。
      */
     public boolean visualize = true;
 
@@ -212,6 +212,32 @@ public class AutoFarmConfig {
     public Integer supplyX = null;
     public Integer supplyY = null;
     public Integer supplyZ = null;
+
+    // ---- 扩展存储与补给：四个专用容器（独立坐标 + 独立启用） ----
+
+    /** 农作物输出容器（存收获物）是否启用。禁用时收获物存回默认补给点 */
+    public boolean outCropEnabled = true;
+    public Integer outCropX = null;
+    public Integer outCropY = null;
+    public Integer outCropZ = null;
+
+    /** 种子输入容器（取种子）是否启用。禁用时从默认补给点取种子 */
+    public boolean inSeedEnabled = true;
+    public Integer inSeedX = null;
+    public Integer inSeedY = null;
+    public Integer inSeedZ = null;
+
+    /** 工具补给容器（取工具 / 骨粉）是否启用。禁用时从默认补给点取 */
+    public boolean inToolEnabled = true;
+    public Integer inToolX = null;
+    public Integer inToolY = null;
+    public Integer inToolZ = null;
+
+    /** 杂物临时存储容器（存非农作物物品）是否启用。默认关闭 —— 开启后杂物单独存放 */
+    public boolean outJunkEnabled = false;
+    public Integer outJunkX = null;
+    public Integer outJunkY = null;
+    public Integer outJunkZ = null;
 
     /**
      * 默认种子槽位，取值 1~9（就是快捷栏从左数第几格）。
@@ -1003,6 +1029,22 @@ public class AutoFarmConfig {
         c.supplyX = this.supplyX;
         c.supplyY = this.supplyY;
         c.supplyZ = this.supplyZ;
+        c.outCropEnabled = this.outCropEnabled;
+        c.outCropX = this.outCropX;
+        c.outCropY = this.outCropY;
+        c.outCropZ = this.outCropZ;
+        c.inSeedEnabled = this.inSeedEnabled;
+        c.inSeedX = this.inSeedX;
+        c.inSeedY = this.inSeedY;
+        c.inSeedZ = this.inSeedZ;
+        c.inToolEnabled = this.inToolEnabled;
+        c.inToolX = this.inToolX;
+        c.inToolY = this.inToolY;
+        c.inToolZ = this.inToolZ;
+        c.outJunkEnabled = this.outJunkEnabled;
+        c.outJunkX = this.outJunkX;
+        c.outJunkY = this.outJunkY;
+        c.outJunkZ = this.outJunkZ;
         c.defaultSeedSlot = this.defaultSeedSlot;
         c.backupCropStacks = this.backupCropStacks;
         c.fillEmptyFarmland = this.fillEmptyFarmland;
@@ -1199,6 +1241,28 @@ public class AutoFarmConfig {
             workAreaZ2 = null;
         }
 
+        // 扩展存储与补给：四个容器的坐标同样「要么三个都有、要么都没有」
+        if (!complete(outCropX, outCropY, outCropZ)) {
+            outCropX = null;
+            outCropY = null;
+            outCropZ = null;
+        }
+        if (!complete(inSeedX, inSeedY, inSeedZ)) {
+            inSeedX = null;
+            inSeedY = null;
+            inSeedZ = null;
+        }
+        if (!complete(inToolX, inToolY, inToolZ)) {
+            inToolX = null;
+            inToolY = null;
+            inToolZ = null;
+        }
+        if (!complete(outJunkX, outJunkY, outJunkZ)) {
+            outJunkX = null;
+            outJunkY = null;
+            outJunkZ = null;
+        }
+
         // 疲劳收工：连干多久、歇多久，都拉回合理区间（0 分钟休息 = 手动，是合法值）
         if (fatigueWorkMinutes < 5) fatigueWorkMinutes = 5;
         if (fatigueWorkMinutes > 480) fatigueWorkMinutes = 480;
@@ -1277,6 +1341,28 @@ public class AutoFarmConfig {
     public String supplyPointText() {
         if (!hasSupplyPoint()) return null;
         return supplyX + ", " + supplyY + ", " + supplyZ;
+    }
+
+    // ---- 扩展存储与补给（四个专用容器） ----
+
+    /** 农作物输出容器是否已完整设置 */
+    public boolean hasCropOut() {
+        return complete(outCropX, outCropY, outCropZ);
+    }
+
+    /** 种子输入容器是否已完整设置 */
+    public boolean hasSeedIn() {
+        return complete(inSeedX, inSeedY, inSeedZ);
+    }
+
+    /** 工具补给容器是否已完整设置 */
+    public boolean hasToolIn() {
+        return complete(inToolX, inToolY, inToolZ);
+    }
+
+    /** 杂物临时存储容器是否已完整设置 */
+    public boolean hasJunkOut() {
+        return complete(outJunkX, outJunkY, outJunkZ);
     }
 
     // ---- 工作区域（B 组①） ----
