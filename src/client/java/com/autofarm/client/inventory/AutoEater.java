@@ -2,6 +2,7 @@ package com.autofarm.client.inventory;
 
 import com.autofarm.client.compat.CameraCompat;
 import com.autofarm.client.config.AutoFarmConfig;
+import com.autofarm.client.config.ConfigManager;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 
@@ -261,6 +262,8 @@ public final class AutoEater {
         eating = false;
         elapsed = 0;
         biteTicks = 0;
-        cooldown = RETRY_COOLDOWN;
+        // 「无间隔连发」时不吃这一轮结束后的歇气 —— 吃到饱就直接接下一件事。
+        AutoFarmConfig config = ConfigManager.get();
+        cooldown = config != null && config.instantActions ? 0 : RETRY_COOLDOWN;
     }
 }

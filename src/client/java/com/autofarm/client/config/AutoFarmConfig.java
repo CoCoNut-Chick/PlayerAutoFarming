@@ -74,6 +74,15 @@ public class AutoFarmConfig {
     /** 转向时间低于这个值（且不为 0）就提示「转得太快、不够自然」 */
     public static final int TURN_DURATION_SAFE_MS = 200;
 
+    /**
+     * 无间隔连发：撒骨粉 / 种植 / 采摘 / 采集之间不再插入停顿，
+     * 像「长按右键」那样一步接一步连续执行（进食也顺带不再歇）。
+     *
+     * <p>默认关。开了以后动作会明显更快，但节奏变得很规律 ——
+     * 它和「防踢模式」「拟人化节奏」是相反方向的，别一起用。
+     */
+    public boolean instantActions = false;
+
     /** 种子不够时是否自动前往补给点取种子 */
     public boolean refillSeeds = true;
 
@@ -1033,6 +1042,7 @@ public class AutoFarmConfig {
         c.replant = this.replant;
         c.aimMode = this.aimMode;
         c.turnDurationMs = this.turnDurationMs;
+        c.instantActions = this.instantActions;
         c.refillSeeds = this.refillSeeds;
         c.depositWhenFull = this.depositWhenFull;
         c.optimizePath = this.optimizePath;

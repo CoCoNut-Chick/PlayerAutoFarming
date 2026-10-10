@@ -1626,7 +1626,8 @@ public final class FarmTaskManager {
             // 犹豫过就记下来，否则站在同一棵前面来回打量，永远不开工。
             boolean fresh = !held.equals(hesitatedAt);
             hesitatedAt = held;
-            if (fresh && Humanizer.rollHesitate()) {
+            // 「无间隔连发」时也不打量 —— 那是拟人化的停顿，和「不要间隔」是相反方向
+            if (!config.instantActions && fresh && Humanizer.rollHesitate()) {
                 humanizeDelay = Math.max(humanizeDelay, Humanizer.hesitateTicks());
                 state = FarmState.HARVESTING;
                 return;
@@ -1730,8 +1731,9 @@ public final class FarmTaskManager {
                 }
             }
 
-            // 附加功能「拟人化节奏」：这一次真的动了手（收了或种了），就歇一小会儿
-            if (config.humanizeTiming
+            // 附加功能「拟人化节奏」：这一次真的动了手（收了或种了），就歇一小会儿。
+            // 「无间隔连发」开着时不歇 —— 用户要的就是连续作业。
+            if (!config.instantActions && config.humanizeTiming
                     && (CropHarvester.wasHarvested() || CropHarvester.wasPlanted())) {
                 humanizeDelay = 2 + ThreadLocalRandom.current().nextInt(4); // 2~5 tick
             }

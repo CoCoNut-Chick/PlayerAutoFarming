@@ -1,6 +1,7 @@
 package com.autofarm.client.harvest;
 
 import com.autofarm.client.config.AutoFarmConfig;
+import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.human.Humanizer;
 import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.InventoryScanner;
@@ -112,6 +113,18 @@ public final class CropHarvester {
 
     /** 交互距离上限。原版够得着是 4.5 格，取 4.0 留一点余量 */
     private static final double REACH = 4.0;
+
+    /**
+     * 两次动手之间隔多久。
+     *
+     * <p>开了「无间隔连发」（{@link AutoFarmConfig#instantActions}）就固定 {@code 1} ——
+     * 每 tick 动一次手，等于像长按右键那样连续作业；否则走 {@link Humanizer#gap}
+     * 那个带随机抖动的间隔，节奏更像人。
+     */
+    private static int actionGap(int base) {
+        AutoFarmConfig config = ConfigManager.get();
+        return config != null && config.instantActions ? 1 : Humanizer.gap(base);
+    }
 
     private static BlockPos target;
     private static Stage stage = Stage.DONE;
@@ -407,7 +420,7 @@ public final class CropHarvester {
         // 等间距的重试本身就是一个很明显的机器特征
         if (BlockInteractor.isWithinReach(player, target, REACH) && ticks >= nextActionAt) {
             BlockInteractor.useBlock(client, target);
-            nextActionAt = ticks + Humanizer.gap(PICK_RETRY_INTERVAL);
+            nextActionAt = ticks + actionGap(PICK_RETRY_INTERVAL);
         }
         ticks++;
 
@@ -553,7 +566,7 @@ public final class CropHarvester {
         // 种子是「种在下面那块耕地上的」，所以要贴着耕地往上一格放
         if (ticks >= nextActionAt) {
             BlockInteractor.placeWith(client, target, slot);
-            nextActionAt = ticks + Humanizer.gap(REPLANT_RETRY_INTERVAL);
+            nextActionAt = ticks + actionGap(REPLANT_RETRY_INTERVAL);
         }
         ticks++;
 
@@ -618,7 +631,7 @@ public final class CropHarvester {
 
         if (ticks >= nextActionAt) {
             BlockInteractor.placeWith(client, target, slot);
-            nextActionAt = ticks + Humanizer.gap(REPLANT_RETRY_INTERVAL);
+            nextActionAt = ticks + actionGap(REPLANT_RETRY_INTERVAL);
         }
         ticks++;
 
@@ -694,7 +707,7 @@ public final class CropHarvester {
             BlockInteractor.useBlock(client, target);
             boneMealUsed++;
             StatsManager.get().recordBoneMeal();
-            nextActionAt = ticks + Humanizer.gap(BONE_MEAL_RETRY_INTERVAL);
+            nextActionAt = ticks + actionGap(BONE_MEAL_RETRY_INTERVAL);
         }
         ticks++;
 

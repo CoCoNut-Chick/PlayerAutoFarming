@@ -80,7 +80,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int ANTIKICK_ROWS = 2;
     private static final int SEC_ANTIKICK_Y = SEC_STEALTH_Y + SEC_STEALTH_H + SECTION_GAP;
     private static final int SEC_ANTIKICK_H = ROW_FIRST + ANTIKICK_ROWS * ROW_GAP + 4;
-    private static final int BEHAVIOR_ROWS = 7;
+    private static final int BEHAVIOR_ROWS = 8;
     private static final int SEC_BEHAVIOR_Y = SEC_ANTIKICK_Y + SEC_ANTIKICK_H + SECTION_GAP;
     /** 底部留一点给「转向时间过小」的警告行 */
     private static final int SEC_BEHAVIOR_H = ROW_FIRST + BEHAVIOR_ROWS * ROW_GAP + 16;
@@ -182,6 +182,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget reactionTimeButton;
     private ButtonWidget idleLookButton;
     private TextFieldWidget turnTimeField;
+    private ButtonWidget instantActionsButton;
     private ButtonWidget scheduleButton;
     private ButtonWidget scheduleStartButton;
     private ButtonWidget scheduleEndButton;
@@ -420,6 +421,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
         });
         turnTimeField.setTooltip(Tooltip.of(Text.translatable("autofarm.turn_time.tip")));
         addScrolling(turnTimeField);
+
+        this.instantActionsButton = toggle("autofarm.option.instant_actions",
+                draft.instantActions, value -> draft.instantActions = value,
+                "autofarm.instant_actions.tip");
+        layout(instantActionsButton, contentX, 0, fullW);
 
         this.scheduleButton = toggle("autofarm.option.schedule",
                 draft.scheduleEnabled, value -> draft.scheduleEnabled = value,
@@ -865,6 +871,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.antikick" -> draft.antiKickMode;
             case "autofarm.option.reaction_delay" -> draft.reactionDelay;
             case "autofarm.option.idle_look" -> draft.idleLookAround;
+            case "autofarm.option.instant_actions" -> draft.instantActions;
             case "autofarm.option.schedule" -> draft.scheduleEnabled;
             case "autofarm.option.work_area" -> draft.workAreaEnabled;
             case "autofarm.option.daylight" -> draft.workDaylightOnly;
@@ -970,9 +977,10 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(reactionTimeButton, behavior + ROW_FIRST + ROW_GAP);
         setRowY(idleLookButton, behavior + ROW_FIRST + 2 * ROW_GAP);
         setRowY(turnTimeField, behavior + ROW_FIRST + 3 * ROW_GAP);
-        setRowY(scheduleButton, behavior + ROW_FIRST + 4 * ROW_GAP);
-        setRowY(scheduleStartButton, behavior + ROW_FIRST + 5 * ROW_GAP);
-        setRowY(scheduleEndButton, behavior + ROW_FIRST + 6 * ROW_GAP);
+        setRowY(instantActionsButton, behavior + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(scheduleButton, behavior + ROW_FIRST + 5 * ROW_GAP);
+        setRowY(scheduleStartButton, behavior + ROW_FIRST + 6 * ROW_GAP);
+        setRowY(scheduleEndButton, behavior + ROW_FIRST + 7 * ROW_GAP);
     }
 
     private void positionArea(int originY) {
@@ -1119,6 +1127,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.reactionDelayTicks = 10;
         draft.idleLookAround = false;
         draft.turnDurationMs = 600;
+        draft.instantActions = false;
         draft.scheduleEnabled = false;
         draft.scheduleStartHour = 8;
         draft.scheduleEndHour = 23;
@@ -1178,6 +1187,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.reactionDelayTicks = old.reactionDelayTicks;
         draft.idleLookAround = old.idleLookAround;
         draft.turnDurationMs = old.turnDurationMs;
+        draft.instantActions = old.instantActions;
         draft.scheduleEnabled = old.scheduleEnabled;
         draft.scheduleStartHour = old.scheduleStartHour;
         draft.scheduleEndHour = old.scheduleEndHour;
