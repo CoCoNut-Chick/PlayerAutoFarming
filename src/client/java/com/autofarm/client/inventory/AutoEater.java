@@ -131,9 +131,9 @@ public final class AutoEater {
             return;
         }
 
-        // 自由视角（摄像机和身体分开）时也不该被偷偷喂食 —— 屏幕上身体不动，
-        // 却在那边自己啃东西，同样扎眼。
-        if (CameraCompat.isCameraDetached()) {
+        // 自由视角 + 开了「自由视角时停机」时也不该被偷偷喂食 —— 屏幕上身体不动，
+        // 却在那边自己啃东西，同样扎眼。（关着那一项时照常吃，见 CameraCompat。）
+        if (CameraCompat.pauseForFreecam(config)) {
             stop(client);
             cooldown = 0;
             return;

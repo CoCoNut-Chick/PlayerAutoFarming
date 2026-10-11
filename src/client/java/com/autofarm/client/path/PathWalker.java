@@ -1,5 +1,6 @@
 package com.autofarm.client.path;
 
+import com.autofarm.client.compat.CameraCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.human.Humanizer;
@@ -7,7 +8,6 @@ import com.autofarm.client.interact.BlockInteractor;
 import com.autofarm.client.inventory.AutoEater;
 import com.autofarm.client.inventory.InventoryScanner;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.input.Input;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.util.math.BlockPos;
@@ -38,16 +38,21 @@ import java.util.Set;
  * </ol>
  *
  * <h2>怎么让角色「自己走」</h2>
- * Minecraft 的客户端玩家每 tick 会先读一次输入（{@code KeyboardInput.tick}
- * 把按键状态抄进 {@code Input} 的字段），然后按这份输入移动。
- * 所以想让角色自动走，就必须在「读输入」之后动手。
+ * 客户端玩家每 tick 的移动是这么来的：先由输入对象（{@code KeyboardInput}）把<b>按键</b>
+ * 翻译成<b>移动意图</b>，再由 {@code ClientPlayerEntity.tickNewAi()} 把这份意图抄进
+ * {@code sidewaysSpeed / forwardSpeed / jumping}，最后交给物理去走。
  *
- * <p>这里不用「模拟按键」那种写法（直接去按 W 键的绑定），原因是它会和真人打架：
- * 绑定是一个全局状态，我们把它设成按下，玩家自己按的那个 W 就被覆盖了。
+ * <p>我们接管的是<b>最后一层</b>（见 {@code ClientPlayerInputMixin}）：在 {@code tickNewAi}
+ * 的末尾直接把意图写成我们想要的值。这样做的两个好处：
+ * <ul>
+ *   <li>键盘输入对象<b>一个字都没被改</b>：玩家自己的按键、自由视角模组用它飞摄像机的逻辑，
+ *       都完全不受影响；我们一停，控制权立刻还回去；</li>
+ *   <li>原版在自由视角下会跳过「抄意图」那一步（{@code isCamera()} 为假），
+ *       写在更下游就能绕过它 —— 灵魂出窍开着也能照常干活。</li>
+ * </ul>
  *
- * <p>改用 {@code KeyboardInput.tick} 末尾的一次注入（见 {@code KeyboardInputMixin}）：
- * 原版抄完按键状态后，如果我们正在接管，就把抄出来的结果替换成我们想要的。
- * 这样玩家手上的键位状态<b>一个字都没被改</b>，我们一停，控制权立刻还回去。
+ * <p>也不去「模拟按键」（改 {@code KeyBinding.pressed}）那种写法：绑定是全局状态，
+ * 我们设成按下，玩家自己按的同一个键就被覆盖了。
  *
  * <h2>挖掘和放置</h2>
  * 两者都走原版的交互管理器，和真人操作完全同一条路：
@@ -123,6 +128,8 @@ public final class PathWalker {
     /** 本 tick 的输入意图，由 {@link #tick} 算好、由 {@link #applyInputOverride} 消费 */
     private static boolean wantForward;
     private static boolean wantJump;
+    /** 本 tick 要不要疾跑 —— 同样在 {@link #applyInputOverride} 里落地 */
+    private static boolean wantSprint;
 
     /**
      * 已经站到当前目标跟前、正在等调用方处理（收割/补种）。
@@ -150,6 +157,7 @@ public final class PathWalker {
         stuckTicks = 0;
         wantForward = false;
         wantJump = false;
+        wantSprint = false;
         holding = false;
         resolved.clear();
     }
@@ -163,6 +171,7 @@ public final class PathWalker {
         stuckTicks = 0;
         wantForward = false;
         wantJump = false;
+        wantSprint = false;
         holding = false;
         exactTargets.clear();
         // 注意：resolved 里可能有还没被取走的点，留着让调用方取完再清
@@ -307,6 +316,7 @@ public final class PathWalker {
         if (paused || player.isSpectator() || AutoEater.isHandlingHunger()) {
             wantForward = false;
             wantJump = false;
+            wantSprint = false;
             return;
         }
 
@@ -314,6 +324,7 @@ public final class PathWalker {
         if (holding) {
             wantForward = false;
             wantJump = false;
+            wantSprint = false;
             return;
         }
 
@@ -321,11 +332,13 @@ public final class PathWalker {
         if (!ensureSegment(client, player)) {
             wantForward = false;
             wantJump = false;
+            wantSprint = false;
             return;
         }
         if (!isActive() || waypoint >= segment.size()) {
             wantForward = false;
             wantJump = false;
+            wantSprint = false;
             return;
         }
 
@@ -335,6 +348,7 @@ public final class PathWalker {
         if (step.needsWork()) {
             wantForward = false;
             wantJump = false;
+            wantSprint = false;
             if (workOnStep(client, player, step)) {
                 // 还在挖/还在放，这一 tick 不走路
                 if (++actionTicks > ACTION_TIMEOUT_TICKS) {
@@ -397,6 +411,7 @@ public final class PathWalker {
         if (aligned && Humanizer.stumble()) {
             wantForward = false;
             wantJump = false;
+            wantSprint = false;
             player.setSprinting(false);
             stuckTicks = 0;
             lastPos = null;
@@ -408,8 +423,10 @@ public final class PathWalker {
         wantJump = (aligned && needJump) || stuckTicks >= STUCK_JUMP_TICKS;
 
         // ---- 疾跑：赶路时替玩家按住 Ctrl ----
-        // 防踢模式下再叠一层「疾跑间歇」：真人不会一路从头跑到尾，中间总要走两步喘口气
-        applySprint(player, aligned && !needJump && Humanizer.allowSprint());
+        // 防踢模式下再叠一层「疾跑间歇」：真人不会一路从头跑到尾，中间总要走两步喘口气。
+        // 记下这一 tick 的意图，真正的落点见 applyInputOverride —— 那儿要再按一次，原因见那里。
+        wantSprint = aligned && !needJump && Humanizer.allowSprint();
+        applySprint(player, wantSprint);
     }
 
     /**
@@ -423,9 +440,9 @@ public final class PathWalker {
      *       都会把疾跑关掉，我们要是还硬设 true 就成了「一人按一次」的抽搐，索性先让开。</li>
      * </ol>
      *
-     * <p>还有一处必须显式松手的原因：疾跑一旦点上，只要 {@code movementForward} 还是 1，
-     * 原版就以为你还按着 Ctrl，不会自己停。而我们恰好一直把 {@code movementForward} 按在 1 上，
-     * 所以「不想跑」这件事必须我们自己说出来，不能指望原版收手。
+     * <p>还有一处必须显式松手的原因：疾跑一旦点上，只要玩家还在往前走（原版看的是
+     * {@code input.hasForwardMovement()}），原版就以为你还按着 Ctrl，不会自己停。
+     * 而我们恰好一直在往前送，所以「不想跑」这件事必须我们自己说出来，不能指望原版收手。
      *
      * <p>顺带一提：疾跑只加快移动，<b>不影响挖掘速度</b>；换来的是去下一个目标路上更快，
      * 代价是饥饿值掉得更快。
@@ -442,26 +459,57 @@ public final class PathWalker {
     }
 
     /**
-     * 由 {@code KeyboardInputMixin} 在 {@code KeyboardInput.tick} 结束时调用。
+     * 把「这一 tick 想怎么走」写进玩家的<b>移动意图</b>，返回有没有真的接管。
      *
-     * <p>只有在「正在接管」时才会动这些字段；其余时候一个字都不改，
-     * 玩家的真实操作完全不受影响。
+     * <p>写的是 {@code sidewaysSpeed / forwardSpeed / jumping}，<b>不是</b>键盘输入对象。
+     * 原因见 {@link com.autofarm.client.compat.CameraCompat} 的类注释：自由视角一开，
+     * 原版会跳过「按住键 → 移动意图」那一步，所以只能写到更下游的字段上。
+     * 顺带的好处是键盘输入完全留给玩家和自由视角模组，谁也不抢谁的。
+     *
+     * <p>正常视角（摄像机在身体上）且没在接管时，一个字段都不碰 ——
+     * 那时原版自己会把玩家的按键抄进来，我们插手反而会把玩家冻住。
      */
-    public static void applyInputOverride(Input input) {
-        if (input == null || plan == null) {
+    public static boolean applyInputOverride(ClientPlayerEntity player) {
+        if (player == null || plan == null) {
+            return false;
+        }
+        boolean active = !paused && isActive();
+        if (!active) {
+            return false;
+        }
+        player.sidewaysSpeed = 0.0f;
+        player.forwardSpeed = wantForward ? 1.0f : 0.0f;
+        player.setJumping(wantJump);
+
+        // 疾跑得在这里再按一次。原版每 tick 都会做这么个判断：
+        //   「已经疾跑着，但 input.hasForwardMovement() 是假（= 没按着前进键）→ 取消疾跑」
+        // 那是按「玩家手上的键」算的，我们既没按键、也不去改输入对象，所以它每 tick 都会取消一次；
+        // 而这个注入点正好在它后面、又在真正算出速度的 travel() 之前，补一次就赶上了。
+        // 同一 tick 里「取消 → 重新按上」净变化为零，客户端也就不会多发一个疾跑包。
+        applySprint(player, wantSprint);
+        return true;
+    }
+
+    /**
+     * 没人在接管时，把移动意图清零 —— <b>只在自由视角下需要</b>。
+     *
+     * <p>因为自由视角下原版不再自己抄输入，上一次留下的 {@code forwardSpeed}
+     * 只会每 tick 乘 0.98 慢慢衰减：不清掉的话，路线走完人还会自己往前飘好几秒。
+     * （正常视角下原版每 tick 都会重新抄一遍玩家的按键，不存在这个问题。）
+     *
+     * <p>总开关关着时也不碰 —— 那是玩家的角色，轮不到我们管。
+     */
+    public static void clearIdleIntent(ClientPlayerEntity player) {
+        AutoFarmConfig config = ConfigManager.get();
+        if (player == null || config == null || !config.enabled) {
             return;
         }
-
-        boolean active = !paused && isActive();
-
-        input.pressingForward = active && wantForward;
-        input.pressingBack = false;
-        input.pressingLeft = false;
-        input.pressingRight = false;
-        input.movementForward = input.pressingForward ? 1.0f : 0.0f;
-        input.movementSideways = 0.0f;
-        input.jumping = active && wantJump;
-        input.sneaking = false;
+        if (!CameraCompat.isCameraDetached()) {
+            return;
+        }
+        player.sidewaysSpeed = 0.0f;
+        player.forwardSpeed = 0.0f;
+        player.setJumping(false);
     }
 
     // ================= 挖 / 垫 =================
@@ -613,6 +661,7 @@ public final class PathWalker {
         stuckTicks = 0;
         wantForward = false;
         wantJump = false;
+        wantSprint = false;
     }
 
     /** 当前目标到不了：记一笔跳过，效果是「别再来找它」 */
@@ -632,6 +681,7 @@ public final class PathWalker {
         stuckTicks = 0;
         wantForward = false;
         wantJump = false;
+        wantSprint = false;
         if (!isActive()) {
             stop();
         }

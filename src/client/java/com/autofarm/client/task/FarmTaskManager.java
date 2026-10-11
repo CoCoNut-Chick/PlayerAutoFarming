@@ -798,6 +798,14 @@ public final class FarmTaskManager {
             return;
         }
 
+        // 自由视角（灵魂出窍）：由配置项「自由视角时停机」决定这一 tick 要不要整个停手。
+        //
+        // 之所以「不停手」时真的能干活：原版 ClientPlayerEntity.tickNewAi() 里那段
+        // 「把输入抄成移动意图」的代码外面套着 if (isCamera())，摄像机一离开身体就被整段跳过，
+        // 于是角色一步都走不了。我们把移动意图写在那个判断的下游（见 ClientPlayerInputMixin），
+        // 绕过了它 —— 而且全程不碰键盘输入对象，自由视角模组拿 WASD 飞摄像机完全不受影响。
+        boolean freecamPaused = CameraCompat.pauseForFreecam(config);
+
         // 「关 → 开」的边沿：清空「已处理」并强制重扫。
         // 抓边沿而不是只看当前值，是为了让「面板里点开」和「快捷键开」走同一套逻辑，
         // 都能把还没被挖掉的成熟作物重新认出来。
@@ -909,7 +917,7 @@ public final class FarmTaskManager {
         // 这时候退回普通停机（见下面的 safety），等能动了再撤。
         boolean retreatActive = wantRetreat
                 && client.currentScreen == null
-                && !CameraCompat.isCameraDetached();
+                && !freecamPaused;
         if (!lowHealth) {
             // 血回来了：撤退相关的记忆全部复位，下一次低血量可以重新撤
             retreating = false;
@@ -992,11 +1000,9 @@ public final class FarmTaskManager {
         // 干得越久，动作越容易走神；歇下来（暂停、开界面）它会慢慢回落
         Humanizer.feedWorking(config.enabled && !paused && !retreatActive);
 
-        // 自由视角（masa 全家桶的「灵魂出窍」）：摄像机和身体分开之后，
-        // 屏幕上看到的人是不动的，可世界里方块却在自己碎 —— 那太显眼了。
-        // 打开这个开关就先停手，只保留描边和路线；关掉开关则照常干活
-        // （渲染本来就是按摄像机算的，所以画面不会错位）。
-        boolean freecamPaused = config.pauseOnFreecam && CameraCompat.isCameraDetached();
+        // 自由视角（灵魂出窍）：摄像机和身体分开之后，屏幕上看到的人是不动的，
+        // 可世界里方块却在自己碎 —— 那太显眼了。打开「自由视角时停机」就先停手，
+        // 只保留描边和路线；关掉（默认）则照常干活：这一 tick 的 freecamPaused 在 tick 开头算好了。
 
         // ================================================================
         // 附加功能「受击反制」（C 组）：挨打之后的这几秒，停手 + 回头看向攻击者。
@@ -1008,7 +1014,7 @@ public final class FarmTaskManager {
             hitReactTicks--;
             hitReacting = true; // 受击窗口内一律停手（能不能回头再另说）
             if (!config.autoAttack && hitTarget != null && hitTarget.isAlive()
-                    && !CameraCompat.isCameraDetached()) {
+                    && !freecamPaused) {
                 BlockInteractor.aimAt(client.player, hitTarget.getX(), hitTarget.getEyeY(),
                         hitTarget.getZ());
             }
@@ -1066,7 +1072,7 @@ public final class FarmTaskManager {
         if (outsideArea
                 && !paused
                 && client.currentScreen == null
-                && !CameraCompat.isCameraDetached()) {
+                && !freecamPaused) {
             if (!areaReturning) {
                 // 刚出界：把手上的活全放下（这条路线本来就通不到圈外去），准备回程
                 areaReturning = true;
@@ -1102,7 +1108,7 @@ public final class FarmTaskManager {
                 // 一边挥刀（两条路会同时跑，看着也不像人）。
                 && !AutoEater.isHandlingHunger()
                 && client.currentScreen == null
-                && !CameraCompat.isCameraDetached()
+                && !freecamPaused
                 && KillAura.tick(client, config);
 
         // 玩家打开任意界面（背包、聊天、ESC……）、或者已经躺下了的时候立刻挂起，
@@ -1129,7 +1135,7 @@ public final class FarmTaskManager {
                 && !fightingActive
                 && !hitReacting
                 && client.currentScreen == null
-                && !CameraCompat.isCameraDetached()
+                && !freecamPaused
                 && !viewBusy);
 
         // ================================================================

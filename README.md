@@ -70,7 +70,7 @@ Minecraft Java 版 **1.20.1** 的 Fabric **客户端**模组：自动收割 + �
 
 ## 版本
 
-当前版本 **2.3.2**。版本规范与完整变更记录见 [CHANGELOG.md](CHANGELOG.md)；
+当前版本 **2.3.3**。版本规范与完整变更记录见 [CHANGELOG.md](CHANGELOG.md)；
 各版本构建产物归档在 `versions/<版本号>/`，发布版本见 [Releases](../../releases)。
 
 ## 构建

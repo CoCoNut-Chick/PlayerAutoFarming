@@ -23,10 +23,11 @@ import net.minecraft.util.math.BlockPos;
  * </ol>
  *
  * <h2>怎么动角色</h2>
- * 和 {@link com.autofarm.client.path.PathWalker} 走<b>同一条通道</b>：
- * 只是在 {@code KeyboardInput.tick} 结束时把「这一 tick 的移动意图」替换掉，
- * 玩家的真实按键状态一个字都不改。两者不会打架 —— 触发自救时任务大脑会先
- * 把寻路停掉（见 {@code FarmTaskManager}），所以同一时刻只有一边在接管。
+ * 和 {@link com.autofarm.client.path.PathWalker} 走<b>同一条通道</b>
+ * （见 {@code ClientPlayerInputMixin}）：在玩家移动意图那一层写入，
+ * 玩家的真实按键和自由视角模组的摄像机操作一个字都不改。
+ * 两者不会打架 —— 触发自救时任务大脑会先把寻路停掉（见 {@code FarmTaskManager}），
+ * 所以同一时刻只有一边在接管。
  *
  * <p>它<b>不改任何游戏规则</b>：不发额外的包、不改速度上限、不绕碰撞，
  * 只是替玩家按住「跳跃」或者朝某个方向按住「前进」而已。
@@ -77,9 +78,10 @@ public final class RescueHelper {
         if (!config.enabled || !config.selfRescueEnabled || player.isSpectator()) {
             return false;
         }
-        // 自由视角（摄像机和身体分开）时不接管 —— 否则屏幕上身体不动，却在那边自己
-        // 上浮 / 朝水源跑，很扎眼。返回 false 并保持「没在自救」，控制权不落在我们手上。
-        if (CameraCompat.isCameraDetached()) {
+        // 自由视角 + 开了「自由视角时停机」时不接管 —— 否则屏幕上身体不动，
+        // 却在那边自己上浮 / 朝水源跑，很扎眼。返回 false 并保持「没在自救」，
+        // 控制权不落在我们手上。（关着那一项时照常自救，见 CameraCompat。）
+        if (CameraCompat.pauseForFreecam(config)) {
             return false;
         }
 
@@ -113,18 +115,19 @@ public final class RescueHelper {
      * 由 {@code KeyboardInputMixin} 调用（排在 PathWalker 之后）。
      * 没有在自救时一个字段都不碰。
      */
-    public static void applyInputOverride(Input input) {
-        if (input == null || mode == Mode.NONE) {
-            return;
+    /**
+     * 把自救的动作写进玩家的移动意图，返回有没有真的接管。
+     *
+     * @see com.autofarm.client.path.PathWalker#applyInputOverride 同一套通道，原因见那里
+     */
+    public static boolean applyInputOverride(ClientPlayerEntity player) {
+        if (player == null || mode == Mode.NONE) {
+            return false;
         }
-        input.pressingForward = wantForward;
-        input.pressingBack = false;
-        input.pressingLeft = false;
-        input.pressingRight = false;
-        input.movementForward = wantForward ? 1.0f : 0.0f;
-        input.movementSideways = 0.0f;
-        input.jumping = wantJump;
-        input.sneaking = false;
+        player.sidewaysSpeed = 0.0f;
+        player.forwardSpeed = wantForward ? 1.0f : 0.0f;
+        player.setJumping(wantJump);
+        return true;
     }
 
     /** 自救时该播报的那句话（翻译键）；不在自救时返回 null */

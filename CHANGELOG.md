@@ -6,6 +6,48 @@ AutoFarm 采用语义化版本：`主版本.次版本.修订号`。
 
 ---
 
+## 2.3.3
+
+**主题：修复「开自由视角（灵魂出窍）后角色一步都不走」+ 重做自由视角兼容**
+
+### 根因
+
+反编译 `ClientPlayerEntity.tickNewAi()` 后确认，原版把「按键 → 移动意图」这一步包在判断里：
+
+```java
+if (this.isCamera()) {                       // 摄像机和身体重合时
+    this.sidewaysSpeed = this.input.movementSideways;
+    this.forwardSpeed  = this.input.movementForward;
+    this.jumping       = this.input.jumping;
+}
+```
+
+自由视角一开，`isCamera()` 就是 `false`，**这整段被跳过** —— 于是无论怎么改输入对象，
+角色都一步也走不了。之前只能靠自由视角模组自己的「允许灵魂出窍时控制角色」选项绕过去，
+而那个选项又会把键盘从摄像机手里抢走，导致摄像机飞不动。
+
+### 改法
+
+- 接管点从 `KeyboardInput.tick` 挪到 **`ClientPlayerEntity.tickNewAi()` 的末尾**
+  （新 `ClientPlayerInputMixin`，删掉旧的 `KeyboardInputMixin`）：
+  直接写 `sidewaysSpeed / forwardSpeed / jumping`，绕开 `isCamera()` 判断。
+- **全程不再碰键盘输入对象** → 自由视角模组拿 WASD 飞摄像机完全不受影响，
+  **不需要**再开它的「控制角色」选项；玩家自己的按键也一个字没改。
+- 新增 `PathWalker.clearIdleIntent`：自由视角下没人接管时把移动意图清零
+  （原版那时不抄输入，不清的话上一次的 `forwardSpeed` 会每 tick ×0.98 慢慢衰减，
+  路线走完了人还会自己往前飘好几秒）。
+- **疾跑跟着一起挪了落点**：原版每 tick 有「已经疾跑、但 `input.hasForwardMovement()` 是假
+  → 取消疾跑」这一条，按的是玩家手上的键；我们既不按键也不改输入对象，所以它每 tick 都会
+  取消一次。现在在同一个注入点（原版那条判断之后、算速度之前）把疾跑重新按上 ——
+  同一 tick 内「取消→重按」净变化为零，客户端不会多发疾跑包，锁定疾跑照旧生效。
+- 自由视角相关的「让路」判断统一走 `CameraCompat.pauseForFreecam(config)`：
+  撤退、受击回头、自动打怪、空闲环顾、自动进食、环境自救**都只看「自由视角时停机」这一项**，
+  不再无条件为自由视角让路 —— 关掉它（默认）时这些功能在自由视角下照常工作。
+- 「自由视角时停机」的说明重写，讲清楚两种语义。
+- 旧的 `KeyboardInputMixin`（改键盘输入对象的那套）整个删掉。
+
+---
+
 ## 2.3.2
 
 **主题：改名为 PlayerAutoFarming + 开源发布准备**
