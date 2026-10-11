@@ -522,6 +522,34 @@ public class AutoFarmConfig {
      */
     public int pickupDelaySeconds = 1;
 
+    /**
+     * <b>拾取范围</b>（格）：专门给掉落物用的扫描半径，独立于 {@link #scanRadius}（作物扫描半径）。
+     *
+     * <p>给掉落物单开一个半径，是因为两者的合理尺度差很多：作物要一棵棵走过去收，
+     * 半径开太大只会让路线绕远；而掉落物是「顺手就能捡」的东西，稍微跑一段把它们扫干净更划算。
+     * 想「范围拾取」就把这个值调大（最大 48 格），想只捡脚边的就调小。
+     *
+     * <p>⚠️ 注意这里的「范围」指的是<b>视野范围</b>，不是「隔空吸取」：
+     * 物品进背包这件事完全由服务端决定（原版 {@code ItemEntity.onPlayerCollision} 头一句就是
+     * {@code if (world.isClient) return;}），客户端既没有「拾取」这个包、也决定不了物品归属。
+     * 所以「范围拾取」的真实做法是：把范围内的掉落物排进路线、**走过去**让原版把东西吸进包。
+     * 这是唯一能在客户端实现、又不会被服务器当成作弊的方式。
+     */
+    public int pickupRadius = 16;
+
+    /** 拾取范围的合法区间（格） */
+    public static final int PICKUP_RADIUS_MIN = 4;
+    public static final int PICKUP_RADIUS_MAX = 48;
+
+    /**
+     * 拾取范围里「什么都捡」（默认关闭 = 只捡农作物产物）。
+     *
+     * <p>关着时只认「像作物产物」的东西（见 {@code CropRegistry.isCropDrop}），
+     * 免得追着腐肉、骨头、箭矢满田跑；开着则范围内的掉落物一律捡回来。
+     * 前提是「优先拾取掉落物」开着 —— 那一项才是这个功能的总开关。
+     */
+    public boolean pickupAllItems = false;
+
     // ---- 瓜类与自定义作物（瓜茎识别 + 自定义方块） ----
     //
     // 原版的西瓜 / 南瓜不是「作物方块」：它们没有 age，茎才带 age。
@@ -1104,6 +1132,8 @@ public class AutoFarmConfig {
         c.verboseHud = this.verboseHud;
         c.pickupDroppedItems = this.pickupDroppedItems;
         c.pickupDelaySeconds = this.pickupDelaySeconds;
+        c.pickupRadius = this.pickupRadius;
+        c.pickupAllItems = this.pickupAllItems;
         c.melonHarvest = this.melonHarvest;
         c.customHarvestBlocks = this.customHarvestBlocks == null
                 ? new ArrayList<>() : new ArrayList<>(this.customHarvestBlocks);
@@ -1235,6 +1265,9 @@ public class AutoFarmConfig {
 
         if (pickupDelaySeconds < 1) pickupDelaySeconds = 1;
         if (pickupDelaySeconds > 30) pickupDelaySeconds = 30;
+        // 拾取范围：拉回合法区间
+        if (pickupRadius < PICKUP_RADIUS_MIN) pickupRadius = PICKUP_RADIUS_MIN;
+        if (pickupRadius > PICKUP_RADIUS_MAX) pickupRadius = PICKUP_RADIUS_MAX;
 
         // 自定义方块名单：去掉空串（手改 JSON 写坏了也不至于崩）。
         // 名单里的名字认不出方块（模组被卸了、名字拼错了）不在这里过滤 ——

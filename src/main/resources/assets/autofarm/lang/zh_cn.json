@@ -460,5 +460,11 @@
   "autofarm.turn_time.pending": "未确认：按 Enter 或点右侧「确认」才生效（离开本页会放弃）",
   "autofarm.turn_time.danger.subtitle": "为什么这么小的值我们不推荐",
   "autofarm.turn_time.danger.body1": "转向时间小于 200 毫秒时，视角几乎是瞬间甩过去的；填 0 更是完全关掉平滑转向。",
-  "autofarm.turn_time.danger.body2": "真人转视角是连贯、带惯性的，而瞬移式的转头是反作弊最容易识别的特征之一。建议至少 200 毫秒，常用 600 毫秒。确认后这个值才会写进配置。"
+  "autofarm.turn_time.danger.body2": "真人转视角是连贯、带惯性的，而瞬移式的转头是反作弊最容易识别的特征之一。建议至少 200 毫秒，常用 600 毫秒。确认后这个值才会写进配置。",
+  "autofarm.option.pickup_radius": "拾取范围",
+  "autofarm.pickup_radius.tip": "掉落物单独用这一档半径扫描，和作物扫描半径无关。调大 = 把更远的掉落物也排进路线去捡。注意：这是「看得更远、走过去捡」，不是隔空吸取 —— 物品进背包由服务端判定（原版客户端根本不参与），客户端能做到的只有把角色走到它旁边。",
+  "autofarm.option.pickup_all": "拾取对象",
+  "autofarm.pickup_all.no": "仅农作物产物",
+  "autofarm.pickup_all.yes": "所有掉落物",
+  "autofarm.pickup_all.tip": "「仅农作物产物」只认小麦、胡萝卜这类作物掉落物，免得追着腐肉、骨头、箭矢满田跑；「所有掉落物」则把范围内的东西一律捡回来（背包会很快满，注意配合存放策略）。"
 }

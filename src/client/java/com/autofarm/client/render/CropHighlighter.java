@@ -111,9 +111,12 @@ public final class CropHighlighter {
         List<BlockPos> extras = config.visualize ? FarmTaskManager.getExtraTargets() : List.of();
         // 当前目标（正走向 / 正在处理的那一格）用白色高亮，一眼看到它接下来动哪一格
         BlockPos current = config.visualize ? FarmTaskManager.getCurrentTarget() : null;
+        // 掉落物（这一轮打算去捡的）用第四种颜色 —— 「拾取范围」到底圈住了什么，一眼看得见
+        List<BlockPos> drops = config.visualize ? FarmTaskManager.getPickupTargets() : List.of();
         List<BlockPos> route = config.showPath ? FarmTaskManager.getRoute() : List.of();
         List<PathStep> segment = config.showPath ? FarmTaskManager.getActiveSegment() : List.of();
-        if (crops.isEmpty() && spots.isEmpty() && extras.isEmpty() && current == null
+        if (crops.isEmpty() && spots.isEmpty() && extras.isEmpty() && drops.isEmpty()
+                && current == null
                 && route.isEmpty() && segment.isEmpty()) {
             return;
         }
@@ -137,9 +140,9 @@ public final class CropHighlighter {
                 config.highlightAlpha01());
 
         if (config.highlightThroughWalls) {
-            renderThroughWalls(params, crops, spots, extras, current, route, segment);
+            renderThroughWalls(params, crops, spots, extras, drops, current, route, segment);
         } else {
-            renderDepthTested(context, params, crops, spots, extras, current, route, segment);
+            renderDepthTested(context, params, crops, spots, extras, drops, current, route, segment);
         }
     }
 
@@ -152,7 +155,8 @@ public final class CropHighlighter {
      */
     private static void renderDepthTested(WorldRenderContext context, Params params,
                                           List<BlockPos> crops, List<BlockPos> spots,
-                                          List<BlockPos> extras, BlockPos current,
+                                          List<BlockPos> extras, List<BlockPos> drops,
+                                          BlockPos current,
                                           List<BlockPos> route, List<PathStep> segment) {
         VertexConsumerProvider consumers = context.consumers();
         if (consumers == null) {
@@ -160,7 +164,7 @@ public final class CropHighlighter {
         }
 
         VertexConsumer vertexConsumer = consumers.getBuffer(RenderLayer.getDebugQuads());
-        drawAll(vertexConsumer, params, crops, spots, extras, current, route, segment);
+        drawAll(vertexConsumer, params, crops, spots, extras, drops, current, route, segment);
 
         // 事件返回后 MC 还会统一绘制一次，这里主动 flush 让绘制时机确定可控
         if (consumers instanceof VertexConsumerProvider.Immediate immediate) {
@@ -177,7 +181,8 @@ public final class CropHighlighter {
      * <p>全程用 try/finally 还原，避免污染后面的天气、粒子、手部渲染。
      */
     private static void renderThroughWalls(Params params, List<BlockPos> crops, List<BlockPos> spots,
-                                          List<BlockPos> extras, BlockPos current,
+                                          List<BlockPos> extras, List<BlockPos> drops,
+                                          BlockPos current,
                                           List<BlockPos> route, List<PathStep> segment) {
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
         RenderSystem.enableBlend();
@@ -193,7 +198,7 @@ public final class CropHighlighter {
             // Tessellator 的缓冲是全局复用的，万一之前被谁 fixedColor() 过，
             // 我们的颜色会被静默忽略（画出来全白）。这一行把状态清掉。
             buffer.unfixColor();
-            drawAll(buffer, params, crops, spots, extras, current, route, segment);
+            drawAll(buffer, params, crops, spots, extras, drops, current, route, segment);
             BufferRenderer.drawWithGlobalProgram(buffer.end());
         } finally {
             RenderSystem.enableDepthTest();
@@ -211,7 +216,8 @@ public final class CropHighlighter {
      * 可以共用这一份代码。
      */
     private static void drawAll(VertexConsumer vc, Params p, List<BlockPos> crops,
-                                List<BlockPos> spots, List<BlockPos> extras, BlockPos current,
+                                List<BlockPos> spots, List<BlockPos> extras, List<BlockPos> drops,
+                                BlockPos current,
                                 List<BlockPos> route, List<PathStep> segment) {
         drawBoxes(vc, p, crops, p.red(), p.green(), p.blue(), p.alpha());
         // 空耕地用固定的青色：和成熟作物的橙红区分开，也避开「挖红 / 垫蓝」这两个路线色
@@ -221,6 +227,11 @@ public final class CropHighlighter {
         // 额外目标（瓜 / 自定义方块）用金黄：既不是「成熟作物」也不是「空地」，单独一档
         if (!extras.isEmpty()) {
             drawBoxes(vc, p, extras, EXTRA_R, EXTRA_G, EXTRA_B, p.alpha());
+        }
+        // 掉落物用紫色（第四档）：它既不是作物、也不是「要去挖的东西」，
+        // 而是「走过去就会被吸走」的那类目标，和上面三种都区分开
+        if (!drops.isEmpty()) {
+            drawBoxes(vc, p, drops, DROP_R, DROP_G, DROP_B, p.alpha());
         }
         // 当前目标用纯白：这是「它接下来动哪一格」的最醒目标记，压在所有颜色之上
         if (current != null) {
@@ -235,6 +246,11 @@ public final class CropHighlighter {
     private static final float EMPTY_FARMLAND_B = 0.70f;
 
     /** 额外目标描边的颜色（金黄），和橙红（作物）、青绿（空耕地）都区分开 */
+    /** 掉落物描边的颜色（紫），和橙红（作物）/ 青绿（空耕地）/ 金黄（额外目标）都拉开 */
+    private static final float DROP_R = 0.78f;
+    private static final float DROP_G = 0.45f;
+    private static final float DROP_B = 1.00f;
+
     private static final float EXTRA_R = 0.98f;
     private static final float EXTRA_G = 0.78f;
     private static final float EXTRA_B = 0.16f;

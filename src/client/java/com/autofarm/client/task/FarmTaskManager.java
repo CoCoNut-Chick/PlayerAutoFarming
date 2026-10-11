@@ -171,6 +171,12 @@ public final class FarmTaskManager {
     private static List<BlockPos> extraTargetsList = Collections.emptyList();
 
     /**
+     * {@link #pickupTargets} 的只读列表镜像 —— 和 {@link #extraTargetsList} 同一个理由：
+     * 渲染层每帧都要拿它画框，直接在 getter 里复制太浪费。一次扫描刷新一遍即可。
+     */
+    private static List<BlockPos> pickupTargetsList = Collections.emptyList();
+
+    /**
      * 骨粉催熟目标：田里那些「<b>还没熟、但已经种下了</b>」的作物。
      *
      * <p>它和成熟作物分开的理由很实际：催熟是「有富余才做」的事，收成是「熟了就该收」的事，
@@ -489,6 +495,11 @@ public final class FarmTaskManager {
         return extraTargetsList;
     }
 
+    /** 这一轮打算去捡的掉落物（渲染层拿它画框，让「拾取范围」看得见） */
+    public static List<BlockPos> getPickupTargets() {
+        return pickupTargetsList;
+    }
+
     /** 附近空耕地的格数（面板上显示，好知道它为什么要往空地跑） */
     public static int getFarmlandCount() {
         return emptyFarmland.size();
@@ -633,6 +644,7 @@ public final class FarmTaskManager {
         pickupTargets.clear();
         extraTargets.clear();
         extraTargetsList = Collections.emptyList();
+        pickupTargetsList = Collections.emptyList();
         boneMealTargets.clear();
         pickupWaitTicks = 0;
         pickupWaitPos = null;
@@ -1291,6 +1303,9 @@ public final class FarmTaskManager {
             pickupTargets.removeAll(extraTargets);
             pickupTargets.removeAll(boneMealTargets);
         }
+        // 刷新掉落物的只读镜像（渲染层每帧要拿它画框），一次扫描只复制这一回。
+        // 放在剔除之后：描边画的就应该是「这一轮真会去捡的那些」，不含被作物抢走同格的。
+        pickupTargetsList = List.copyOf(pickupTargets);
 
         // 让「已处理」集合跟着扫描结果瘦身，避免玩家在同一片区域待久了无限膨胀。
         // 收掉的作物会变成空气、补种后变成幼苗，两者都不再是「成熟作物」，
@@ -1501,12 +1516,14 @@ public final class FarmTaskManager {
                                              Set<BlockPos> out) {
         long minAge = Math.max(1, config.pickupDelaySeconds) * 20L; // 秒 → tick
         double ignoreSq = PICKUP_IGNORE_DISTANCE * PICKUP_IGNORE_DISTANCE;
-        Box box = client.player.getBoundingBox().expand(config.scanRadius);
+        // 半径用「拾取范围」而不是作物扫描半径：掉落物是顺手能捡的东西，尺度跟作物不一样
+        Box box = client.player.getBoundingBox().expand(config.pickupRadius);
         for (ItemEntity item : client.world.getEntitiesByClass(ItemEntity.class, box,
                 e -> e.isAlive()
                         && e.getItemAge() >= minAge
                         && e.squaredDistanceTo(client.player) > ignoreSq
-                        && CropRegistry.isCropDrop(e.getStack())
+                        // 默认只捡「像作物产物」的；开了「什么都捡」则一律收
+                        && (config.pickupAllItems || CropRegistry.isCropDrop(e.getStack()))
                         && config.insideWorkArea(e.getX(), e.getY(), e.getZ()))) {
             out.add(item.getBlockPos().toImmutable());
         }

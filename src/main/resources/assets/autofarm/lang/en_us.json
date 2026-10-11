@@ -460,5 +460,11 @@
   "autofarm.turn_time.pending": "Not applied yet: press Enter or click Apply (leaving this page discards it)",
   "autofarm.turn_time.danger.subtitle": "Why we don't recommend a value this small",
   "autofarm.turn_time.danger.body1": "Below 200 ms the view snaps around almost instantly, and 0 turns smooth turning off entirely.",
-  "autofarm.turn_time.danger.body2": "Real players turn with momentum; instant snapping is one of the easiest patterns anti-cheat picks up. Keep at least 200 ms — 600 ms is the usual choice. The value is only written after you confirm."
+  "autofarm.turn_time.danger.body2": "Real players turn with momentum; instant snapping is one of the easiest patterns anti-cheat picks up. Keep at least 200 ms — 600 ms is the usual choice. The value is only written after you confirm.",
+  "autofarm.option.pickup_radius": "Pickup Range",
+  "autofarm.pickup_radius.tip": "Dropped items are scanned with their own radius, independent of the crop scan radius. Larger = walk further to collect more drops. Note: this means \"look further and walk there\", not \"suck items in\" — item pickup is decided by the server (the vanilla client is not even involved), so the only thing a client can do is move the player next to the item.",
+  "autofarm.option.pickup_all": "Pickup Filter",
+  "autofarm.pickup_all.no": "Crop drops only",
+  "autofarm.pickup_all.yes": "All dropped items",
+  "autofarm.pickup_all.tip": "\"Crop drops only\" recognises wheat/carrot-style harvest drops, so you do not chase rotten flesh, bones or arrows around the field. \"All dropped items\" collects everything in range instead (your inventory will fill up fast — pair it with a storage policy)."
 }

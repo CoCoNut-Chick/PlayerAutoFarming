@@ -102,7 +102,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int MISC_ROWS = 3;
     private static final int SEC_MISC_Y = SEC_TOOL_Y + SEC_TOOL_H + SECTION_GAP;
     private static final int SEC_MISC_H = ROW_FIRST + MISC_ROWS * ROW_GAP + 4;
-    private static final int PICKUP_ROWS = 2;
+    private static final int PICKUP_ROWS = 4;
     private static final int SEC_PICKUP_Y = SEC_MISC_Y + SEC_MISC_H + SECTION_GAP;
     private static final int SEC_PICKUP_H = ROW_FIRST + PICKUP_ROWS * ROW_GAP + 4;
 
@@ -124,6 +124,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] DURABILITY_CHOICES = {5, 10, 15, 20, 30};
     private static final int[] COOLDOWN_CHOICES = {5, 10, 15, 30, 60};
     private static final int[] PICKUP_DELAY_CHOICES = {1, 2, 3, 5};
+    /** 「拾取范围」档位（格）。掉落物单开一档半径，最大到 48 格 */
+    private static final int[] PICKUP_RADIUS_CHOICES = {4, 8, 12, 16, 24, 32, 48};
     private static final double[] ATTACK_RANGE_CHOICES = {2.5, 2.9, 3.5, 4.5, 6.0};
     private static final int[] VIOLENCE_CHOICES = {0, 1, 2};
     private static final int[] ANTIKICK_LEVEL_CHOICES = {0, 1, 2, 3};
@@ -174,6 +176,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget cooldownButton;
     private ButtonWidget verboseHudButton;
     private ButtonWidget pickupDropsButton;
+    private ButtonWidget pickupRadiusButton;
+    private ButtonWidget pickupAllButton;
     private ButtonWidget pickupDelayButton;
     private ButtonWidget antiKickButton;
     private ButtonWidget antiKickLevelButton;
@@ -633,6 +637,23 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.pickup_drops.tip");
         layout(pickupDropsButton, contentX, 0, fullW);
 
+        // 拾取范围：掉落物专用的扫描半径。调大就是「范围拾取」——
+        // 注意它是「看得更远、走过去捡」，不是隔空吸取（物品入包由服务端决定，见配置里的说明）。
+        this.pickupRadiusButton = ButtonWidget.builder(pickupRadiusLabel(), b -> {
+            draft.pickupRadius = nextChoice(PICKUP_RADIUS_CHOICES, draft.pickupRadius);
+            b.setMessage(pickupRadiusLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        pickupRadiusButton.setTooltip(Tooltip.of(Text.translatable("autofarm.pickup_radius.tip")));
+        addScrolling(pickupRadiusButton);
+
+        // 拾取对象：只捡农作物产物 / 范围内什么都捡
+        this.pickupAllButton = ButtonWidget.builder(pickupAllLabel(), b -> {
+            draft.pickupAllItems = !draft.pickupAllItems;
+            b.setMessage(pickupAllLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        pickupAllButton.setTooltip(Tooltip.of(Text.translatable("autofarm.pickup_all.tip")));
+        addScrolling(pickupAllButton);
+
         this.pickupDelayButton = ButtonWidget.builder(pickupDelayLabel(), b -> {
             draft.pickupDelaySeconds = nextChoice(PICKUP_DELAY_CHOICES, draft.pickupDelaySeconds);
             b.setMessage(pickupDelayLabel());
@@ -916,6 +937,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
             violenceLevelButton.visible = violenceLevelButton.visible
                     && draft.autoAttack && draft.autoAttackViolent;
         }
+        // 「拾取范围」「拾取对象」是从属于「优先拾取掉落物」的：那一项没开时它俩没意义
+        if (pickupRadiusButton != null) {
+            pickupRadiusButton.visible = pickupRadiusButton.visible && draft.pickupDroppedItems;
+        }
+        if (pickupAllButton != null) {
+            pickupAllButton.visible = pickupAllButton.visible && draft.pickupDroppedItems;
+        }
         boolean box = draft.workAreaMode == AutoFarmConfig.AREA_MODE_BOX;
         if (workAreaRadiusButton != null) {
             workAreaRadiusButton.visible = workAreaRadiusButton.visible && !box;
@@ -1032,7 +1060,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
 
         int pickup = originY + SEC_PICKUP_Y;
         setRowY(pickupDropsButton, pickup + ROW_FIRST);
-        setRowY(pickupDelayButton, pickup + ROW_FIRST + ROW_GAP);
+        setRowY(pickupRadiusButton, pickup + ROW_FIRST + ROW_GAP);
+        setRowY(pickupAllButton, pickup + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(pickupDelayButton, pickup + ROW_FIRST + 3 * ROW_GAP);
     }
 
     private void positionResource(int originY) {
@@ -1159,6 +1189,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.failureCooldownSeconds = 15;
         draft.verboseHud = false;
         draft.pickupDroppedItems = false;
+        draft.pickupRadius = 16;
+        draft.pickupAllItems = false;
         draft.pickupDelaySeconds = 1;
         draft.melonHarvest = false;
         draft.customHarvestBlocks = new ArrayList<>();
@@ -1225,6 +1257,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.failureCooldownSeconds = old.failureCooldownSeconds;
         draft.verboseHud = old.verboseHud;
         draft.pickupDroppedItems = old.pickupDroppedItems;
+        draft.pickupRadius = old.pickupRadius;
+        draft.pickupAllItems = old.pickupAllItems;
         draft.pickupDelaySeconds = old.pickupDelaySeconds;
         draft.melonHarvest = old.melonHarvest;
         draft.customHarvestBlocks = new ArrayList<>(old.customHarvestBlocks);
@@ -1290,6 +1324,17 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private Text pickupDelayLabel() {
         return optionLabel("autofarm.option.pickup_delay",
                 Text.translatable("autofarm.value.seconds", draft.pickupDelaySeconds));
+    }
+
+    private Text pickupRadiusLabel() {
+        return optionLabel("autofarm.option.pickup_radius",
+                Text.translatable("autofarm.value.blocks", draft.pickupRadius));
+    }
+
+    private Text pickupAllLabel() {
+        return optionLabel("autofarm.option.pickup_all",
+                Text.translatable(draft.pickupAllItems
+                        ? "autofarm.pickup_all.yes" : "autofarm.pickup_all.no"));
     }
 
     private Text attackRangeLabel() {
