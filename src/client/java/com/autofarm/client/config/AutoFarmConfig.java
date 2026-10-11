@@ -550,6 +550,46 @@ public class AutoFarmConfig {
      */
     public boolean pickupAllItems = false;
 
+    /**
+     * <b>纯拾取模式</b>：只捡地上的掉落物，完全不干农活（默认关闭）。
+     *
+     * <p>它<b>独立于「自动收割」总开关</b>：总开关关着、只打开这一项，模组照样会
+     * 走到附近的掉落物上把它们捡回来。打开后下列行为一律停掉 ——
+     * 不收割、不补种、不催熟、不挖瓜 / 自定义方块、不补种空耕地、不去补给点；
+     * 保留的是保命动作（环境自救、受击反制、低血量停机、背包满停机）
+     * 和工作区域 / 环境 / 作息这几道「该不该干活」的闸门。
+     *
+     * <p>典型用法：收了半天、田里散了一地掉落物懒得自己捡；或者你只想让角色
+     * 当个「扫地机器人」，把周围掉的东西收回来。
+     */
+    public boolean pickupOnlyMode = false;
+
+    /**
+     * <b>掉落物优先</b>：地上有掉落物躺够 {@link #pickupPrioritySeconds} 秒还没进包，
+     * 就<b>中断当前路线</b>，专门为它跑一趟（默认关闭）。
+     *
+     * <p>和 {@link #pickupDroppedItems} 的区别是「排队」和「插队」：
+     * 那一项是「把掉落物排在路线最前面」—— 手上这条路线还是走完才轮到它；
+     * 这一项是「一旦躺太久就直接打断手上的活，先去把它捡了」。
+     *
+     * <p>之所以值得打断：掉落物不会自己长回去，而且有存活时间上限 ——
+     * 一件被水流冲远、被怪撞飞、或者卡在角落的掉落物，你越是「等会儿再捡」，
+     * 它越可能在你回头之前就消失了。
+     */
+    public boolean pickupPriorityEnabled = false;
+
+    /**
+     * 掉落物「值得插队」的存在时长（秒）。
+     *
+     * <p>调小 = 反应更快（刚掉下去没捡到就掉头去捡），但频繁打断收割；
+     * 调大 = 更从容，代价是掉落物被冲走 / 消失的概率更高。
+     */
+    public int pickupPrioritySeconds = 8;
+
+    /** 掉落物优先判定的合法区间（秒） */
+    public static final int PICKUP_PRIORITY_MIN = 1;
+    public static final int PICKUP_PRIORITY_MAX = 60;
+
     // ---- 瓜类与自定义作物（瓜茎识别 + 自定义方块） ----
     //
     // 原版的西瓜 / 南瓜不是「作物方块」：它们没有 age，茎才带 age。
@@ -1043,6 +1083,8 @@ public class AutoFarmConfig {
         if (failureCooldown) n++;
         if (verboseHud) n++;
         if (pickupDroppedItems) n++;
+        if (pickupOnlyMode) n++;
+        if (pickupPriorityEnabled) n++;
         if (melonHarvest) n++;
         if (customHarvestBlocks != null && !customHarvestBlocks.isEmpty()) n++;
         if (boneMealBoost) n++;
@@ -1134,6 +1176,9 @@ public class AutoFarmConfig {
         c.pickupDelaySeconds = this.pickupDelaySeconds;
         c.pickupRadius = this.pickupRadius;
         c.pickupAllItems = this.pickupAllItems;
+        c.pickupOnlyMode = this.pickupOnlyMode;
+        c.pickupPriorityEnabled = this.pickupPriorityEnabled;
+        c.pickupPrioritySeconds = this.pickupPrioritySeconds;
         c.melonHarvest = this.melonHarvest;
         c.customHarvestBlocks = this.customHarvestBlocks == null
                 ? new ArrayList<>() : new ArrayList<>(this.customHarvestBlocks);
@@ -1268,6 +1313,9 @@ public class AutoFarmConfig {
         // 拾取范围：拉回合法区间
         if (pickupRadius < PICKUP_RADIUS_MIN) pickupRadius = PICKUP_RADIUS_MIN;
         if (pickupRadius > PICKUP_RADIUS_MAX) pickupRadius = PICKUP_RADIUS_MAX;
+        // 掉落物优先：插队阈值也拉回合法区间（手改 JSON 写 0 或 999 都不至于出事）
+        if (pickupPrioritySeconds < PICKUP_PRIORITY_MIN) pickupPrioritySeconds = PICKUP_PRIORITY_MIN;
+        if (pickupPrioritySeconds > PICKUP_PRIORITY_MAX) pickupPrioritySeconds = PICKUP_PRIORITY_MAX;
 
         // 自定义方块名单：去掉空串（手改 JSON 写坏了也不至于崩）。
         // 名单里的名字认不出方块（模组被卸了、名字拼错了）不在这里过滤 ——

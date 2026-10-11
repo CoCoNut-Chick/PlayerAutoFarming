@@ -71,7 +71,8 @@ public final class AutoFarmHud {
         }
 
         List<Line> lines = new ArrayList<>();
-        if (!config.enabled) {
+        // 「纯拾取模式」是一道独立于总开关的闸：只开它，HUD 也该照常显示
+        if (!config.enabled && !config.pickupOnlyMode) {
             // 关着的时候只留一行很淡的字，提示它还在、以及怎么开
             lines.add(new Line(Text.translatable("autofarm.hud.off"), COLOR_OFF));
             draw(context, client, lines);
@@ -80,6 +81,11 @@ public final class AutoFarmHud {
 
         lines.add(new Line(Text.translatable("autofarm.hud.title",
                 Text.translatable(FarmTaskManager.getState().getTranslationKey())), COLOR_TEXT));
+
+        // 纯拾取模式：单独标一行，免得看 HUD 的人以为「总开关没开、模组却在动」是出 bug 了
+        if (config.pickupOnlyMode) {
+            lines.add(new Line(Text.translatable("autofarm.hud.pickup_only"), COLOR_NOTICE));
+        }
 
         int seeds = FarmTaskManager.getSeedCount();
         // 只有「确实在靠种子补种」时才把种子少当成警告：

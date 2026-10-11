@@ -501,7 +501,9 @@ public final class PathWalker {
      */
     public static void clearIdleIntent(ClientPlayerEntity player) {
         AutoFarmConfig config = ConfigManager.get();
-        if (player == null || config == null || !config.enabled) {
+        // 两道闸都关着才不管 —— 纯拾取模式也会自己走路（走过去捡东西）
+        if (player == null || config == null
+                || (!config.enabled && !config.pickupOnlyMode)) {
             return;
         }
         if (!CameraCompat.isCameraDetached()) {

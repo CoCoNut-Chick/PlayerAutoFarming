@@ -75,7 +75,9 @@ public final class RescueHelper {
         if (player == null || client.world == null || config == null) {
             return false;
         }
-        if (!config.enabled || !config.selfRescueEnabled || player.isSpectator()) {
+        // 「自动收割」或「纯拾取模式」任一开着都算在工作 —— 保命的事两种模式下都要做
+        boolean working = config.enabled || config.pickupOnlyMode;
+        if (!working || !config.selfRescueEnabled || player.isSpectator()) {
             return false;
         }
         // 自由视角 + 开了「自由视角时停机」时不接管 —— 否则屏幕上身体不动，

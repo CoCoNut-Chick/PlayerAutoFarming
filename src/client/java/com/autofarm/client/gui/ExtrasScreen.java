@@ -102,7 +102,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int MISC_ROWS = 3;
     private static final int SEC_MISC_Y = SEC_TOOL_Y + SEC_TOOL_H + SECTION_GAP;
     private static final int SEC_MISC_H = ROW_FIRST + MISC_ROWS * ROW_GAP + 4;
-    private static final int PICKUP_ROWS = 4;
+    // 纯拾取模式 / 优先拾取掉落物 / 拾取范围 / 拾取对象 / 拾取判定延迟 /
+    // 掉落物优先（插队）/ 优先判定时长
+    private static final int PICKUP_ROWS = 7;
     private static final int SEC_PICKUP_Y = SEC_MISC_Y + SEC_MISC_H + SECTION_GAP;
     private static final int SEC_PICKUP_H = ROW_FIRST + PICKUP_ROWS * ROW_GAP + 4;
 
@@ -124,6 +126,8 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private static final int[] DURABILITY_CHOICES = {5, 10, 15, 20, 30};
     private static final int[] COOLDOWN_CHOICES = {5, 10, 15, 30, 60};
     private static final int[] PICKUP_DELAY_CHOICES = {1, 2, 3, 5};
+    /** 「掉落物优先」的插队阈值（秒）：躺够这么久还没进包，就中断手上的活专门跑一趟 */
+    private static final int[] PICKUP_PRIORITY_CHOICES = {3, 5, 8, 15, 30};
     /** 「拾取范围」档位（格）。掉落物单开一档半径，最大到 48 格 */
     private static final int[] PICKUP_RADIUS_CHOICES = {4, 8, 12, 16, 24, 32, 48};
     private static final double[] ATTACK_RANGE_CHOICES = {2.5, 2.9, 3.5, 4.5, 6.0};
@@ -175,10 +179,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private ButtonWidget failureCooldownButton;
     private ButtonWidget cooldownButton;
     private ButtonWidget verboseHudButton;
+    private ButtonWidget pickupOnlyButton;
     private ButtonWidget pickupDropsButton;
     private ButtonWidget pickupRadiusButton;
     private ButtonWidget pickupAllButton;
     private ButtonWidget pickupDelayButton;
+    private ButtonWidget pickupPriorityButton;
+    private ButtonWidget pickupPriorityTimeButton;
     private ButtonWidget antiKickButton;
     private ButtonWidget antiKickLevelButton;
     private ButtonWidget reactionDelayButton;
@@ -632,6 +639,24 @@ public class ExtrasScreen extends ScrollPanelScreen {
                 "autofarm.verbose_hud.tip");
         layout(verboseHudButton, contentX, 0, fullW);
 
+        // 「纯拾取模式」：独立于「自动收割」总开关的一道闸 —— 只开它，模组也会干活，
+        // 但只捡掉落物（不收菜、不补种、不催熟、不挖瓜、不打怪）。
+        this.pickupOnlyButton = ButtonWidget.builder(
+                toggleLabel("autofarm.option.pickup_only", draft.pickupOnlyMode), b -> {
+                    draft.pickupOnlyMode = !draft.pickupOnlyMode;
+                    if (draft.pickupOnlyMode) {
+                        // 顺手把「拾取对象」默认成全捡：纯拾取还只认农作物产物的话，
+                        // 没种过的地上一件都捡不到，这个模式等于白开。
+                        draft.pickupAllItems = true;
+                        if (pickupAllButton != null) {
+                            pickupAllButton.setMessage(pickupAllLabel());
+                        }
+                    }
+                    b.setMessage(toggleLabel("autofarm.option.pickup_only", draft.pickupOnlyMode));
+                }).dimensions(contentX, 0, contentWidth, ROW_H).build();
+        pickupOnlyButton.setTooltip(Tooltip.of(Text.translatable("autofarm.pickup_only.tip")));
+        addScrolling(pickupOnlyButton);
+
         this.pickupDropsButton = toggle("autofarm.option.pickup_drops",
                 draft.pickupDroppedItems, value -> draft.pickupDroppedItems = value,
                 "autofarm.pickup_drops.tip");
@@ -660,6 +685,19 @@ public class ExtrasScreen extends ScrollPanelScreen {
         }).dimensions(subX, 0, subW, ROW_H).build();
         pickupDelayButton.setTooltip(Tooltip.of(Text.translatable("autofarm.pickup_delay.tip")));
         addScrolling(pickupDelayButton);
+
+        // 掉落物优先：躺够时长的掉落物直接「插队」—— 中断手上的路线，专门为它跑一趟
+        this.pickupPriorityButton = toggle("autofarm.option.pickup_priority",
+                draft.pickupPriorityEnabled, value -> draft.pickupPriorityEnabled = value,
+                "autofarm.pickup_priority.tip");
+        layout(pickupPriorityButton, contentX, 0, fullW);
+
+        this.pickupPriorityTimeButton = ButtonWidget.builder(pickupPriorityTimeLabel(), b -> {
+            draft.pickupPrioritySeconds = nextChoice(PICKUP_PRIORITY_CHOICES, draft.pickupPrioritySeconds);
+            b.setMessage(pickupPriorityTimeLabel());
+        }).dimensions(subX, 0, subW, ROW_H).build();
+        pickupPriorityTimeButton.setTooltip(Tooltip.of(Text.translatable("autofarm.pickup_priority_time.tip")));
+        addScrolling(pickupPriorityTimeButton);
     }
 
     private void buildResourceTab() {
@@ -896,7 +934,9 @@ public class ExtrasScreen extends ScrollPanelScreen {
             case "autofarm.option.replace_tool" -> draft.autoReplaceTool;
             case "autofarm.option.failure_cooldown" -> draft.failureCooldown;
             case "autofarm.option.verbose_hud" -> draft.verboseHud;
+            case "autofarm.option.pickup_only" -> draft.pickupOnlyMode;
             case "autofarm.option.pickup_drops" -> draft.pickupDroppedItems;
+            case "autofarm.option.pickup_priority" -> draft.pickupPriorityEnabled;
             case "autofarm.option.antikick" -> draft.antiKickMode;
             case "autofarm.option.reaction_delay" -> draft.reactionDelay;
             case "autofarm.option.idle_look" -> draft.idleLookAround;
@@ -937,12 +977,19 @@ public class ExtrasScreen extends ScrollPanelScreen {
             violenceLevelButton.visible = violenceLevelButton.visible
                     && draft.autoAttack && draft.autoAttackViolent;
         }
-        // 「拾取范围」「拾取对象」是从属于「优先拾取掉落物」的：那一项没开时它俩没意义
+        // 「拾取范围」「拾取对象」是从属于「优先拾取掉落物」的：那一项没开时它俩没意义。
+        // 「纯拾取模式」是另一道闸，只开它同样用得上这两项，所以也放行。
+        boolean pickupActive = draft.pickupDroppedItems || draft.pickupOnlyMode;
         if (pickupRadiusButton != null) {
-            pickupRadiusButton.visible = pickupRadiusButton.visible && draft.pickupDroppedItems;
+            pickupRadiusButton.visible = pickupRadiusButton.visible && pickupActive;
         }
         if (pickupAllButton != null) {
-            pickupAllButton.visible = pickupAllButton.visible && draft.pickupDroppedItems;
+            pickupAllButton.visible = pickupAllButton.visible && pickupActive;
+        }
+        // 「优先判定时长」从属于「掉落物优先」
+        if (pickupPriorityTimeButton != null) {
+            pickupPriorityTimeButton.visible = pickupPriorityTimeButton.visible
+                    && draft.pickupPriorityEnabled;
         }
         boolean box = draft.workAreaMode == AutoFarmConfig.AREA_MODE_BOX;
         if (workAreaRadiusButton != null) {
@@ -1059,10 +1106,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
         setRowY(verboseHudButton, misc + ROW_FIRST + 2 * ROW_GAP);
 
         int pickup = originY + SEC_PICKUP_Y;
-        setRowY(pickupDropsButton, pickup + ROW_FIRST);
-        setRowY(pickupRadiusButton, pickup + ROW_FIRST + ROW_GAP);
-        setRowY(pickupAllButton, pickup + ROW_FIRST + 2 * ROW_GAP);
-        setRowY(pickupDelayButton, pickup + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(pickupOnlyButton, pickup + ROW_FIRST);
+        setRowY(pickupDropsButton, pickup + ROW_FIRST + ROW_GAP);
+        setRowY(pickupRadiusButton, pickup + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(pickupAllButton, pickup + ROW_FIRST + 3 * ROW_GAP);
+        setRowY(pickupDelayButton, pickup + ROW_FIRST + 4 * ROW_GAP);
+        setRowY(pickupPriorityButton, pickup + ROW_FIRST + 5 * ROW_GAP);
+        setRowY(pickupPriorityTimeButton, pickup + ROW_FIRST + 6 * ROW_GAP);
     }
 
     private void positionResource(int originY) {
@@ -1188,10 +1238,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.failureCooldown = false;
         draft.failureCooldownSeconds = 15;
         draft.verboseHud = false;
+        draft.pickupOnlyMode = false;
         draft.pickupDroppedItems = false;
         draft.pickupRadius = 16;
         draft.pickupAllItems = false;
         draft.pickupDelaySeconds = 1;
+        draft.pickupPriorityEnabled = false;
+        draft.pickupPrioritySeconds = 8;
         draft.melonHarvest = false;
         draft.customHarvestBlocks = new ArrayList<>();
         draft.boneMealBoost = false;
@@ -1256,10 +1309,13 @@ public class ExtrasScreen extends ScrollPanelScreen {
         draft.failureCooldown = old.failureCooldown;
         draft.failureCooldownSeconds = old.failureCooldownSeconds;
         draft.verboseHud = old.verboseHud;
+        draft.pickupOnlyMode = old.pickupOnlyMode;
         draft.pickupDroppedItems = old.pickupDroppedItems;
         draft.pickupRadius = old.pickupRadius;
         draft.pickupAllItems = old.pickupAllItems;
         draft.pickupDelaySeconds = old.pickupDelaySeconds;
+        draft.pickupPriorityEnabled = old.pickupPriorityEnabled;
+        draft.pickupPrioritySeconds = old.pickupPrioritySeconds;
         draft.melonHarvest = old.melonHarvest;
         draft.customHarvestBlocks = new ArrayList<>(old.customHarvestBlocks);
         draft.boneMealBoost = old.boneMealBoost;
@@ -1324,6 +1380,11 @@ public class ExtrasScreen extends ScrollPanelScreen {
     private Text pickupDelayLabel() {
         return optionLabel("autofarm.option.pickup_delay",
                 Text.translatable("autofarm.value.seconds", draft.pickupDelaySeconds));
+    }
+
+    private Text pickupPriorityTimeLabel() {
+        return optionLabel("autofarm.option.pickup_priority_time",
+                Text.translatable("autofarm.value.seconds", draft.pickupPrioritySeconds));
     }
 
     private Text pickupRadiusLabel() {

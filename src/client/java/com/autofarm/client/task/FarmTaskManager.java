@@ -136,6 +136,15 @@ public final class FarmTaskManager {
     private static final double PICKUP_IGNORE_DISTANCE = 1.6;
 
     /**
+     * 一件掉落物「插队去捡了却没捡到手」之后的冷却（tick）。
+     *
+     * <p>防的是死循环：某件东西掉进了够不着的角落（卡在栅栏里、泡在水里被推来推去），
+     * 若它每轮都算「值得插队」，角色就会永远围着它转、田里的活全停下。
+     * 试过一次没成，就先把它从「紧急」名单里摘掉 20 秒，让正常作业先跑起来。
+     */
+    private static final int PICKUP_URGENT_COOLDOWN_TICKS = 400;
+
+    /**
      * 一趟补给「没办成」之后的冷却（tick）。
      *
      * <p>没办成包括：走不到、箱子打不开、箱子已经满了搬不动、箱子里没有要的种子。
@@ -333,6 +342,23 @@ public final class FarmTaskManager {
 
     /** 同一格掉落物「站够了却还没进包」时已经重试了几轮（避免无限耗在同一格） */
     private static int pickupRetryTicks;
+
+    /**
+     * 这一轮是不是「专门为掉落物跑一趟」。
+     *
+     * <p>为真时下面的规划只排掉落物、不排作物 / 空地 / 瓜 / 骨粉目标 ——
+     * 这正是「掉落物优先」插队的效果：手上的活全放一放，先跑这一趟把东西捡回来。
+     */
+    private static boolean urgentPickupRun;
+
+    /** 这一趟专门去捡的那些掉落物（{@link #urgentPickupRun} 为真时才有意义） */
+    private static final Set<BlockPos> urgentPickupTargets = new HashSet<>();
+
+    /** 每格掉落物的「存在时长」快照（tick），扫描时顺手记下，插队判定直接读它 */
+    private static final Map<BlockPos, Long> pickupAges = new HashMap<>();
+
+    /** 「插队去捡过、但没捡到」的位置 → 解禁时刻，冷却期内不再算紧急 */
+    private static final Map<BlockPos, Long> pickupUrgentBlocked = new HashMap<>();
 
     /**
      * 防踢模式：已经「打量过」的目标。
@@ -649,6 +675,10 @@ public final class FarmTaskManager {
         pickupWaitTicks = 0;
         pickupWaitPos = null;
         pickupRetryTicks = 0;
+        urgentPickupRun = false;
+        urgentPickupTargets.clear();
+        pickupAges.clear();
+        pickupUrgentBlocked.clear();
         hesitatedAt = null;
         pendingSafety = null;
         safetySeenTicks = 0;
@@ -696,8 +726,10 @@ public final class FarmTaskManager {
         AutoFarmConfig config = ConfigManager.get();
         config.enabled = !config.enabled;
 
-        // 关掉 → 立刻停手，把控制权还给你
-        if (!config.enabled) {
+        // 关掉 → 立刻停手，把控制权还给你。
+        // 但「纯拾取模式」还开着的话不算全停 —— 那种模式下模组仍在捡东西，
+        // 清场会把它这一趟的路线也抹掉（下一轮能重排，但没必要抖这一下）。
+        if (!config.enabled && !config.pickupOnlyMode) {
             PathWalker.stop();
             CropHarvester.reset();
             ContainerTransfer.reset();
@@ -721,6 +753,10 @@ public final class FarmTaskManager {
             pickupWaitTicks = 0;
             pickupWaitPos = null;
             pickupRetryTicks = 0;
+            urgentPickupRun = false;
+            urgentPickupTargets.clear();
+            pickupAges.clear();
+            pickupUrgentBlocked.clear();
             hesitatedAt = null;
             pendingSafety = null;
             safetySeenTicks = 0;
@@ -741,7 +777,7 @@ public final class FarmTaskManager {
             sessionTicks = 0;
             StatsManager.get().save();
             notify(client, config, "stop");
-        } else {
+        } else if (config.enabled) {
             // 打开 → 假装「刚进入这个世界」：清空记忆、下一 tick 立刻重扫
             handled.clear();
             lastScanTick = Long.MIN_VALUE;
@@ -759,13 +795,19 @@ public final class FarmTaskManager {
             fatigueStopped = false;
             notify(client, config, "start");
         }
-        lastEnabled = config.enabled;
+        // 给 tick 的「刚开工」边沿用：纯拾取模式开着时，关了总开关也仍然算在工作
+        lastEnabled = config.enabled || config.pickupOnlyMode;
 
         ConfigManager.persist();
 
         if (client != null && client.player != null) {
-            client.player.sendMessage(Text.translatable("autofarm.message.toggled",
-                    Text.translatable(config.enabled ? "autofarm.on" : "autofarm.off")), true);
+            // 总开关关了、但纯拾取模式还在跑 —— 别播报成「整个停了」，那会误导
+            Text state = config.enabled
+                    ? Text.translatable("autofarm.on")
+                    : (config.pickupOnlyMode
+                            ? Text.translatable("autofarm.hud.pickup_only")
+                            : Text.translatable("autofarm.off"));
+            client.player.sendMessage(Text.translatable("autofarm.message.toggled", state), true);
         }
     }
 
@@ -797,9 +839,17 @@ public final class FarmTaskManager {
         }
 
         AutoFarmConfig config = ConfigManager.get();
-        // 「自动收割」关了就整个停手，连高亮也不扫 —— 关掉开关就该什么都不显示，
+        // 「纯拾取模式」：一道独立于「自动收割」总开关的闸 —— 只开它，模组照样会工作，
+        // 但只捡掉落物（见下面 farming 的定义）。
+        boolean pickupOnly = config.pickupOnlyMode;
+        // 这一 tick 到底要不要动：任一道闸开着就算「在工作」（保命动作、停机判据都看它）
+        boolean working = config.enabled || pickupOnly;
+        // 「干不干农活」：总开关开着、而且没切到纯拾取模式。收割 / 补种 / 催熟 / 挖瓜 /
+        // 补种空地 / 去补给点，全都以它为闸 —— 纯拾取模式下它们一个都不跑。
+        boolean farming = config.enabled && !pickupOnly;
+        // 两道闸都关着就整个停手，连高亮也不扫 —— 关掉开关就该什么都不显示，
         // 而不是留着描边让人误以为还在工作。
-        if (!config.enabled) {
+        if (!working) {
             // 关掉开关 = 整个停手，连高亮也不扫（关掉就该什么都不显示）。
             // 只在「刚关掉」那一个 tick 清一次场 —— 不能每 tick 都调 reset()：
             // 它含 StatsManager.save()（写盘），关着开关挂机就会变成一直写盘。
@@ -873,7 +923,7 @@ public final class FarmTaskManager {
         // 排在所有事情之前 —— 人都在水里了，收菜的事先放一放。
         // 自救期间由 RescueHelper 接管移动输入（见 KeyboardInputMixin）。
         // ================================================================
-        if (config.enabled && RescueHelper.tick(client, config)) {
+        if (working && RescueHelper.tick(client, config)) {
             if (PathWalker.isActive() || supplyPhase != SupplyPhase.NONE) {
                 cancelSupply(null);
                 PathWalker.stop();
@@ -889,7 +939,7 @@ public final class FarmTaskManager {
         // 捕获的是「受伤计时从 0 变成 >0」的上升沿 —— 也就是这一 tick 真的受了伤。
         // ================================================================
         int hurtTime = client.player.hurtTime;
-        if (config.enabled && config.hitReactionEnabled) {
+        if (working && config.hitReactionEnabled) {
             if (hurtTime > 0 && lastHurtTime == 0) {
                 beginHitReaction(client, config);
             }
@@ -904,14 +954,15 @@ public final class FarmTaskManager {
         // 继续收下去，多出来的作物只会掉在地上烂掉。宁可停下来等你处理，
         // 也不做这种「收了个寂寞」的事。腾出空间（或者设好补给点）之后自动恢复。
         // ================================================================
-        boolean stopForFull = config.enabled && shouldStopForFullInventory(client, config);
+        // 背包满停机对「纯拾取模式」同样有效：捡东西也要有地方放，满包还硬捡只会原地空转
+        boolean stopForFull = working && shouldStopForFullInventory(client, config);
 
         // 附加功能「危险撤退」（C 组）：血少 + 附近有威胁时，用「主动撤离」代替「原地停机」。
         // 判据在这里先算好；它成立时下面会跳过「低血量停机」那一条 ——
         // 否则会出现「一边要撤、一边被自己的安全检查按住」的矛盾。
-        boolean lowHealth = config.enabled
+        boolean lowHealth = working
                 && client.player.getHealth() < config.retreatHealthHearts * 2.0f;
-        boolean wantRetreat = config.enabled
+        boolean wantRetreat = working
                 && config.retreatEnabled
                 && !retreatDone
                 && lowHealth
@@ -944,7 +995,7 @@ public final class FarmTaskManager {
         // 附加功能「危险反应延迟」：危险第一次出现时先愣一下再停手 ——
         // 机器会在冒出危险的同一 tick 停手，真人总要花上几百毫秒（见 applyReactionDelay）。
         // 撤退接管时不走这一条：那种情况下的正确动作是「走开」，不是「原地不动」。
-        String safety = config.enabled && !retreatActive
+        String safety = working && !retreatActive
                 ? applyReactionDelay(config, safetyNotice(client, config))
                 : null;
 
@@ -966,19 +1017,19 @@ public final class FarmTaskManager {
         }
 
         // 附加功能「仅在指定时段工作」：不在工作时段就停手（账号仍然在线，只是不干活）
-        boolean offSchedule = config.enabled && config.scheduleEnabled && !insideSchedule(config);
+        boolean offSchedule = working && config.scheduleEnabled && !insideSchedule(config);
         // 附加功能「仅白天 / 仅晴天」：环境不合适就停手，条件一恢复自动继续
-        String environment = config.enabled ? environmentNotice(client, config) : null;
+        String environment = working ? environmentNotice(client, config) : null;
         // 先算「除定时休息之外，是否已经因为别的原因停手」。定时休息的计时要用到它：
         // 否则夜间挂机 / 背包满停机那些时间也会被算进「连续工作」，一开灯就累到触发休息。
         boolean pausedBeforeRest = stopForFull || safety != null || offSchedule || environment != null;
         // 这一 tick 要不要整个人停手（背包满、安全保护、外加几个附加功能）
-        boolean resting = config.enabled && updateRest(config, pausedBeforeRest);
+        boolean resting = working && updateRest(config, pausedBeforeRest);
         // 上面这些都成立 = 「已经在停手」。疲劳计时要用到它 ——
         // 只有真正在干活的那些 tick 才该被算进「连续工作」。
         boolean alreadyPaused = pausedBeforeRest || resting;
         // 附加功能「疲劳收工」：连续干到上限就整场停下来
-        boolean fatigued = config.enabled && updateFatigue(config, alreadyPaused);
+        boolean fatigued = working && updateFatigue(config, alreadyPaused);
         boolean paused = alreadyPaused || fatigued;
 
         // 一停机就播报一次（actionbar），免得你以为是模组卡了 ——
@@ -1004,13 +1055,13 @@ public final class FarmTaskManager {
         // 附加功能：HUD 详细统计的「运行时长」——只数真正干活的时间，
         // 暂停（满包 / 危险 / 休息 / 开着界面）的 tick 不算，这样它更像一块秒表。
         // 撤退是在「保命」而不是「干活」，所以也不算进去。
-        if (config.enabled && !paused && !retreatActive) {
+        if (working && !paused && !retreatActive) {
             sessionTicks++;
         }
 
         // 防踢模式：把「这一 tick 到底有没有在干活」喂给疲劳模型 ——
         // 干得越久，动作越容易走神；歇下来（暂停、开界面）它会慢慢回落
-        Humanizer.feedWorking(config.enabled && !paused && !retreatActive);
+        Humanizer.feedWorking(working && !paused && !retreatActive);
 
         // 自由视角（灵魂出窍）：摄像机和身体分开之后，屏幕上看到的人是不动的，
         // 可世界里方块却在自己碎 —— 那太显眼了。打开「自由视角时停机」就先停手，
@@ -1022,7 +1073,7 @@ public final class FarmTaskManager {
         // 这里只处理「没开自动打怪」时的转向，避免两边抢视角。
         // ================================================================
         boolean hitReacting = false;
-        if (config.enabled && config.hitReactionEnabled && hitReactTicks > 0) {
+        if (working && config.hitReactionEnabled && hitReactTicks > 0) {
             hitReactTicks--;
             hitReacting = true; // 受击窗口内一律停手（能不能回头再另说）
             if (!config.autoAttack && hitTarget != null && hitTarget.isAlive()
@@ -1068,7 +1119,7 @@ public final class FarmTaskManager {
         // ================================================================
         // 正在跑补给时不判越界 —— 补给点本身可能在圈外，去补给就是「有意出圈」，
         // 不能一出圈就被越界返回撤销整趟补给（否则圈外的箱子永远用不了）。
-        boolean outsideArea = config.enabled
+        boolean outsideArea = working
                 && config.workAreaEnabled
                 && supplyPhase == SupplyPhase.NONE
                 && !config.insideWorkArea(client.player.getX(), client.player.getY(), client.player.getZ());
@@ -1113,7 +1164,8 @@ public final class FarmTaskManager {
         //   - 它一旦接管，这一 tick 的寻路与收割都让路（见下面的 walkPaused 与优先级 2），
         //     但<b>不丢弃</b>手上的路线 —— 目标清掉之后自动接着收。
         // ================================================================
-        boolean fightingActive = config.enabled
+        // 纯拾取模式下不打怪：这个模式的语义就是「只捡东西」，其余动作（含战斗）一律停。
+        boolean fightingActive = farming
                 && config.autoAttack
                 && !paused
                 // 吃 > 打怪：饿到要进食时先让 AutoEater 把这口饭吃完，别一边按着使用键啃、
@@ -1137,7 +1189,7 @@ public final class FarmTaskManager {
         // 才让视角慢慢游走。危险停机时不环顾 —— 那时候「装死」比「东张西望」更安全；
         // 自由视角下也不环顾（摄像机和身体是分开的，转头只会让人看着别扭）。
         boolean viewBusy = !walkPaused && (PathWalker.isActive() || CropHarvester.isBusy());
-        IdleLook.tick(client, config, config.enabled
+        IdleLook.tick(client, config, working
                 && !stopForFull
                 && safety == null
                 // 「危险反应延迟」还没数够时 safety 仍是 null，但危险已经在逼近 ——
@@ -1159,7 +1211,7 @@ public final class FarmTaskManager {
             // 这时别再顺着当前路线空跑（后面全是撒不了骨粉的催熟目标），<b>中断它</b>，
             // 先去补给点取骨粉，取到再回来接着催熟。
             // 授权来自「耗材自给」开关（它才是「自动去补给点取耗材」的那道闸）。
-            boolean boneMealRunDry = config.enabled
+            boolean boneMealRunDry = farming
                     && config.boneMealBoost
                     && config.autoFetchSupplies
                     && supplyPhase == SupplyPhase.NONE
@@ -1205,6 +1257,9 @@ public final class FarmTaskManager {
         // ================================================================
         long now = client.world.getTime();
         if (lastScanTick != Long.MIN_VALUE && now - lastScanTick < getEffectiveScanInterval()) {
+            // 「掉落物优先」是一次性的判定结果，不是跨 tick 的状态：
+            // 这一轮没扫，也就没有新的紧急名单，别拿上一轮的旧名单去规划。
+            urgentPickupRun = false;
             return;
         }
         lastScanTick = now;
@@ -1212,26 +1267,29 @@ public final class FarmTaskManager {
         // 「补种空耕地」只在真正要干活时才去扫（关着时连这块开销都省掉）。
         // 顺便注意：成熟作物的过滤条件挂在扫描里，被筛掉的作物根本不会进列表 ——
         // 于是世界里不给它画描边、面板计数也对得上。
-        boolean wantFarmland = config.enabled && config.fillEmptyFarmland;
+        boolean wantFarmland = farming && config.fillEmptyFarmland;
         // 顺手记下「被作物筛选挡掉」的作物种类 —— 只在「只收能补种的」模式下用它：
         // 那种模式挡掉几乎都是因为「没种子」，得据此触发一次种子补给，
         // 否则会死锁（没种子 → 不收 → 永远不去取种子 → 永远没种子）。
         Set<Block> filteredBySeed = new HashSet<>();
-        CropScanner.ScanResult scanned = CropScanner.scan(
-                client.world,
-                client.player.getBlockPos(),
-                config.scanRadius,
-                CropScanner.DEFAULT_DOWN,
-                CropScanner.DEFAULT_UP,
-                state -> {
-                    boolean ok = CropFilter.allowsHarvest(state.getBlock(), config, client.player);
-                    if (!ok && config.cropFilterMode == AutoFarmConfig.FILTER_ONLY_REPLANTABLE) {
-                        filteredBySeed.add(state.getBlock());
-                    }
-                    return ok;
-                },
-                wantFarmland
-        );
+        // 纯拾取模式下压根不扫作物：扫出来的目标一个都用不上，白花一遍方块遍历的钱。
+        CropScanner.ScanResult scanned = farming
+                ? CropScanner.scan(
+                        client.world,
+                        client.player.getBlockPos(),
+                        config.scanRadius,
+                        CropScanner.DEFAULT_DOWN,
+                        CropScanner.DEFAULT_UP,
+                        state -> {
+                            boolean ok = CropFilter.allowsHarvest(state.getBlock(), config, client.player);
+                            if (!ok && config.cropFilterMode == AutoFarmConfig.FILTER_ONLY_REPLANTABLE) {
+                                filteredBySeed.add(state.getBlock());
+                            }
+                            return ok;
+                        },
+                        wantFarmland
+                )
+                : new CropScanner.ScanResult(List.of(), List.of());
         matureCrops = new ArrayList<>(scanned.mature());
         // 「只收能补种的」把整片田都挡下来了，而且挡下来的是真作物 → 就是缺种子。
         // 记一笔补给需求，让下面的补给流程去种子容器取；取到之前先不收（保持模式本意）。
@@ -1254,12 +1312,12 @@ public final class FarmTaskManager {
         // 它们不是作物（没有 age、判不出成熟），所以不并进 matureCrops，而是单独一个
         // 集合 —— 收割时走「挖掉不补种」那条路（见 drive 里的 startBreak）。
         extraTargets.clear();
-        if (config.melonHarvest) {
+        if (farming && config.melonHarvest) {
             extraTargets.addAll(CropScanner.findGourdBlocks(
                     client.world, client.player.getBlockPos(),
                     config.scanRadius, CropScanner.DEFAULT_DOWN, CropScanner.DEFAULT_UP));
         }
-        if (config.customHarvestBlocks != null && !config.customHarvestBlocks.isEmpty()) {
+        if (farming && config.customHarvestBlocks != null && !config.customHarvestBlocks.isEmpty()) {
             Set<String> customIds = new HashSet<>(config.customHarvestBlocks);
             extraTargets.addAll(CropScanner.findCustomBlocks(
                     client.world, client.player.getBlockPos(),
@@ -1272,7 +1330,7 @@ public final class FarmTaskManager {
         // 附加功能「骨粉催熟」：把田里还没熟、但已经种下的作物也找出来。
         // 关着时整块跳过 —— 成熟作物表里不会有它们，也不会有任何额外开销。
         boneMealTargets.clear();
-        if (config.boneMealBoost) {
+        if (farming && config.boneMealBoost) {
             boneMealTargets.addAll(CropScanner.findImmatureCrops(
                     client.world, client.player.getBlockPos(),
                     config.scanRadius, CropScanner.DEFAULT_DOWN, CropScanner.DEFAULT_UP));
@@ -1291,7 +1349,10 @@ public final class FarmTaskManager {
         // 附加功能「优先拾取掉落物」：顺手看看田里有没有掉在外面、还没进包的作物掉落物。
         // 得到的是「在哪一格」，下一步会排进路线最前面。
         pickupTargets.clear();
-        if (config.pickupDroppedItems) {
+        pickupAges.clear();
+        // 「优先拾取掉落物」是收菜之余顺手捡；「纯拾取模式」是别的都不干、专门捡。
+        // 两者共用同一套扫描与路线，谁开着都进这一块。
+        if (config.pickupDroppedItems || pickupOnly) {
             collectPickupTargets(client, config, pickupTargets);
             // 掉落物若和作物 / 空耕地 / 额外 / 骨粉目标落在同一格，从掉落物集合里剔除 ——
             // 那格按「作物」处理（收割时顺手把脚下掉落物吸走）。否则掉落物分支会在 drive 里
@@ -1306,6 +1367,30 @@ public final class FarmTaskManager {
         // 刷新掉落物的只读镜像（渲染层每帧要拿它画框），一次扫描只复制这一回。
         // 放在剔除之后：描边画的就应该是「这一轮真会去捡的那些」，不含被作物抢走同格的。
         pickupTargetsList = List.copyOf(pickupTargets);
+
+        // ================================================================
+        // 附加功能「掉落物优先」：地上有掉落物躺够 pickupPrioritySeconds 秒还没进包
+        //   → 中断手上的路线，专门为它跑一趟（urgentPickupRun 会让后面的规划只排掉落物）。
+        //
+        // 排在扫描之后（得先知道哪有掉落物）、规划之前（它决定这一轮排什么）。
+        // 三条「不抢」的规矩和补给 / 骨粉那两条中断一致：
+        //   - 正握着某个目标干活（isHolding / isBusy）→ 先把这半步做完；
+        //   - 正在补给路上 → 那趟是「有意的出圈」，先跑完；
+        //   - 停机 / 受击 / 打怪 → 这些优先级本来就在它前面。
+        // ================================================================
+        urgentPickupRun = !paused
+                && !hitReacting
+                && !fightingActive
+                && supplyPhase == SupplyPhase.NONE
+                && !PathWalker.isHolding()
+                && !CropHarvester.isBusy()
+                && collectUrgentPickups(client, config);
+        if (urgentPickupRun) {
+            // 中断手上的路线：把「正在走的那条」放掉，下一轮只规划掉落物。
+            // 没进 handled 的作物不会丢 —— 它们还是成熟作物，捡完这一趟自然会重排。
+            PathWalker.stop();
+            CropHarvester.reset();
+        }
 
         // 让「已处理」集合跟着扫描结果瘦身，避免玩家在同一片区域待久了无限膨胀。
         // 收掉的作物会变成空气、补种后变成幼苗，两者都不再是「成熟作物」，
@@ -1359,12 +1444,14 @@ public final class FarmTaskManager {
 
         // 附加功能「资源自给」：先算清楚这一趟除了种子之外还要顺带取什么。
         // 两项都默认关着，所以关着的时候这两行是纯粹的常数判断，不会多花什么。
-        suppliesWanted = config.autoFetchSupplies && config.boneMealBoost
+        // 「取耗材 / 取工具」是为农活服务的（撒骨粉、挖作物），纯拾取模式下一律不跑 ——
+        // 那种模式下唯一还值得跑的补给是「背包满了去存东西」（见下面的 3a）。
+        suppliesWanted = farming && config.autoFetchSupplies && config.boneMealBoost
                 && InventoryScanner.countBoneMeal(client.player) < config.boneMealThreshold;
-        toolWanted = config.autoFetchTool
+        toolWanted = farming && config.autoFetchTool
                 && InventoryScanner.countUsableTools(client.player) == 0;
 
-        // 3a. 背包快满了 → 先存作物产物
+        // 3a. 背包快满了 → 先存作物产物（纯拾取模式同样需要：东西捡进来也要有地方放）
         if (shouldGoDeposit(client, config)
                 && startSupplyRun(client, config, true, refillWanted, SupplyPurpose.DEPOSIT_CROP)) {
             return;
@@ -1379,8 +1466,8 @@ public final class FarmTaskManager {
             return;
         }
 
-        // 3b. 缺种子 → 取种子
-        boolean wantSeeds = refillWanted && config.refillSeeds;
+        // 3b. 缺种子 → 取种子（纯拾取模式不收也不种，用不上种子）
+        boolean wantSeeds = farming && refillWanted && config.refillSeeds;
         if (wantSeeds && supplyCooldown == 0
                 && containerFor(config, SupplyPurpose.REFILL_SEED) != null
                 && startSupplyRun(client, config, false, true, SupplyPurpose.REFILL_SEED)) {
@@ -1428,46 +1515,61 @@ public final class FarmTaskManager {
         occupied.addAll(extraTargets);
         occupied.addAll(boneMealTargets);
 
-        // 附加功能「优先拾取掉落物」：先把散在地上的作物掉落物排进路线。
-        // 它排在成熟作物前面 —— 掉落物不会自己长回去，还可能被水冲走、被怪撞飞，
-        // 或者干脆因为存在太久而消失，所以先把它捡回来，再谈地里的活。
-        for (BlockPos pos : pickupTargets) {
-            if (!occupied.contains(pos) && !handled.contains(pos)) {
-                pending.add(pos);
+        if (urgentPickupRun) {
+            // ============================================================
+            // 附加功能「掉落物优先」插队的这一趟：路线里<b>只放掉落物</b>。
+            //
+            // 地里的活也不是丢了 —— 它们还在 matureCrops / emptyFarmland 里等着，
+            // 只是没进这一轮的 pending。捡完这一趟，下一轮扫描自然又把它们排进来。
+            // 这就是「专门为掉落物跑一趟」：不为顺手，专门为它拐一趟路。
+            // ============================================================
+            for (BlockPos pos : urgentPickupTargets) {
+                if (!handled.contains(pos)) {
+                    pending.add(pos);
+                }
             }
-        }
-
-        // 附加功能「骨粉催熟」：有未成熟作物 + 有骨粉时，<b>优先于收集</b>执行。
-        // 催熟是连续性的 —— 先把能催的都催完（或骨粉彻底用完），再回头收割。
-        // 手边没骨粉时干脆不排（深搜整个背包判断，主背包深处有骨粉也算「有」，
-        // 撒的时候再换到快捷栏）。
-        if (config.boneMealBoost && InventoryScanner.findBoneMealSlotDeep(client.player) >= 0) {
-            for (BlockPos pos : boneMealTargets) {
-                addPending(pending, pos);
+        } else {
+            // 附加功能「优先拾取掉落物」：先把散在地上的作物掉落物排进路线（排在成熟作物前面）。
+            // 它排在最后、只作「队列内的优先级」：掉落物不会自己长回去，还可能被水冲走、
+            // 被怪撞飞，或者干脆因为存在太久而消失，所以先把它捡回来，再谈地里的活。
+            for (BlockPos pos : pickupTargets) {
+                if (!occupied.contains(pos) && !handled.contains(pos)) {
+                    pending.add(pos);
+                }
             }
-        }
 
-        for (BlockPos pos : matureCrops) {
-            addPending(pending, pos);
-        }
-
-        // 附加功能「瓜茎识别 + 自定义方块」：额外目标（瓜 / 自定义方块）也排进同一条路线。
-        // 排在成熟作物之后 —— 先把正儿八经的庄稼收完，再挖瓜和自定义方块。
-        for (BlockPos pos : extraTargets) {
-            addPending(pending, pos);
-        }
-
-        // 空耕地也排进同一条路线（如果开着补种空地）。
-        // 一个前提：手边得真有种子 —— 一粒都没有的话，走过去也只是站着报「没种子」，
-        // 白跑一趟。那种情况直接记账「该去补给点取种子」，让上面那条补给流程接手。
-        if (config.fillEmptyFarmland && !emptyFarmland.isEmpty()) {
-            if (InventoryScanner.countSeeds(client.player, null) > 0) {
-                for (BlockPos pos : emptyFarmland) {
+            // 附加功能「骨粉催熟」：有未成熟作物 + 有骨粉时，<b>优先于收集</b>执行。
+            // 催熟是连续性的 —— 先把能催的都催完（或骨粉彻底用完），再回头收割。
+            // 手边没骨粉时干脆不排（深搜整个背包判断，主背包深处有骨粉也算「有」，
+            // 撒的时候再换到快捷栏）。
+            if (config.boneMealBoost && InventoryScanner.findBoneMealSlotDeep(client.player) >= 0) {
+                for (BlockPos pos : boneMealTargets) {
                     addPending(pending, pos);
                 }
-            } else {
-                refillWanted = true;
-                announceEvent(client, "autofarm.notice.plant_no_seed");
+            }
+
+            for (BlockPos pos : matureCrops) {
+                addPending(pending, pos);
+            }
+
+            // 附加功能「瓜茎识别 + 自定义方块」：额外目标（瓜 / 自定义方块）也排进同一条路线。
+            // 排在成熟作物之后 —— 先把正儿八经的庄稼收完，再挖瓜和自定义方块。
+            for (BlockPos pos : extraTargets) {
+                addPending(pending, pos);
+            }
+
+            // 空耕地也排进同一条路线（如果开着补种空地）。
+            // 一个前提：手边得真有种子 —— 一粒都没有的话，走过去也只是站着报「没种子」，
+            // 白跑一趟。那种情况直接记账「该去补给点取种子」，让上面那条补给流程接手。
+            if (config.fillEmptyFarmland && !emptyFarmland.isEmpty()) {
+                if (InventoryScanner.countSeeds(client.player, null) > 0) {
+                    for (BlockPos pos : emptyFarmland) {
+                        addPending(pending, pos);
+                    }
+                } else {
+                    refillWanted = true;
+                    announceEvent(client, "autofarm.notice.plant_no_seed");
+                }
             }
         }
 
@@ -1525,8 +1627,50 @@ public final class FarmTaskManager {
                         // 默认只捡「像作物产物」的；开了「什么都捡」则一律收
                         && (config.pickupAllItems || CropRegistry.isCropDrop(e.getStack()))
                         && config.insideWorkArea(e.getX(), e.getY(), e.getZ()))) {
-            out.add(item.getBlockPos().toImmutable());
+            BlockPos pos = item.getBlockPos().toImmutable();
+            out.add(pos);
+            // 顺手把「这东西在地上躺了多久」记下来：掉落物优先（插队）的判定要读它，
+            // 免得为了判个年龄再把这些实体遍历第二遍。同一格有多个时取最久的那个。
+            pickupAges.merge(pos, (long) item.getItemAge(), Math::max);
         }
+    }
+
+    /**
+     * 附加功能「掉落物优先」：挑出这一轮「值得插队」的掉落物。
+     *
+     * <p>判据只有一条 —— 它在{@link #pickupAges 地上躺的时间}达到了
+     * {@link AutoFarmConfig#pickupPrioritySeconds} 秒。这类东西最可能在你「等会儿再捡」的
+     * 工夫里被水冲走、被怪撞飞、或者直接到点消失，所以值得打断手上的活先跑一趟。
+     *
+     * <p>刚插队去捡过、结果没捡到的位置会进 {@link #pickupUrgentBlocked 冷却}，
+     * 免得一件卡在够不着角落的掉落物把整场作业永久拖住。
+     *
+     * @return true 表示这一轮该中断手上的路线，专门去捡这些东西
+     */
+    private static boolean collectUrgentPickups(MinecraftClient client, AutoFarmConfig config) {
+        urgentPickupTargets.clear();
+        if (!config.pickupPriorityEnabled || pickupTargets.isEmpty() || pickupAges.isEmpty()) {
+            return false;
+        }
+        long now = client.world.getTime();
+        if (!pickupUrgentBlocked.isEmpty()) {
+            pickupUrgentBlocked.entrySet().removeIf(entry -> entry.getValue() <= now);
+        }
+        long minAge = Math.max(1, config.pickupPrioritySeconds) * 20L; // 秒 → tick
+        for (Map.Entry<BlockPos, Long> entry : pickupAges.entrySet()) {
+            BlockPos pos = entry.getKey();
+            if (entry.getValue() < minAge) {
+                continue;
+            }
+            if (!pickupTargets.contains(pos) || handled.contains(pos)) {
+                continue;
+            }
+            if (pickupUrgentBlocked.containsKey(pos)) {
+                continue;
+            }
+            urgentPickupTargets.add(pos);
+        }
+        return !urgentPickupTargets.isEmpty();
     }
 
     /** 把工作区域外的目标从集合里剔掉（功能没开 / 没设坐标时原样保留，不影响既有行为） */
@@ -1547,12 +1691,22 @@ public final class FarmTaskManager {
 
     /** 这一格上现在还有没有「作物掉落物」实体 —— 用来判断东西是不是真的进包了 */
     private static boolean hasCropDropAt(MinecraftClient client, BlockPos pos) {
+        return hasDropAt(client, pos, false);
+    }
+
+    /**
+     * 这一格上现在还有没有掉落物实体。
+     *
+     * @param anyItem 为真时不限种类 —— 「什么都捡」/「纯拾取模式」下捡的可能根本不是作物，
+     *                只认作物会把「石头还躺在那儿」误判成「已经捡到手了」
+     */
+    private static boolean hasDropAt(MinecraftClient client, BlockPos pos, boolean anyItem) {
         if (client == null || client.world == null || pos == null) {
             return false;
         }
         Box box = new Box(pos).expand(0.5);
         return !client.world.getEntitiesByClass(ItemEntity.class, box,
-                e -> e.isAlive() && CropRegistry.isCropDrop(e.getStack())).isEmpty();
+                e -> e.isAlive() && (anyItem || CropRegistry.isCropDrop(e.getStack()))).isEmpty();
     }
 
     /**
@@ -1600,14 +1754,25 @@ public final class FarmTaskManager {
             }
             // 站够了，看看东西是不是真的进包了。没进包（被水冲走、卡在角落、刚被怪撞飞）
             // 就先别急着放行，再站一小会儿；但设个上限，别在同一格无限耗下去。
-            if (hasCropDropAt(client, held) && ++pickupRetryTicks < PICKUP_MAX_RETRIES) {
+            // 「什么都捡」/「纯拾取模式」下捡的可能不是作物，判定也要跟着放宽。
+            boolean stillThere = hasDropAt(client, held, config.pickupAllItems);
+            if (stillThere && ++pickupRetryTicks < PICKUP_MAX_RETRIES) {
                 pickupWaitTicks = PICKUP_WAIT_TICKS;
                 state = FarmState.PICKUP;
                 return;
             }
+            if (stillThere) {
+                // 站了这么多轮还是没吸进来 —— 这件东西多半够不着（卡在栅栏缝里、泡在水里被推来推去）。
+                // 记一笔冷却：接下来这段时间它不再算「值得插队」，免得它把整场作业永久拖住。
+                pickupUrgentBlocked.put(held.toImmutable(),
+                        client.world.getTime() + PICKUP_URGENT_COOLDOWN_TICKS);
+            }
             pickupWaitPos = null;
             pickupRetryTicks = 0;
-            StatsManager.get().recordPickup();
+            // 只有真捡到手才记一笔 —— 「站够了但东西还在」不该算进拾取统计
+            if (!stillThere) {
+                StatsManager.get().recordPickup();
+            }
             PathWalker.releaseTarget();
             drainResolved();
             // 掉落物会消失、会移动，位置不该被当成「已处理」长期锁死 —— 一旦锁进
@@ -1618,8 +1783,9 @@ public final class FarmTaskManager {
             return;
         }
 
-        // 开关被关掉了 → 放行，别把角色吊在一个点上
-        if (!config.enabled) {
+        // 两道闸都关掉了 → 放行，别把角色吊在一个点上
+        // （纯拾取模式开着时也算「在工作」，见 tick 开头的 working）
+        if (!config.enabled && !config.pickupOnlyMode) {
             PathWalker.releaseTarget();
             drainResolved();
             return;

@@ -93,9 +93,10 @@ public final class CropHighlighter {
 
     private static void render(WorldRenderContext context) {
         AutoFarmConfig config = ConfigManager.get();
-        // 总开关一关，什么都别画 —— 描边 / 路线一律不显示（就算 visualize 还开着）。
+        // 两道闸都关着就什么都别画 —— 描边 / 路线一律不显示（就算 visualize 还开着）。
         // 这是硬保险：关掉开关之后画面上不该再有任何「它还在工作」的痕迹。
-        if (!config.enabled) {
+        // 纯拾取模式也算在工作：那种模式下没有作物可描，但「打算去捡的掉落物」要画出来。
+        if (!config.enabled && !config.pickupOnlyMode) {
             return;
         }
         if (!config.visualize && !config.showPath) {

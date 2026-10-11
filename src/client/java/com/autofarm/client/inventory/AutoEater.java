@@ -139,8 +139,9 @@ public final class AutoEater {
             return;
         }
 
-        // 不干活的时候，一个字都不碰玩家的按键
-        if (!config.enabled || !config.autoEat) {
+        // 不干活的时候，一个字都不碰玩家的按键。
+        // 「纯拾取模式」开着也算在工作 —— 满地图跑着捡东西，饿到跑不动同样要先吃饭。
+        if ((!config.enabled && !config.pickupOnlyMode) || !config.autoEat) {
             stop(client);
             cooldown = 0;
             return;
