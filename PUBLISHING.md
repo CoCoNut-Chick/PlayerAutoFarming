@@ -210,28 +210,56 @@ git push -u origin main
 
 **源码仓库 ≠ 下载页。** 玩家想要的是能直接丢进 `mods/` 的 jar，这个要放在 Release 里。
 
+### 方式 A（推荐，已经配好了）：推一个 tag，CI 自动发
+
+仓库里已经有 `.github/workflows/release.yml` —— 只要推一个 `v*` 形式的 tag，
+GitHub 就会自动构建、创建 Release、把 jar 挂上去。
+
+```bash
+# 1. 版本号已经改好并提交（gradle.properties 的 version、CHANGELOG 的 ## x.y.z）
+# 2. 打 tag：版本号前面加个 v
+git tag -a v2.4.2 -m "PlayerAutoFarming 2.4.2"
+git push origin v2.4.2
+```
+
+然后打开仓库的 **Actions** 页看 `release` 这个 workflow（约 1~2 分钟跑完），
+跑完去 **Releases** 就能看到新版，jar 已经挂在下面了。下载页链接形如：
+
+```
+https://github.com/CoCoNut-Chick/PlayerAutoFarming/releases/tag/v2.4.2
+```
+
+> 这样做还有个额外好处：**Release 里的 jar 一定是这个 tag 的源码构建出来的**，
+> 不会出现「本地产物和 tag 对不上」这种最难查的问题。jar 由 CI 从零构建，
+> 本地都不需要开 Gradle。
+
+### 方式 B：手工发（CI 不听话时用）
+
 先本地构建一次，把 jar 造出来：
 
 ```bash
 export JAVA_HOME="D:/Java/jdk-21.0.12.1"   # 换成你自己的 JDK 路径
 ./gradlew build
 ls -l build/libs/
-# 应该看到 playerautofarming-2.3.2.jar
+# 应该看到 playerautofarming-2.4.2.jar（还有带 -sources 的源码包，那个不要传）
 ```
 
 然后：
 
 1. 仓库页面右侧 **Releases** → **Draft a new release**
-2. **Choose a tag** → 输入 `v2.3.2` → 点 **Create new tag: v2.3.2 on publish**
+2. **Choose a tag** → 输入 `v2.4.2` → 点 **Create new tag: v2.4.2 on publish**
 3. **Target**：`main`
-4. **Release title**：`v2.3.2`
-5. **Describe this release**：把 `CHANGELOG.md` 里 `## 2.3.2` 那一段贴进去（Markdown 直接渲染）
-6. **Attach binaries**：把 `build/libs/playerautofarming-2.3.2.jar` 拖进去
+4. **Release title**：`v2.4.2`
+5. **Describe this release**：把 `CHANGELOG.md` 里 `## 2.4.2` 那一段贴进去（Markdown 直接渲染）
+6. **Attach binaries**：把 `build/libs/playerautofarming-2.4.2.jar` 拖进去
    （**只传普通 jar**，不要传 `-sources.jar`、也不要传 `build/` 里的中间产物）
 7. 点 **Publish release**
 
-之后每次发版都是这套流程：改版本号 → 构建 → 归档 `versions/<版本号>/` → 提交推送 →
-新建一个 Release 挂上 jar。
+### 每次发版的完整节奏
+
+改版本号 → 构建通过 → 归档 `versions/<版本号>/` → 提交推送 → 打 tag 推送（方式 A）。
+
+方式 A 只需要最后那两条命令，前面几步就是平时提交代码的流程。
 
 ---
 
