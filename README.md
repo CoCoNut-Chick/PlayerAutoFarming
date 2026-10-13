@@ -1,6 +1,7 @@
 # PlayerAutoFarming
 
-[![build](https://github.com/YOUR_NAME/PlayerAutoFarming/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_NAME/PlayerAutoFarming/actions/workflows/build.yml)
+[![build](https://github.com/CoCoNut-Chick/PlayerAutoFarming/actions/workflows/build.yml/badge.svg)](https://github.com/CoCoNut-Chick/PlayerAutoFarming/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/CoCoNut-Chick/PlayerAutoFarming?label=download&color=2ea043)](https://github.com/CoCoNut-Chick/PlayerAutoFarming/releases/latest)
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1-62b47a.svg)](https://www.minecraft.net/)
 [![Loader](https://img.shields.io/badge/Fabric-0.19.5%2B-dbb69c.svg)](https://fabricmc.net/)
 [![License](https://img.shields.io/badge/License-CC0--1.0-lightgrey.svg)](LICENSE)
@@ -24,7 +25,8 @@ Minecraft Java 版 **1.20.1** 的 Fabric **客户端**模组：自动收割 + �
 
 1. 给 Minecraft 1.20.1 装 [Fabric Loader](https://fabricmc.net/use/installer/)（0.19.5 或更高）；
 2. 下载 [Fabric API](https://modrinth.com/mod/fabric-api)（1.20.1 对应版本）放进 `.minecraft/mods/`；
-3. 下载本模组的 jar（从 [Releases](../../releases) 页）放进 `.minecraft/mods/`；
+3. 下载本模组的 jar（**[最新版 Releases](https://github.com/CoCoNut-Chick/PlayerAutoFarming/releases/latest)**，
+   选 `playerautofarming-<版本>.jar`，**不要**下载带 `-sources` 的那个）放进 `.minecraft/mods/`；
 4. 可选：装 [Mod Menu](https://modrinth.com/mod/modmenu)，就能在「模组列表 → 配置」里直接打开面板。
 
 需要 Java 17 或更高。
@@ -106,7 +108,7 @@ Minecraft Java 版 **1.20.1** 的 Fabric **客户端**模组：自动收割 + �
 
 ## 关于本项目 / How it was made
 
-**创意、需求与设计来自 [CoCoNutChick](https://github.com/YOUR_NAME)：** 做什么功能、
+**创意、需求与设计来自 [CoCoNutChick](https://github.com/CoCoNut-Chick)：** 做什么功能、
 每个开关的取舍、什么时候该拦一道风险提示、界面长什么样，全部由作者提出并逐项拍板；
 每一版都进游戏实测，发现问题再回头改。
 
@@ -133,7 +135,7 @@ Everything runs on the client — no server-side installation is required.
 
 Install [Fabric Loader](https://fabricmc.net/use/installer/) and
 [Fabric API](https://modrinth.com/mod/fabric-api) for 1.20.1, then drop the jar from the
-[Releases](../../releases) page into `.minecraft/mods/`. [Mod Menu](https://modrinth.com/mod/modmenu)
+[latest release](https://github.com/CoCoNut-Chick/PlayerAutoFarming/releases/latest) page into `.minecraft/mods/`. [Mod Menu](https://modrinth.com/mod/modmenu)
 is optional but adds a config button in the mod list. Java 17+ required.
 
 Press `G` for the panel and `` ` `` to toggle harvesting.
