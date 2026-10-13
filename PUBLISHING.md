@@ -343,7 +343,67 @@ export JAVA_HOME="D:/Java/jdk-21.0.12.1"
 之后日常 `git push` 如果也慢，可以换下面的方案 B：先把代码放到国内平台，
 GitHub 只作为镜像，等网络方便时再同步。
 
-## A.4 重要：注册不是必须现在做
+## A.4 `ssh -T git@github.com` 超时 —— 改用 443 端口（实测有效）
+
+**现象**：
+
+```
+ssh: connect to host github.com port 22: Connection timed out
+```
+
+这是国内最常见的 Git 障碍：**GitHub 的 22 端口被挡住**。它和「网页能不能打开」是两回事 ——
+网页走 443，SSH 默认走 22，两者可能一个通、一个不通。
+
+**成因与解法**：GitHub 官方额外提供了一台 **443 端口的 SSH 入口** `ssh.github.com`，
+专门给「22 端口被封」的网络用。本机实测（2026-10）：
+
+| 目标 | 结果 |
+|---|---|
+| `github.com:22` | 超时 |
+| `github.com:443`（HTTPS） | 超时 |
+| **`ssh.github.com:443`** | **通，且认证成功** |
+
+所以只要让 git 走那台机器就行。新建/编辑 `~/.ssh/config`（Windows 上是
+`C:\Users\<你的用户名>\.ssh\config`，没有就自己建一个）：
+
+```
+Host github.com
+  HostName ssh.github.com
+  Port 443
+  User git
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+  ServerAliveInterval 30
+```
+
+配置写好之后，**原来的命令一个字都不用改**：
+
+```bash
+ssh -T git@github.com          # 应该看到 Hi 用户名! You've successfully authenticated
+git push -u origin main
+```
+
+> 注意 `Host github.com` 这一行是「匹配规则」，不是要连的地址 —— 真正连的地址由
+> `HostName ssh.github.com` + `Port 443` 决定。所以 `git remote` 里的
+> `git@github.com:用户名/仓库.git` 依然照原样写，不用动。
+
+**排查顺序**（贴进 Git Bash 就能跑）：
+
+```bash
+# 1. 22 端口通不通（不通是最常见情况，直接上 443 方案）
+ssh -T git@github.com
+
+# 2. 443 入口通不通 + 密钥认不认
+ssh -T -p 443 git@ssh.github.com
+
+# 3. 如果第 2 步报 Connection reset / timed out，那 443 入口也被挡了 ——
+#    只能靠 A.2 换网络，或走附录 B 的 Gitee
+```
+
+> 关于 `Connection reset by ... port 443`：偶尔会出现一次，**重试一次**往往就过了；
+> 连续多次都被 reset，才说明这条路确实不通。
+
+## A.5 重要：注册不是必须现在做
 
 代码、文档、构建产物在本地**已经全部就绪**了。GitHub 只是"放出去"的渠道之一。
 如果一时半会儿上不去，**直接走附录 B 用 Gitee 发布**，功能上完全够用，
