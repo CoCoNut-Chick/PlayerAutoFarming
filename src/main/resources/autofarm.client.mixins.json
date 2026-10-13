@@ -1,0 +1,16 @@
+{
+	"required": true,
+	"package": "com.autofarm.client.mixin",
+	"compatibilityLevel": "${java}",
+	"client": [
+		"ExampleClientMixin",
+		"ClientPlayerInputMixin",
+		"MinecraftClientMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

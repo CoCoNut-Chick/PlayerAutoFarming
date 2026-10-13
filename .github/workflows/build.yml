@@ -1,7 +1,6 @@
-# Automatically build the project and run any configured tests for every push
-# and submitted pull request. This can help catch issues that only occur on
-# certain platforms or Java versions, and provides a first line of defence
-# against bad commits.
+# 每次 push / PR 都把所有支持的 Minecraft 版本构建一遍。
+# 多版本工程最容易出的问题就是「改了一个版本、另一个版本编译不过」，
+# 这个工作流就是那道防线。
 
 name: build
 on: [pull_request, push]
@@ -12,21 +11,29 @@ jobs:
     steps:
       - name: checkout repository
         uses: actions/checkout@v6
+
       - name: validate gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
+
       - name: setup jdk
         uses: actions/setup-java@v5
         with:
-          # 和本地开发保持一致：Gradle 9.7.1 跑在 JDK 21 上，
-          # 编译目标是 17（见 build.gradle 的 options.release）
-          java-version: '21'
+          # 必须是 25：Loom 1.18 自己就要求 JVM 25 才能运行，
+          # 26.1+ 的 Minecraft 也要求 Java 25。
+          # 各版本实际的编译目标由 build.gradle.kts 按版本自动降到 17 / 21。
+          java-version: '25'
           distribution: 'microsoft'
+
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
-      - name: build
-        run: ./gradlew build
+
+      - name: build all versions
+        # chiseledBuild = Stonecutter 提供的「把所有注册的版本都构建一遍」
+        run: ./gradlew chiseledBuild
+
       - name: capture build artifacts
         uses: actions/upload-artifact@v7
         with:
           name: Artifacts
+          # 各版本的产物会被 buildAndCollect 汇总到 build/libs/<版本>/ 下
           path: build/libs/

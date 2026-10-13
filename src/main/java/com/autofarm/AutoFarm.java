@@ -1,9 +1,7 @@
 package com.autofarm;
 
 import net.fabricmc.api.ModInitializer;
-
-import net.minecraft.util.Identifier;
-
+import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +22,7 @@ public class AutoFarm implements ModInitializer {
 		LOGGER.info("Hello Fabric world!");
 	}
 
-	public static Identifier id(String path) {
-		return new Identifier(MOD_ID, path);
+	public static ResourceLocation id(String path) {
+		return new ResourceLocation(MOD_ID, path);
 	}
 }

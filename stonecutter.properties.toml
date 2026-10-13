@@ -1,0 +1,35 @@
+# Stonecutter 的「集中属性表」——所有跟具体版本有关的值都放这里。
+# 顶上是与版本无关的 mod 元数据，下面每个 [表] 对应一个 Minecraft 版本。
+#
+# 加一个新支持的版本 = 这里加一段 + 在 settings.gradle.kts 的 versions(...) 里加个名字。
+
+# ---------------- 与版本无关 ----------------
+mod.id = "autofarm"
+mod.name = "PlayerAutoFarming"
+mod.group = "com.autofarm"
+mod.version = "2.4.1"
+
+# Fabric Loader 是版本无关的，全体共用一个（向后兼容）
+deps.fabric_loader = "0.19.5"
+
+# Loom 版本。loom-back-compat 插件靠它决定用哪套 Loom 变体。
+# 1.18.4 是当前稳定版；26.1+ 需要 >= 1.15，所以这个值够用。
+loomx.loom_version = "1.18.4"
+
+# ---------------- 各版本 ----------------
+# mod.mc_compat  → 写进 fabric.mod.json 的 minecraft 依赖范围
+# mod.mc_releases → 发布到 Modrinth/CurseForge 时勾选的版本
+# deps.fabric_api → 该 MC 版本对应的 Fabric API 构建
+# deps.modmenu   → 该 MC 版本对应的 Mod Menu（可选依赖）
+
+["1.20.1"]
+mod.mc_compat = "~1.20.1"
+mod.mc_releases = ["1.20.1"]
+deps.fabric_api = "0.92.12+1.20.1"
+deps.modmenu = "7.2.2"
+
+["1.21.1"]
+mod.mc_compat = ">=1.21 <=1.21.1"
+mod.mc_releases = ["1.21", "1.21.1"]
+deps.fabric_api = "0.116.17+1.21.1"
+deps.modmenu = "11.0.5"
