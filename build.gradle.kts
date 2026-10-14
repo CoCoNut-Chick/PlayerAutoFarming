@@ -70,7 +70,9 @@ dependencies {
 
     fapi(
         "fabric-lifecycle-events-v1",   // ClientTickEvents / ClientLifecycleEvents
-        "fabric-key-binding-api-v1",    // KeyBindingHelper
+        // 快捷键模块：26.1 起 Fabric 把它从 key-binding 改名成了 key-mapping
+        if (sc.current.parsed >= "26.1") "fabric-key-mapping-api-v1"
+        else "fabric-key-binding-api-v1",
         "fabric-networking-api-v1",     // ClientPlayNetworking
         "fabric-rendering-v1",          // WorldRenderEvents / HudRenderCallback
     )

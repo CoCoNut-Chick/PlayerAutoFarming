@@ -32,5 +32,21 @@ stonecutter parameters {
         string(current.parsed >= "26.1") {
             replace("classTweaker v2 named", "classTweaker v2 official")
         }
+
+        // 26.1 起 GUI 绘制被拆成了「抽取 + 绘制」两拍：
+        //   GuiGraphics（一个类包办一切）→ GuiGraphicsExtractor（只负责抽取）
+        // 好消息是 API 几乎一一对应（fill / enableScissor / blit / fillGradient
+        // 的签名都没动），只有文本方法改了名。
+        // 所以源码统一写老名字，构建 26.x 时由这三条规则自动换掉 ——
+        // 十个界面文件一个都不用改。
+        string(current.parsed >= "26.1") {
+            replace("GuiGraphics", "GuiGraphicsExtractor")
+        }
+        string(current.parsed >= "26.1") {
+            replace(".drawString(", ".text(")
+        }
+        string(current.parsed >= "26.1") {
+            replace(".drawCenteredString(", ".centeredText(")
+        }
     }
 }
