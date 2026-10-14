@@ -5,7 +5,8 @@
 	"client": [
 		"ExampleClientMixin",
 		"ClientPlayerInputMixin",
-		"MinecraftClientMixin"
+		"MinecraftClientMixin",
+		"LevelRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

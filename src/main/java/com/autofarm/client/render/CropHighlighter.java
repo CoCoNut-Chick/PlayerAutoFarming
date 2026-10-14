@@ -105,8 +105,8 @@ public final class CropHighlighter {
 
     //? if 1.21.9 {
     /*// 1.21.9 这一版 Fabric API 没有 WorldRenderEvents（见上面的 import 说明），
-    // 挂不上世界渲染流程，所以这一版不做描边高亮。
-    // 收割、补种、路线规划、控制面板、HUD 全都照常 —— 只是地里不画那个框。
+    // 所以这里没东西可注册 —— 描边改由 LevelRendererMixin 搭原版的方块轮廓渲染来画
+    // （见 renderViaOutlineHook 的说明）。收割、补种、路线、面板、HUD 全都照常。
     public static void register() {
     }
     *///?} else {
@@ -127,9 +127,51 @@ public final class CropHighlighter {
                           double pixels, float red, float green, float blue, float alpha) {
     }
 
-    // 下面两个方法只在「能挂上世界渲染」的版本里存在（1.21.9 除外）。
+    /**
+     * 一帧渲染的三件必需品：变换矩阵、顶点缓冲、相机位置。
+     *
+     * <p>「怎么挂上世界渲染」在各版本是不同的（见上面的 register()）：
+     * 老版本靠 Fabric 的 WorldRenderEvents；1.21.9 该事件缺席，改由 mixin 搭原版的
+     * 方块轮廓渲染；1.21.10+ 又换回（改名换包的）事件。
+     * 但真要画东西时需要的输入是同一套 —— 所以各自凑齐这个 FrameCtx，
+     * 再汇进下面同一条绘制路径。
+     */
+    private record FrameCtx(PoseStack matrices, MultiBufferSource consumers, Vec3 cameraPos) {
+    }
+
+    // 这个入口只在「Fabric 提供世界渲染事件」的版本里存在。
+    // 1.21.9 没有该事件，改走下面的 renderViaOutlineHook。
     //? if !1.21.9 {
     private static void render(WorldRenderContext context) {
+        // 1.21.10 重新引入事件时改了 WorldRenderContext 的方法名：
+        //   matrixStack() → matrices()；camera() 被移除（改为从 GameRenderer 取主相机）
+        //? if <1.21.10 {
+        renderFrame(new FrameCtx(context.matrixStack(), context.consumers(),
+                context.camera().getPosition()));
+        //?} else {
+        /*renderFrame(new FrameCtx(context.matrices(), context.consumers(),
+                Minecraft.getInstance().gameRenderer.getMainCamera().getPosition()));
+        *///?}
+    }
+    //?}
+
+    /**
+     * 1.21.9 专用入口：由 {@code LevelRendererMixin} 在「方块轮廓渲染完之后」调用。
+     *
+     * <p>为什么搭在方块轮廓上：1.21.9 把渲染拆成了「抽取 → 绘制」两拍，
+     * 而 Fabric 的世界渲染事件在这一版恰好缺席。与其自己去猜插入点，不如搭原版
+     * 画方块轮廓的那一步 —— 它手里正好有矩阵和缓冲，干的事情也和我们的描边同性质。
+     *
+     * <p>相机位置这里直接问 GameRenderer（1.21.9 的 mixin 回调给不出相机，
+     * 而 getMainCamera() 在这一版仍是公开的）。
+     */
+    public static void renderViaOutlineHook(PoseStack matrices, MultiBufferSource consumers) {
+        renderFrame(new FrameCtx(matrices, consumers,
+                Minecraft.getInstance().gameRenderer.getMainCamera().getPosition()));
+    }
+
+    /** 三个入口共用的核心：检查开关、收集目标、构造参数，再按配置选一条路径画出去 */
+    private static void renderFrame(FrameCtx ctx) {
         AutoFarmConfig config = ConfigManager.get();
         // 两道闸都关着就什么都别画 —— 描边 / 路线一律不显示（就算 visualize 还开着）。
         // 这是硬保险：关掉开关之后画面上不该再有任何「它还在工作」的痕迹。
@@ -165,21 +207,9 @@ public final class CropHighlighter {
             return;
         }
 
-        // 1.21.10 重新引入世界渲染事件时顺手改了 WorldRenderContext 的方法名：
-        //   matrixStack() → matrices()
-        //   camera()      → 直接没有了，改为从 GameRenderer 取主相机
-        //? if <1.21.10 {
-        PoseStack matrices = context.matrixStack();
-        //?} else {
-        /*PoseStack matrices = context.matrices();
-        *///?}
         Params params = new Params(
-                matrices.last().pose(),
-                //? if <1.21.10 {
-                context.camera().getPosition(),
-                //?} else {
-                /*Minecraft.getInstance().gameRenderer.getMainCamera().getPosition(),
-                *///?}
+                ctx.matrices().last().pose(),
+                ctx.cameraPos(),
                 // 「1 像素等于多少格」的换算基准（见类注释）
                 Math.tan(Math.toRadians(client.options.fov().get()) / 2.0),
                 Math.max(1, client.getWindow().getHeight()),
@@ -192,7 +222,7 @@ public final class CropHighlighter {
         if (config.highlightThroughWalls) {
             renderThroughWalls(params, crops, spots, extras, drops, current, route, segment);
         } else {
-            renderDepthTested(context, params, crops, spots, extras, drops, current, route, segment);
+            renderDepthTested(ctx, params, crops, spots, extras, drops, current, route, segment);
         }
     }
 
@@ -203,12 +233,12 @@ public final class CropHighlighter {
      * {@code POSITION_COLOR} 顶点 + {@code QUADS} 模式 + {@code COLOR_PROGRAM}
      * + 透明混合 + 不剔除背面 + 标准的深度测试。所以描边会被前方方块正常遮挡。
      */
-    private static void renderDepthTested(WorldRenderContext context, Params params,
+    private static void renderDepthTested(FrameCtx ctx, Params params,
                                           List<BlockPos> crops, List<BlockPos> spots,
                                           List<BlockPos> extras, List<BlockPos> drops,
                                           BlockPos current,
                                           List<BlockPos> route, List<PathStep> segment) {
-        MultiBufferSource consumers = context.consumers();
+        MultiBufferSource consumers = ctx.consumers();
         if (consumers == null) {
             return;
         }
@@ -230,8 +260,6 @@ public final class CropHighlighter {
      *
      * <p>全程用 try/finally 还原，避免污染后面的天气、粒子、手部渲染。
      */
-    //?}
-
     private static void renderThroughWalls(Params params, List<BlockPos> crops, List<BlockPos> spots,
                                           List<BlockPos> extras, List<BlockPos> drops,
                                           BlockPos current,

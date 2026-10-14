@@ -78,8 +78,8 @@ stonecutter {
             //   2) Fabric API 在这一版**没有** WorldRenderEvents（1.21.10 才重新引入），
             //      而描边渲染正是靠它挂上世界渲染流程的 ——
             //      这一版要么写降级（不画描边）、要么改走底层 hook。
-            // 所以先处理 1.21.10，1.21.9 与 1.21.11 各自单独收尾。
-            // "1.21.9",
+            // 1.21.9 的描边改走 mixin（见 LevelRendererMixin）：搭原版的方块轮廓渲染。
+            "1.21.9",
             "1.21.10",
             // ⚠️ 1.21.11（1.x 线的收官版）暂缓，又是一批 GUI / 渲染重构：
             //   - AbstractButton 新增抽象方法 renderContents(GuiGraphics,int,int,float)，
