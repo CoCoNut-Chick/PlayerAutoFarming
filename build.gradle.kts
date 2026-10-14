@@ -24,8 +24,29 @@ val requiredJava: JavaVersion = when {
 }
 
 repositories {
-    // Mod Menu 发布在 Terraformers 自己的 maven 上，不在 Maven Central
-    maven("https://maven.terraformersmc.com/releases/") { name = "TerraformersMC" }
+    /**
+     * 把某个 group 的查找范围**锁死**在指定的 maven 上。
+     *
+     * 为什么非锁不可：不锁的话 Gradle 会按仓库顺序挨个去问「这个坐标你有没有」，
+     * 而仓库列表里排在前面的是 Loom 自动加的 maven.fabricmc.net ——
+     * 它在国内走 Cloudflare，偶发连接超时，**一次超时就足以让整个依赖解析失败**：
+     *
+     *   Could not GET 'https://maven.fabricmc.net/com/terraformersmc/modmenu/12.0.1/....pom'
+     *   > Connect to maven.fabricmc.net:443 failed: Connection timed out
+     *
+     * 明明 Mod Menu 压根不在那个仓库里，却因为「顺便去问了一句」而把构建拖垮。
+     * 锁死之后，这些 group 只会去它真正的 maven 找，绕开那条不稳的链路。
+     */
+    fun strictMaven(url: String, alias: String, vararg groups: String) = exclusiveContent {
+        forRepository { maven(url) { name = alias } }
+        filter { groups.forEach(::includeGroup) }
+    }
+
+    // Mod Menu 发布在 Terraformers 自己的 maven 上
+    strictMaven("https://maven.terraformersmc.com/releases/", "TerraformersMC", "com.terraformersmc")
+
+    // Mod Menu 的传递依赖 placeholder-api 来自 Nucleoid
+    strictMaven("https://maven.nucleoid.xyz/", "Nucleoid", "eu.pb4")
 }
 
 dependencies {

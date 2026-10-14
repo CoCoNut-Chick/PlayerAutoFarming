@@ -52,9 +52,17 @@ public final class BlockNavigator {
         if (world == null) {
             return false;
         }
+        // 1.21.2 把世界上下界的方法名缩短了：
+        //   getMinBuildHeight / getMaxBuildHeight → getMinY / getMaxY
+        //? if <1.21.2 {
         if (y < world.getMinBuildHeight() || y >= world.getMaxBuildHeight()) {
             return false;
         }
+        //?} else {
+        /*if (y < world.getMinY() || y >= world.getMaxY()) {
+            return false;
+        }
+        *///?}
         // 未加载的区块一律当成「走不通」，否则会把 A* 引到一片虚空里
         if (world instanceof ClientLevel clientWorld
                 && !clientWorld.hasChunk(x >> 4, z >> 4)) {

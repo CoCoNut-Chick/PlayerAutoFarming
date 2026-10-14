@@ -230,8 +230,22 @@ public final class BlockInteractor {
         int dx = Integer.signum(pos.getX() - feet.getX());
         int dy = Integer.signum(pos.getY() - feet.getY());
         int dz = Integer.signum(pos.getZ() - feet.getZ());
-        Direction dir = Direction.fromDelta(-dx, -dy, -dz);
-        return dir == null ? Direction.UP : dir;
+        // 这里刻意不用 Direction.fromDelta —— 1.21.4 把它移除了。
+        // 我们要的其实只是「取三个轴里变化最大的那个方向」，手写反而更直接，
+        // 而且不用为它写版本条件：所有版本共用同一段逻辑。
+        if (dx == 0 && dy == 0 && dz == 0) {
+            return Direction.UP;   // 站在同一格上，随便给一个（原版也有同样的兜底）
+        }
+        int ax = Math.abs(dx);
+        int ay = Math.abs(dy);
+        int az = Math.abs(dz);
+        if (ay >= ax && ay >= az) {
+            return dy > 0 ? Direction.UP : Direction.DOWN;
+        }
+        if (az >= ax) {
+            return dz > 0 ? Direction.SOUTH : Direction.NORTH;
+        }
+        return dx > 0 ? Direction.EAST : Direction.WEST;
     }
 
     // ================= 挖一格 =================

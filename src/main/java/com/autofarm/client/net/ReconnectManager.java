@@ -131,9 +131,9 @@ public final class ReconnectManager {
         try {
             ServerAddress address = ServerAddress.parseString(info.ip);
             // 1.20.1 的签名：(父界面, 客户端, 地址, 服务器信息, 是否快速加入)
-            // 1.21 起末尾多了一个 TransferState（跨服传送的上下文），
+            // **1.20.5** 起末尾多了一个 TransferState（跨服传送的上下文），
             // 普通掉线重连没有这东西，传 null 就是「不是传送过来的」。
-            //? if <1.21 {
+            //? if <1.20.5 {
             ConnectScreen.startConnecting(client.screen, client, address, info, false);
             //?} else {
             /*ConnectScreen.startConnecting(client.screen, client, address, info, false, null);

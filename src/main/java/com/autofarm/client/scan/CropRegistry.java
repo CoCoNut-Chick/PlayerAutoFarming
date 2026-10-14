@@ -6,8 +6,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+//? if <1.21.2 {
 import net.minecraft.world.item.ItemNameBlockItem;
+//?}
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.AttachedStemBlock;
 import net.minecraft.world.level.block.Block;
@@ -224,7 +227,17 @@ public final class CropRegistry {
             return null;
         }
         ResourceLocation identifier = ResourceLocation.tryParse(id);
-        return identifier == null ? null : BuiltInRegistries.BLOCK.get(identifier);
+        if (identifier == null) {
+            return null;
+        }
+        // 1.21.2 起 Registry#get 返回的是 Optional<Holder.Reference<T>>
+        // （为数据驱动的注册表让路）。想要裸对象得用 getValue，
+        // 它在找不到时返回 null —— 正好是这里原来的语义。
+        //? if <1.21.2 {
+        return BuiltInRegistries.BLOCK.get(identifier);
+        //?} else {
+        /*return BuiltInRegistries.BLOCK.getValue(identifier);
+        *///?}
     }
 
     /** 注册名 → 显示名（界面里列作物清单用）。认不出来就把原字符串显示出来 */
@@ -268,9 +281,17 @@ public final class CropRegistry {
         }
         Item item = stack.getItem();
         // 1. 放下去变作物方块 = 种子（胡萝卜、土豆这种「作物本体」也算）
+        // 1.21.2 把 ItemNameBlockItem 这个类整个并掉了，这里退回它的父类 BlockItem ——
+        // 下一句 isCropBlock 会把「不是作物方块的方块物品」筛掉，语义不变。
+        //? if <1.21.2 {
         if (item instanceof ItemNameBlockItem aliased && isCropBlock(aliased.getBlock())) {
             return true;
         }
+        //?} else {
+        /*if (item instanceof BlockItem aliased && isCropBlock(aliased.getBlock())) {
+            return true;
+        }
+        *///?}
         return isCropProduce(item);
     }
 
@@ -287,11 +308,17 @@ public final class CropRegistry {
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
         String path = id.getPath();
         for (String candidate : new String[]{path, path + "s", path + "es"}) {
+            // 先把「候选注册名」造出来（1.21 起 ResourceLocation 的构造函数被私有化）
             //? if <1.21 {
-            Block block = BuiltInRegistries.BLOCK.get(new ResourceLocation(id.getNamespace(), candidate));
+            ResourceLocation candidateId = new ResourceLocation(id.getNamespace(), candidate);
             //?} else {
-            /*Block block = BuiltInRegistries.BLOCK.get(
-                    ResourceLocation.fromNamespaceAndPath(id.getNamespace(), candidate));
+            /*ResourceLocation candidateId = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), candidate);
+            *///?}
+            // 再取方块：1.21.2 起 Registry#get 返回 Optional，要裸对象得用 getValue
+            //? if <1.21.2 {
+            Block block = BuiltInRegistries.BLOCK.get(candidateId);
+            //?} else {
+            /*Block block = BuiltInRegistries.BLOCK.getValue(candidateId);
             *///?}
             if (block != Blocks.AIR && isCropBlock(block) && block.asItem() == item) {
                 return true;

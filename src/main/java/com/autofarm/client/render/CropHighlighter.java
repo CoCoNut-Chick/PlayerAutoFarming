@@ -16,7 +16,11 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.Minecraft;
+//? if <1.21.2 {
 import net.minecraft.client.renderer.GameRenderer;
+//?} else {
+/*import net.minecraft.client.renderer.CoreShaders;
+*///?}
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
@@ -185,7 +189,13 @@ public final class CropHighlighter {
                                           List<BlockPos> extras, List<BlockPos> drops,
                                           BlockPos current,
                                           List<BlockPos> route, List<PathStep> segment) {
+        // 1.21.2 把「选哪个着色器」从 Supplier<ShaderInstance> 改成了 ShaderProgram 对象：
+        //   GameRenderer::getPositionColorShader  →  CoreShaders.POSITION_COLOR
+        //? if <1.21.2 {
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        //?} else {
+        /*RenderSystem.setShader(CoreShaders.POSITION_COLOR);
+        *///?}
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableCull();

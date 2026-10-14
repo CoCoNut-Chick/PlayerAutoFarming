@@ -2734,15 +2734,21 @@ public final class FarmTaskManager {
             client.player.playSound(soundFor(kind), 1.0f, 1.0f);
         }
         if (config.notifyToasts) {
-            // 1.21 把 SystemToast 的内部类名从复数 SystemToastIds 改成了单数 SystemToastId，
-            // 顺带把 TUTORIAL_HINT 这个 token 整个删掉了（教程提示不再用 toast 弹）。
+            // Toast 的容器：1.21.2 起 Minecraft#getToasts 改名成 getToastManager
+            //? if <1.21.2 {
+            var toastManager = client.getToasts();
+            //?} else {
+            /*var toastManager = client.getToastManager();
+            *///?}
+            // token 名：**1.20.3** 起 SystemToastIds（复数）→ SystemToastId（单数），
+            // 而且 TUTORIAL_HINT 被整个删掉了（教程提示不再走 toast）。
             // 这边换用 PERIODIC_NOTIFICATION —— 它就是个通用通知位，
             // 语义上最接近我们想做的事（弹一条自己的提示）。
-            //? if <1.21 {
-            SystemToast.addOrUpdate(client.getToasts(), SystemToast.SystemToastIds.TUTORIAL_HINT,
+            //? if <1.20.3 {
+            SystemToast.addOrUpdate(toastManager, SystemToast.SystemToastIds.TUTORIAL_HINT,
                     Component.translatable("autofarm.notify." + kind), Component.empty());
             //?} else {
-            /*SystemToast.addOrUpdate(client.getToasts(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+            /*SystemToast.addOrUpdate(toastManager, SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                     Component.translatable("autofarm.notify." + kind), Component.empty());
             *///?}
         }

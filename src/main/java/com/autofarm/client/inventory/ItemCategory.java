@@ -7,7 +7,9 @@ import java.util.Set;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+//? if <1.21.2 {
 import net.minecraft.world.item.ItemNameBlockItem;
+//?}
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -197,9 +199,15 @@ public enum ItemCategory {
         if (plantable) {
             // 专门的种子：原版给它们用的都是 AliasedBlockItem ——
             // 「放下会长出别的方块」这件事，只有这个类表达得出来
+            //? if <1.21.2 {
             if (!food && stack.getItem() instanceof ItemNameBlockItem) {
                 return SEED;
             }
+            //?} else {
+            /*if (!food && stack.getItem() instanceof BlockItem) {
+                return SEED;
+            }
+            *///?}
             return SELF_SEED;
         }
         if (food) {

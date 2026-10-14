@@ -75,9 +75,9 @@ public final class AutoFarmHud {
         }
         // 开着界面时原版本来就不画 HUD，这里也一起让路；F3 调试界面同理，
         // 不然两堆字会叠在一起。
-        // 「F3 开着没有」这个判断在 1.21 从 Options.renderDebug 挪到了
-        // DebugScreenOverlay#showDebugScreen()（字段变成私有的了）。
-        //? if <1.21 {
+        // 「F3 开着没有」这个判断在 **1.20.2** 就从 Options.renderDebug
+        // 挪到了 DebugScreenOverlay（字段转私有，改由 getDebugOverlay().showDebugScreen() 问）。
+        //? if <1.20.2 {
         if (client.screen != null || client.options.hideGui || client.options.renderDebug) {
             return;
         }
