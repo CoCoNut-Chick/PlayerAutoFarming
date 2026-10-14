@@ -28,6 +28,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 /*import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 *///?}
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 // 着色器相关的类只在 1.21.5 之前用得上（之后整套换成 RenderType 体系了），
 // 而 CoreShaders 本身也只活在 1.21.2 ~ 1.21.4，所以这里是两层嵌套。
@@ -39,7 +40,16 @@ import net.minecraft.client.renderer.GameRenderer;
 *///?}
 //?}
 import net.minecraft.client.renderer.MultiBufferSource;
+// 1.21.11 把渲染类型整体挪进了 .rendertype 子包，而且**拆成了两个类**：
+//   RenderType  —— 实例类（代表某一个渲染类型）
+//   RenderTypes —— 工厂类（所有预定义类型都在这儿，复数 s）
+// 从前的 RenderType.debugQuads() 现在得问 RenderTypes 要。
+//? if <1.21.11 {
 import net.minecraft.client.renderer.RenderType;
+//?} else {
+/*import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+*///?}
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
@@ -149,8 +159,7 @@ public final class CropHighlighter {
         renderFrame(new FrameCtx(context.matrixStack(), context.consumers(),
                 context.camera().getPosition()));
         //?} else {
-        /*renderFrame(new FrameCtx(context.matrices(), context.consumers(),
-                Minecraft.getInstance().gameRenderer.getMainCamera().getPosition()));
+        /*renderFrame(new FrameCtx(context.matrices(), context.consumers(), mainCameraPos()));
         *///?}
     }
     //?}
@@ -166,8 +175,37 @@ public final class CropHighlighter {
      * 而 getMainCamera() 在这一版仍是公开的）。
      */
     public static void renderViaOutlineHook(PoseStack matrices, MultiBufferSource consumers) {
-        renderFrame(new FrameCtx(matrices, consumers,
-                Minecraft.getInstance().gameRenderer.getMainCamera().getPosition()));
+        renderFrame(new FrameCtx(matrices, consumers, mainCameraPos()));
+    }
+
+    /**
+     * 取当前主相机的位置。
+     *
+     * <p>1.21.11 把 {@code Camera#getPosition()} 改名成了 {@code position()}。
+     * 这个值被两个入口共用（1.21.9 的 mixin 回调、1.21.10+ 的世界渲染事件），
+     * 所以收进这个小方法里 —— 改名时只改一处。
+     */
+    private static Vec3 mainCameraPos() {
+        Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
+        //? if <1.21.11 {
+        return camera.getPosition();
+        //?} else {
+        /*return camera.position();
+        *///?}
+    }
+
+    /**
+     * 描边用的渲染类型：原版那个「不写深度、不做深度测试」的调试线框。
+     *
+     * <p>1.21.11 把工厂方法搬去了 {@code RenderTypes}（复数那个类）。
+     * 三处用它的地方都走这个入口，以后再搬也只改一处。
+     */
+    private static RenderType highlightRenderType() {
+        //? if <1.21.11 {
+        return RenderType.debugQuads();
+        //?} else {
+        /*return RenderTypes.debugQuads();
+        *///?}
     }
 
     /** 三个入口共用的核心：检查开关、收集目标、构造参数，再按配置选一条路径画出去 */
@@ -243,7 +281,7 @@ public final class CropHighlighter {
             return;
         }
 
-        VertexConsumer vertexConsumer = consumers.getBuffer(RenderType.debugQuads());
+        VertexConsumer vertexConsumer = consumers.getBuffer(highlightRenderType());
         drawAll(vertexConsumer, params, crops, spots, extras, drops, current, route, segment);
 
         // 事件返回后 MC 还会统一绘制一次，这里主动 flush 让绘制时机确定可控
@@ -320,9 +358,9 @@ public final class CropHighlighter {
         // 顶点接口（VertexConsumer）没变，所以 drawAll 一行都不用动。
         MultiBufferSource.BufferSource buffers =
                 Minecraft.getInstance().renderBuffers().bufferSource();
-        VertexConsumer vc = buffers.getBuffer(RenderType.debugQuads());
+        VertexConsumer vc = buffers.getBuffer(highlightRenderType());
         drawAll(vc, params, crops, spots, extras, drops, current, route, segment);
-        buffers.endBatch(RenderType.debugQuads());
+        buffers.endBatch(highlightRenderType());
         *///?}
     }
 

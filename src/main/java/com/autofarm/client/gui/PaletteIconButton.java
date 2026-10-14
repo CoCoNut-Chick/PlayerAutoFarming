@@ -26,10 +26,18 @@ public class PaletteIconButton extends Button {
         setTooltip(Tooltip.create(Component.translatable("autofarm.highlight.customize")));
     }
 
+    // 1.21.11 把「画底板」和「画内容」拆成了两步：
+    // 底板归框架调用的 renderWidget，子类改为只填一个新增的抽象方法 renderContents。
+    //? if <1.21.11 {
     @Override
     protected void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
         // 先让超类把原版按钮底板画出来，保证和旁边按钮风格一致
         super.renderWidget(context, mouseX, mouseY, delta);
+    //?} else {
+    /*@Override
+    protected void renderContents(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        // 新版底板由框架负责，这里只填内容，所以不再调 super
+    *///?}
 
         int ix = getX() + (getWidth() - ICON) / 2;
         int iy = getY() + (getHeight() - ICON) / 2;

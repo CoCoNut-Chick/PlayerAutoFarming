@@ -344,9 +344,14 @@ public class HighlightStyleScreen extends ScrollPanelScreen {
             this.color = color;
         }
 
+        //? if <1.21.11 {
         @Override
         protected void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
             super.renderWidget(context, mouseX, mouseY, delta);
+        //?} else {
+        /*@Override
+        protected void renderContents(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        *///?}
 
             int x1 = getX() + 2;
             int y1 = getY() + 2;

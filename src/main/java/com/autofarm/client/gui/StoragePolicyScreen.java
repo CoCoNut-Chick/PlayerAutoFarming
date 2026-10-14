@@ -330,11 +330,16 @@ public class StoragePolicyScreen extends ScrollPanelScreen {
                     && mouseY >= getY() && mouseY < getY() + getHeight();
         }
 
+        //? if <1.21.11 {
         @Override
         protected void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
             // message 是空串，所以父类只会画底板和边框，不会写字；
             // 文字由下面自己排版成「左类别、右策略」的样子
             super.renderWidget(context, mouseX, mouseY, delta);
+        //?} else {
+        /*@Override
+        protected void renderContents(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        *///?}
 
             int textY = getY() + (getHeight() - 8) / 2;
             context.drawString(StoragePolicyScreen.this.font,

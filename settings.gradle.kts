@@ -87,7 +87,7 @@ stonecutter {
             //   - RenderType 在 CropHighlighter 里找不到（类结构/包变了）
             //   - AbstractSkeleton 被改名或合并
             //   - Camera#getPosition 也不在原处
-            // "1.21.11",
+            "1.21.11",
 
             // ── 批次 7：未混淆 + Java 25 ──
             // "26.1", "26.1.1", "26.1.2", "26.2", "26.3",

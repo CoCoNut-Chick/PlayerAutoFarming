@@ -10,7 +10,12 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.decoration.ArmorStand;
+// 1.21.11 把骷髅这一支挪进了 .skeleton 子包
+//? if <1.21.11 {
 import net.minecraft.world.entity.monster.AbstractSkeleton;
+//?} else {
+/*import net.minecraft.world.entity.monster.skeleton.AbstractSkeleton;
+*///?}
 import net.minecraft.world.entity.monster.Blaze;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.EnderMan;

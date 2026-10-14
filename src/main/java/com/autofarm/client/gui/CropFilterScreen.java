@@ -507,9 +507,14 @@ public class CropFilterScreen extends ScrollPanelScreen {
                     && mouseY >= getY() && mouseY < getY() + getHeight();
         }
 
+        //? if <1.21.11 {
         @Override
         protected void renderWidget(GuiGraphics context, int mouseX, int mouseY, float delta) {
             super.renderWidget(context, mouseX, mouseY, delta);
+        //?} else {
+        /*@Override
+        protected void renderContents(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        *///?}
 
             // 右边那半：在名单里就写「收割」（白名单）/「不收」（黑名单），
             // 不在名单里则反过来。这样不用去理解「正向还是反向」，看字就行
