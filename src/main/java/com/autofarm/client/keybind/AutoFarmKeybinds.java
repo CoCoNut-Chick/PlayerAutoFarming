@@ -3,6 +3,9 @@ package com.autofarm.client.keybind;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.KeyMapping;
+//? if >=1.21.9 {
+/*import net.minecraft.resources.ResourceLocation;
+*///?}
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -10,7 +13,15 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class AutoFarmKeybinds {
 
+    // 1.21.9 起「快捷键分类」不再是字符串，而要一个注册过的 KeyMapping.Category 对象。
+    // 用 register(...) 建一个自己的分类，语言文件里的键名不变，
+    // 所以 autofarm 那几行翻译照旧能用。
+    //? if <1.21.9 {
     public static final String CATEGORY = "category.autofarm";
+    //?} else {
+    /*public static final KeyMapping.Category CATEGORY =
+            KeyMapping.Category.register(ResourceLocation.fromNamespaceAndPath("autofarm", "main"));
+    *///?}
 
     /** 打开控制面板 */
     public static KeyMapping openPanel;

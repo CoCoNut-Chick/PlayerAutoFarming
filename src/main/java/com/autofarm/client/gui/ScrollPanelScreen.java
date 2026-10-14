@@ -7,6 +7,9 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+//? if >=1.21.9 {
+/*import net.minecraft.client.input.MouseButtonEvent;
+*///?}
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
@@ -336,8 +339,19 @@ public abstract class ScrollPanelScreen extends Screen {
         *///?}
     }
 
+    // 1.21.9 把输入事件换成了记录类：鼠标事件统一收进 MouseButtonEvent，
+    // 坐标和按键号从「三个裸参数」变成 event.x() / event.y() / event.button()。
+    // 为了让下面那段逻辑一行都不用复制，这里在签名后面把三个值取成同名局部变量。
+    //? if <1.21.9 {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    //?} else {
+    /*@Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
+    *///?}
         // 先看是不是按住滚动条拖
         if (button == 0 && overScrollbar(mouseX, mouseY)) {
             if (mouseY >= sbThumbTop && mouseY < sbThumbTop + sbThumbH) {
@@ -355,25 +369,49 @@ public abstract class ScrollPanelScreen extends Screen {
         if (mouseY < contentTop) {
             return false;
         }
+        //? if <1.21.9 {
         return super.mouseClicked(mouseX, mouseY, button);
+        //?} else {
+        /*return super.mouseClicked(event, doubleClick);
+        *///?}
     }
 
+    //? if <1.21.9 {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+    //?} else {
+    /*@Override
+    public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
+        double mouseY = event.y();
+    *///?}
         if (draggingScrollbar) {
             dragScrollbarTo(mouseY);
             return true;
         }
+        //? if <1.21.9 {
         return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        //?} else {
+        /*return super.mouseDragged(event, deltaX, deltaY);
+        *///?}
     }
 
+    //? if <1.21.9 {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    //?} else {
+    /*@Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        int button = event.button();
+    *///?}
         if (draggingScrollbar && button == 0) {
             draggingScrollbar = false;
             return true;
         }
+        //? if <1.21.9 {
         return super.mouseReleased(mouseX, mouseY, button);
+        //?} else {
+        /*return super.mouseReleased(event);
+        *///?}
     }
 
     // ================= 行为 =================

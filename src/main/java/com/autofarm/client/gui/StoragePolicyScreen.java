@@ -10,6 +10,9 @@ import java.util.Map;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+//? if >=1.21.9 {
+/*import net.minecraft.client.input.MouseButtonEvent;
+*///?}
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Inventory;
@@ -300,13 +303,25 @@ public class StoragePolicyScreen extends ScrollPanelScreen {
         }
 
         /** 右键就是反向循环。这里自己判边界，不去碰 ButtonWidget 的鼠标逻辑 */
+        //? if <1.21.9 {
         @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        //?} else {
+        /*@Override
+        public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+            double mouseX = event.x();
+            double mouseY = event.y();
+            int button = event.button();
+        *///?}
             if (button == 1 && isHovering(mouseX, mouseY)) {
                 cycle(category, -1);
                 return true;
             }
+            //? if <1.21.9 {
             return super.mouseClicked(mouseX, mouseY, button);
+            //?} else {
+            /*return super.mouseClicked(event, doubleClick);
+            *///?}
         }
 
         private boolean isHovering(double mouseX, double mouseY) {

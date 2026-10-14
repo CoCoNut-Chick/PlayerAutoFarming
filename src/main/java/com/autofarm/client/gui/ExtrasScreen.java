@@ -11,6 +11,9 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+//? if >=1.21.9 {
+/*import net.minecraft.client.input.KeyEvent;
+*///?}
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.Block;
@@ -1551,15 +1554,26 @@ public class ExtrasScreen extends ScrollPanelScreen {
         backToParent();
     }
 
+    // 1.21.9 起键盘事件也收进了记录类 KeyEvent，按键号变成 event.key()
+    //? if <1.21.9 {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    //?} else {
+    /*@Override
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+    *///?}
         // 在「转向时间」输入框里按 Enter = 点「确认」：危险值在这里弹风险提示
         if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
                 && turnTimeField != null && turnTimeField.isFocused()) {
             commitTurnTime();
             return true;
         }
+        //? if <1.21.9 {
         return super.keyPressed(keyCode, scanCode, modifiers);
+        //?} else {
+        /*return super.keyPressed(event);
+        *///?}
     }
 
     private Component scheduleStartLabel() {

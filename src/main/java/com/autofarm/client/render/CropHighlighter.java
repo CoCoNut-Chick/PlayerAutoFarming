@@ -15,8 +15,19 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+// 1.21.9 是 Fabric API 的过渡版本：WorldRenderEvents 先被移除，1.21.10 才以
+// 新的包名（多了一个 .world）重新引回来。所以这里是三层，不是两层：
+//   < 1.21.9    → 老的 rendering.v1
+//   == 1.21.9   → 两个都没有（见下面 register() 的降级说明）
+//   >= 1.21.10  → rendering.v1.world
+//? if <1.21.9 {
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+//?}
+//? if >=1.21.10 {
+/*import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
+*///?}
 import net.minecraft.client.Minecraft;
 // 着色器相关的类只在 1.21.5 之前用得上（之后整套换成 RenderType 体系了），
 // 而 CoreShaders 本身也只活在 1.21.2 ~ 1.21.4，所以这里是两层嵌套。
@@ -92,15 +103,32 @@ public final class CropHighlighter {
     private CropHighlighter() {
     }
 
+    //? if 1.21.9 {
+    /*// 1.21.9 这一版 Fabric API 没有 WorldRenderEvents（见上面的 import 说明），
+    // 挂不上世界渲染流程，所以这一版不做描边高亮。
+    // 收割、补种、路线规划、控制面板、HUD 全都照常 —— 只是地里不画那个框。
     public static void register() {
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(CropHighlighter::render);
     }
+    *///?} else {
+    public static void register() {
+        // 1.21.10 把重新引入的世界渲染事件换了一套名字，原来的
+        // AFTER_TRANSLUCENT（透明层之后）没有对应项。
+        // 最接近「画在最后」的是 END_MAIN（主渲染结束）。
+        //? if <1.21.10 {
+        WorldRenderEvents.AFTER_TRANSLUCENT.register(CropHighlighter::render);
+        //?} else {
+        /*WorldRenderEvents.END_MAIN.register(CropHighlighter::render);
+        *///?}
+    }
+    //?}
 
     /** 这一帧画描边需要的全部参数，打包传给两条提交路径 */
     private record Params(Matrix4f matrix, Vec3 camera, double tanHalfFov, int framebufferHeight,
                           double pixels, float red, float green, float blue, float alpha) {
     }
 
+    // 下面两个方法只在「能挂上世界渲染」的版本里存在（1.21.9 除外）。
+    //? if !1.21.9 {
     private static void render(WorldRenderContext context) {
         AutoFarmConfig config = ConfigManager.get();
         // 两道闸都关着就什么都别画 —— 描边 / 路线一律不显示（就算 visualize 还开着）。
@@ -137,10 +165,21 @@ public final class CropHighlighter {
             return;
         }
 
+        // 1.21.10 重新引入世界渲染事件时顺手改了 WorldRenderContext 的方法名：
+        //   matrixStack() → matrices()
+        //   camera()      → 直接没有了，改为从 GameRenderer 取主相机
+        //? if <1.21.10 {
         PoseStack matrices = context.matrixStack();
+        //?} else {
+        /*PoseStack matrices = context.matrices();
+        *///?}
         Params params = new Params(
                 matrices.last().pose(),
+                //? if <1.21.10 {
                 context.camera().getPosition(),
+                //?} else {
+                /*Minecraft.getInstance().gameRenderer.getMainCamera().getPosition(),
+                *///?}
                 // 「1 像素等于多少格」的换算基准（见类注释）
                 Math.tan(Math.toRadians(client.options.fov().get()) / 2.0),
                 Math.max(1, client.getWindow().getHeight()),
@@ -191,6 +230,8 @@ public final class CropHighlighter {
      *
      * <p>全程用 try/finally 还原，避免污染后面的天气、粒子、手部渲染。
      */
+    //?}
+
     private static void renderThroughWalls(Params params, List<BlockPos> crops, List<BlockPos> spots,
                                           List<BlockPos> extras, List<BlockPos> drops,
                                           BlockPos current,
