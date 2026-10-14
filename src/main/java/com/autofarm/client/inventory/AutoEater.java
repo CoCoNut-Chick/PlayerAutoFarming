@@ -1,6 +1,7 @@
 package com.autofarm.client.inventory;
 
 import com.autofarm.client.compat.CameraCompat;
+import com.autofarm.client.compat.FoodCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
 import net.minecraft.client.Minecraft;
@@ -208,7 +209,7 @@ public final class AutoEater {
         }
 
         // ---- 手里那格不是食物了（这一口吃完了，或者被别的逻辑换走了）→ 换下一格 ----
-        if (!player.getMainHandItem().isEdible()) {
+        if (!FoodCompat.isEdible(player.getMainHandItem())) {
             if (!switchToAnotherFood(player)) {
                 stop(client);
             }

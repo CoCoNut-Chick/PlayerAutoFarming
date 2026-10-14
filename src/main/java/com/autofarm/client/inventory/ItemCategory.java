@@ -1,5 +1,6 @@
 package com.autofarm.client.inventory;
 
+import com.autofarm.client.compat.FoodCompat;
 import com.autofarm.client.scan.CropRegistry;
 import java.util.HashSet;
 import java.util.Set;
@@ -191,7 +192,7 @@ public enum ItemCategory {
             return null;
         }
         boolean plantable = InventoryScanner.isPlantable(stack);
-        boolean food = stack.isEdible();
+        boolean food = FoodCompat.isEdible(stack);
 
         if (plantable) {
             // 专门的种子：原版给它们用的都是 AliasedBlockItem ——

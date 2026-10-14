@@ -189,7 +189,12 @@ public abstract class ScrollPanelScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        // 1.20.2 起 renderBackground 要多收鼠标坐标与帧时间（原版要在背景上做模糊遮罩）
+        //? if <1.20.2 {
         this.renderBackground(context);
+        //?} else {
+        /*this.renderBackground(context, mouseX, mouseY, delta);
+        *///?}
 
         // 面板底板
         context.fill(left, top, left + panelW, top + panelH, COLOR_PANEL);
@@ -305,8 +310,15 @@ public abstract class ScrollPanelScreen extends Screen {
 
     // ================= 输入 =================
 
+    // 1.20.2 给滚轮事件加了「横向滚动量」，签名从 3 个参数变成 4 个。
+    // 我们只关心纵向，所以新版多出来的那个参数就收着不用。
+    //? if <1.20.2 {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+    //?} else {
+    /*@Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double amount) {
+    *///?}
         if (maxScroll > 0
                 && mouseX >= left && mouseX <= left + panelW
                 && mouseY >= contentTop && mouseY <= contentBottom) {
@@ -317,7 +329,11 @@ public abstract class ScrollPanelScreen extends Screen {
             }
             return true;
         }
+        //? if <1.20.2 {
         return super.mouseScrolled(mouseX, mouseY, amount);
+        //?} else {
+        /*return super.mouseScrolled(mouseX, mouseY, horizontalAmount, amount);
+        *///?}
     }
 
     @Override

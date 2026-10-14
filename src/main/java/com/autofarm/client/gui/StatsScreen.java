@@ -80,7 +80,11 @@ public class StatsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        //? if <1.20.2 {
         this.renderBackground(context);
+        //?} else {
+        /*this.renderBackground(context, mouseX, mouseY, delta);
+        *///?}
 
         context.fill(left, top, left + panelW, top + panelH, COLOR_PANEL);
         drawRectOutline(context, left, top, left + panelW, top + panelH, COLOR_EDGE);

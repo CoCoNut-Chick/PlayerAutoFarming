@@ -194,13 +194,29 @@ public final class CropHighlighter {
         // 核心的一行：深度比较永不通过失败 → 描边无条件画在最前面，穿透一切遮挡
         RenderSystem.disableDepthTest();
         try {
+            // 1.21 重写了缓冲的取法：
+            //   老：Tesselator.getInstance().getBuilder() 拿一个**全局复用**的缓冲，
+            //       再自己 begin(模式, 格式)；
+            //   新：Tesselator.getInstance().begin(模式, 格式) 直接给一个**新的**缓冲。
+            //      正因为每回都是新的，「上次被谁 fixedColor() 过、颜色被静默忽略」这个
+            //      老坑在新版里自然不存在了，所以下面那句清状态也不需要了。
+            //? if <1.21 {
             BufferBuilder buffer = Tesselator.getInstance().getBuilder();
             buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
             // Tessellator 的缓冲是全局复用的，万一之前被谁 fixedColor() 过，
             // 我们的颜色会被静默忽略（画出来全白）。这一行把状态清掉。
             buffer.unsetDefaultColor();
+            //?} else {
+            /*BufferBuilder buffer = Tesselator.getInstance()
+                    .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+            *///?}
             drawAll(buffer, params, crops, spots, extras, drops, current, route, segment);
+            // BufferBuilder#end 改名为 buildOrThrow（返回的 MeshData 就是原来的 RenderedBuffer）
+            //? if <1.21 {
             BufferUploader.drawWithShader(buffer.end());
+            //?} else {
+            /*BufferUploader.drawWithShader(buffer.buildOrThrow());
+            *///?}
         } finally {
             RenderSystem.enableDepthTest();
             RenderSystem.depthMask(true);
@@ -525,9 +541,20 @@ public final class CropHighlighter {
                              double cx, double cy, double cz,
                              double dx, double dy, double dz,
                              float r, float g, float b, float a) {
+        // 1.21 把顶点写入接口整套改了名，而且**取消了 endVertex()**：
+        //   vertex  → addVertex
+        //   color   → setColor
+        //   endVertex → 没有了（写完即生效）
+        //? if <1.21 {
         vc.vertex(m, (float) ax, (float) ay, (float) az).color(r, g, b, a).endVertex();
         vc.vertex(m, (float) bx, (float) by, (float) bz).color(r, g, b, a).endVertex();
         vc.vertex(m, (float) cx, (float) cy, (float) cz).color(r, g, b, a).endVertex();
         vc.vertex(m, (float) dx, (float) dy, (float) dz).color(r, g, b, a).endVertex();
+        //?} else {
+        /*vc.addVertex(m, (float) ax, (float) ay, (float) az).setColor(r, g, b, a);
+        vc.addVertex(m, (float) bx, (float) by, (float) bz).setColor(r, g, b, a);
+        vc.addVertex(m, (float) cx, (float) cy, (float) cz).setColor(r, g, b, a);
+        vc.addVertex(m, (float) dx, (float) dy, (float) dz).setColor(r, g, b, a);
+        *///?}
     }
 }

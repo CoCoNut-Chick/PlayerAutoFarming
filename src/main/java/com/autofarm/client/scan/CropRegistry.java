@@ -287,7 +287,12 @@ public final class CropRegistry {
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
         String path = id.getPath();
         for (String candidate : new String[]{path, path + "s", path + "es"}) {
+            //? if <1.21 {
             Block block = BuiltInRegistries.BLOCK.get(new ResourceLocation(id.getNamespace(), candidate));
+            //?} else {
+            /*Block block = BuiltInRegistries.BLOCK.get(
+                    ResourceLocation.fromNamespaceAndPath(id.getNamespace(), candidate));
+            *///?}
             if (block != Blocks.AIR && isCropBlock(block) && block.asItem() == item) {
                 return true;
             }

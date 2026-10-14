@@ -2734,8 +2734,17 @@ public final class FarmTaskManager {
             client.player.playSound(soundFor(kind), 1.0f, 1.0f);
         }
         if (config.notifyToasts) {
+            // 1.21 把 SystemToast 的内部类名从复数 SystemToastIds 改成了单数 SystemToastId，
+            // 顺带把 TUTORIAL_HINT 这个 token 整个删掉了（教程提示不再用 toast 弹）。
+            // 这边换用 PERIODIC_NOTIFICATION —— 它就是个通用通知位，
+            // 语义上最接近我们想做的事（弹一条自己的提示）。
+            //? if <1.21 {
             SystemToast.addOrUpdate(client.getToasts(), SystemToast.SystemToastIds.TUTORIAL_HINT,
                     Component.translatable("autofarm.notify." + kind), Component.empty());
+            //?} else {
+            /*SystemToast.addOrUpdate(client.getToasts(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                    Component.translatable("autofarm.notify." + kind), Component.empty());
+            *///?}
         }
     }
 

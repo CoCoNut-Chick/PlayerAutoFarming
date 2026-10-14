@@ -23,6 +23,12 @@ public class AutoFarm implements ModInitializer {
 	}
 
 	public static ResourceLocation id(String path) {
+		// 1.21 把 ResourceLocation 的构造函数收成了 protected（只能走静态工厂）。
+		// 源码里统一写 ResourceLocation，1.21.11+ 会由构建脚本自动改名成 Identifier。
+		//? if <1.21 {
 		return new ResourceLocation(MOD_ID, path);
+		//?} else {
+		/*return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
+		*///?}
 	}
 }

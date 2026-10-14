@@ -86,32 +86,51 @@ java {
     withSourcesJar()
     targetCompatibility = requiredJava
     sourceCompatibility = requiredJava
+    // 刻意【不】声明 toolchain。
+    //
+    // 官方模板里写了 vendor = ADOPTIUM + languageVersion = 17/21/25，
+    // 但那是建立在「能联网自动下载 JDK」的前提上的：声明之后 Gradle 会去找
+    // 「Temurin 17」这种具体发行版，本机没有，foojay 去下又连不上，
+    // 直接报 "Cannot find a Java installation"。
+    //
+    // 实际上完全不需要：跑 Gradle 的 JDK 25 可以用 `--release 17` 编译出
+    // Java 17 的字节码，产物与用 JDK 17 编译逐字节等价。所以复用当前 JDK，
+    // 用下面的 options.release 控制目标版本就够了。
+}
 
-    toolchain {
-        vendor = JvmVendorSpec.ADOPTIUM
-        languageVersion = JavaLanguageVersion.of(requiredJava.majorVersion)
-    }
+// 用 --release 而不是靠 JDK 版本本身来卡住目标字节码版本。
+// 这样本机只装一个 JDK 25，也能正确产出 17 / 21 / 25 三档产物；
+// 顺带还能挡住「不小心用了高版本才有的 API」——编译期就会报错。
+tasks.withType<JavaCompile>().configureEach {
+    options.release = requiredJava.majorVersion.toInt()
 }
 
 tasks {
     processResources {
-        val props = mapOf(
-            "id" to sc.properties["mod.id"],
-            "name" to sc.properties["mod.name"],
-            "version" to sc.properties["mod.version"],
+        // 这里刻意把每个值都取成**纯 String**，而不是直接把 sc.properties[...] 塞进 map：
+        // configuration cache 要求任务捕获的对象可序列化，而 sc.properties[...] 是
+        // 泛型取值，背后可能挂着 Gradle 脚本对象 —— 会直接报
+        // "cannot serialize Gradle script object references" 让整个 build 失败。
+        val props: Map<String, String> = mapOf(
+            "id" to sc.properties.get<String>("mod.id"),
+            "name" to sc.properties.get<String>("mod.name"),
+            "version" to project.property("mod.version") as String,
             // minecraft 依赖用「版本范围」而不是死版本号，这样一个 jar 能覆盖同一代的小版本
-            "minecraft" to sc.properties["mod.mc_compat"],
-            "loader" to Regex("\\d+\\.\\d+").find(sc.properties.get<String>("deps.fabric_loader"))!!.value,
+            "minecraft" to sc.properties.get<String>("mod.mc_compat"),
+            "loader" to Regex("\\d+\\.\\d+")
+                .find(sc.properties.get<String>("deps.fabric_loader"))!!.value,
             // 这个 jar 至少要哪个 Java —— 26.x 的 jar 在 Java 21 上根本起不来，
             // 写清楚能让玩家一眼看懂报错
-            // JavaVersion.getMajorVersion() 本来就返回 String，不用再 toString()
+            // （JavaVersion.getMajorVersion() 本身就返回 String）
             "javaMajor" to requiredJava.majorVersion,
         )
         inputs.properties(props)
 
         filesMatching("fabric.mod.json") { expand(props) }
         // mixin 配置里的 compatibilityLevel 也要跟着 Java 版本走（JAVA_17 / 21 / 25）
-        filesMatching("*.mixins.json") { expand("java" to "JAVA_${requiredJava.majorVersion}") }
+        filesMatching("*.mixins.json") {
+            expand(mapOf("java" to "JAVA_${requiredJava.majorVersion}"))
+        }
     }
 
     withType<Jar> {

@@ -1,5 +1,6 @@
 package com.autofarm.client.inventory;
 
+import com.autofarm.client.compat.FoodCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.scan.CropRegistry;
 import java.util.HashMap;
@@ -194,15 +195,16 @@ public final class InventoryScanner {
 
         for (int slot = 0; slot < hotbar; slot++) {
             ItemStack stack = inventory.getItem(slot);
-            if (stack.isEmpty() || !stack.isEdible()) {
+            if (!FoodCompat.isEdible(stack)) {
                 continue;
             }
-            FoodProperties food = stack.getItem().getFoodProperties();
+            FoodProperties food = FoodCompat.food(stack);
             if (food == null) {
                 continue;
             }
-            if (food.getNutrition() > bestHunger) {
-                bestHunger = food.getNutrition();
+            int nutrition = FoodCompat.nutrition(food);
+            if (nutrition > bestHunger) {
+                bestHunger = nutrition;
                 best = slot;
             }
         }

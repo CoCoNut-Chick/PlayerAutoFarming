@@ -55,29 +55,88 @@ export JAVA_HOME="D:/Java/jdk-25"     # 每次跑 Gradle 前都要
 - [x] **CI 改造**：`.github/workflows/build.yml` 改用 JDK 25 跑 `chiseledBuild`（全版本构建）。
 - [x] **工程配置验证通过**：`./gradlew projects` 能正确列出 `:1.20.1` 和 `:1.21.1`。
 
-## 未完成（下一步）
-
-- [ ] **让 1.20.1 编译通过**。最后一次尝试卡住了，原因见下面「已知坑」第 1 条，
-      不是代码问题。重跑命令：
+- [x] **1.20.1 构建通过** ✅
+- [x] **1.21.1 构建通过** ✅
       ```bash
       export JAVA_HOME="D:/Java/jdk-25"
-      ./gradlew :1.20.1:compileJava --console=plain
+      ./gradlew :1.20.1:build :1.21.1:build --console=plain
+      # → versions/1.20.1/build/libs/autofarm-2.4.1+1.20.1.jar
+      # → versions/1.21.1/build/libs/autofarm-2.4.1+1.21.1.jar
       ```
-- [ ] **让 1.21.1 编译通过**。已知的必改点：
-      - `AutoFarm.java:26` 和 `CropRegistry.java:290` 用了 `new ResourceLocation(ns, path)`，
-        **1.21 起构造函数被私有化**，必须改用静态工厂。写法（Stonecutter 条件编译，
-        非当前版本的分支要包在块注释里）：
-        ```java
-        //? if <1.21 {
-        /*return new ResourceLocation(MOD_ID, path);
-        *///?} else
-        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
-        ```
-        注意 `ResourceLocation` 在 1.21.11+ 会被 `stonecutter.gradle.kts` 的替换规则
-        自动改名成 `Identifier`，所以源码里统一写 `ResourceLocation` 就行。
-- [ ] 逐段铺开其余版本，重点在渲染那几处（`render/CropHighlighter.java` 用了
-      `WorldRenderContext`，而 Mojang 在 **1.21.5 / 1.21.6 / 1.21.9** 连续三次重写渲染管线）。
+
+## 1.20.1 → 1.21.1 实际踩到的 API 变化（共 12 类，25 处）
+
+这些是照着编译报错逐个查出来的，后面铺开其它版本时会再遇到同类问题，先记下来。
+
+| 变的东西 | 断点 | 新版写法 |
+|---|---|---|
+| `ItemStack#isEdible()` | 1.20.5 | `stack.has(DataComponents.FOOD)` |
+| `Item#getFoodProperties()` | 1.20.5 | `stack.get(DataComponents.FOOD)`（属性挂在**实例**上了） |
+| `FoodProperties#getNutrition()` | 1.20.5 | `food.nutrition()`（变成 record 了） |
+| `new ResourceLocation(ns, path)` | 1.21 | `ResourceLocation.fromNamespaceAndPath(ns, path)`（构造函数私有化） |
+| `VertexConsumer#vertex/color/endVertex` | 1.21 | `addVertex/setColor`，**`endVertex()` 被删** |
+| `Tesselator#getBuilder()` + `buffer.begin(...)` | 1.21 | `Tesselator#begin(mode, format)` 一条搞定 |
+| `BufferBuilder#end()` | 1.21 | `buildOrThrow()` |
+| `Screen#renderBackground(GuiGraphics)` | 1.20.2 | `renderBackground(GuiGraphics, mouseX, mouseY, delta)` |
+| `Screen#mouseScrolled(x, y, amount)` | 1.20.2 | 多了横向滚动量：`(x, y, horizontalAmount, amount)` |
+| `Options#renderDebug` | 1.21 | `client.getDebugOverlay().showDebugScreen()`（字段转私有） |
+| `SystemToast.SystemToastIds.TUTORIAL_HINT` | 1.21 | `SystemToastId.PERIODIC_NOTIFICATION`（改成单数**且删了 TUTORIAL_HINT**） |
+| `ConnectScreen#startConnecting(...5 参数)` | 1.21 | 末尾多一个 `TransferState`，普通重连传 `null` |
+| `HudRenderCallback#onHudRender(DrawContext, float)` | 1.21 | `(GuiGraphics, DeltaTracker)`（Fabric API 跟着改） |
+
+> 食物那三处（共 6 个调用点）被收进了新文件
+> `client/compat/FoodCompat.java` —— 与其在每个调用点写条件编译，不如把差异集中到一处。
+
+## 怎么查「某个版本里某个 API 到底叫什么」（关键方法论）
+
+写条件编译的难点不是改代码，是**知道改成什么**。按可靠性排序，有三条路：
+
+### 1. Mojang 官方映射文件（最快最准，首选）
+
+每个版本构建过一次之后，本机就有它：
+
+```
+~/.gradle/caches/fabric-loom/<MC版本>/layered/working_dir/layered_hash_*/mojang/client.txt
+```
+
+ProGuard 格式，列出**每个类的全部字段与方法，且带参数签名**。例如查 Toast 的 token：
+
+```bash
+F=~/.gradle/caches/fabric-loom/1.21.1/layered/working_dir/layered_hash_2198/mojang/client.txt
+grep -A 25 'toasts\.SystemToast\$SystemToastId ->' "$F"   # $ 要写 \$，在单引号里则原样
+grep -E "startConnecting" "$F"                            # 顺便就能看到它的完整参数列表
+```
+
+这次 12 类变化里的大部分，都是靠它一锤定音的（比如发现 `TUTORIAL_HINT`
+在 1.21 被整个删掉、`renderDebug` 搬去了 `DebugScreenOverlay`）。
+
+### 2. Fabric API 自己的源码 jar（查 Fabric API 的签名变化）
+
+```
+versions/<MC版本>/build/loom-cache/remapped_working/*-sources.jar
+```
+
+里面有 Fabric API 的完整 Java 源码。`HudRenderCallback` 的新签名就是这么查到的。
+
+### 3. 社区迁移指南（先看大方向）
+
+NeoForge 的 [Migration Primer](https://docs.neoforged.net/primer/docs/1.21)
+按版本列出所有破坏性改动，适合**开工前**先摸清这个版本大概动了哪些刀。
+
+## 未完成（下一步）
+
+- [ ] 逐段铺开其余 **20 个版本**（1.20.2 ~ 26.3）。建议按这个顺序推进，
+      因为它们各自对应一批 API 变化，一次处理一批最省事：
+      1. `1.20.2 / 1.20.3 / 1.20.4` —— 主要是 Screen / GUI 那批（已改好，大概率直接过）
+      2. `1.20.5 / 1.20.6` —— 数据组件那批（食物已处理，可能还有别的组件）
+      3. `1.21.2 ~ 1.21.4`
+      4. `1.21.5 / 1.21.6` —— **渲染管线第一次重写**，`CropHighlighter` 要小心
+      5. `1.21.7 / 1.21.8` —— GUI 渲染改成 RenderState 那套
+      6. `1.21.9 ~ 1.21.11` —— **渲染第二次重写**
+      7. `26.1 ~ 26.3` —— 未混淆 + Java 25 + Fabric API 大改名
 - [ ] 处理 `versions/` 目录的双重含义（见「已知坑」第 3 条）。
+- [ ] 全部版本跑通后：改 CI 的 `chiseledBuild`、更新 README 的支持版本表、
+      发一个多版本的 Release。
 
 ## 加一个新版本的步骤
 

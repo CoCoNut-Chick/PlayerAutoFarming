@@ -7,6 +7,9 @@ import com.autofarm.client.task.FarmTaskManager;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+//? if >=1.21 {
+/*import net.minecraft.client.DeltaTracker;
+*///?}
 import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,17 +60,33 @@ public final class AutoFarmHud {
         HudRenderCallback.EVENT.register(AutoFarmHud::render);
     }
 
+    // 1.21 把「这一帧过了多久」从一个 float 换成了 DeltaTracker 对象
+    // （Fabric 那边的 HudRenderCallback 也跟着换了签名）。
+    // 我们其实用不到它，所以新版只是把参数收下、不读。
+    //? if <1.21 {
     private static void render(GuiGraphics context, float tickDelta) {
+    //?} else {
+    /*private static void render(GuiGraphics context, DeltaTracker tickCounter) {
+    *///?}
         Minecraft client = Minecraft.getInstance();
         AutoFarmConfig config = ConfigManager.get();
         if (!config.showHud || client == null || client.player == null || client.level == null) {
             return;
         }
         // 开着界面时原版本来就不画 HUD，这里也一起让路；F3 调试界面同理，
-        // 不然两堆字会叠在一起
+        // 不然两堆字会叠在一起。
+        // 「F3 开着没有」这个判断在 1.21 从 Options.renderDebug 挪到了
+        // DebugScreenOverlay#showDebugScreen()（字段变成私有的了）。
+        //? if <1.21 {
         if (client.screen != null || client.options.hideGui || client.options.renderDebug) {
             return;
         }
+        //?} else {
+        /*if (client.screen != null || client.options.hideGui
+                || client.getDebugOverlay().showDebugScreen()) {
+            return;
+        }
+        *///?}
 
         List<Line> lines = new ArrayList<>();
         // 「纯拾取模式」是一道独立于总开关的闸：只开它，HUD 也该照常显示
