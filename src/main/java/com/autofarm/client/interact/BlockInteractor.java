@@ -1,5 +1,6 @@
 package com.autofarm.client.interact;
 
+import com.autofarm.client.compat.InventoryCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.human.Humanizer;
@@ -288,7 +289,7 @@ public final class BlockInteractor {
         if (slot < 0) {
             return false;
         }
-        player.getInventory().selected = slot;
+        InventoryCompat.select(player.getInventory(), slot);
         return true;
     }
 

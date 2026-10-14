@@ -68,12 +68,21 @@ stonecutter {
             "1.21", "1.21.2", "1.21.3", "1.21.4",
 
             // ── 批次 4：渲染管线第一次重写 ──
-            // "1.21.5", "1.21.6",
+            "1.21.5", "1.21.6",
 
             // ── 批次 5 ──
-            // "1.21.7", "1.21.8",
+            "1.21.7", "1.21.8",
 
             // ── 批次 6：渲染第二次重写 ──
+            // ⚠️ 1.21.9 ~ 1.21.11 暂缓，两处结构性变化需要单独一轮处理（均已查明）：
+            //   1) GUI 输入事件整套换成记录类：
+            //        mouseClicked(double,double,int) → mouseClicked(MouseButtonEvent, boolean)
+            //        mouseReleased(double,double,int) → mouseReleased(MouseButtonEvent)
+            //        mouseDragged(...,int,double,double) → mouseDragged(MouseButtonEvent,double,double)
+            //        keyPressed(int,int,int) → keyPressed(KeyEvent)
+            //   2) Fabric API 在这一版**没有** WorldRenderEvents（1.21.10 才重新引入），
+            //      而描边渲染正是靠它挂上世界渲染流程的 ——
+            //      这一版要么写降级（不画描边）、要么改走底层 hook。
             // "1.21.9", "1.21.10", "1.21.11",
 
             // ── 批次 7：未混淆 + Java 25 ──

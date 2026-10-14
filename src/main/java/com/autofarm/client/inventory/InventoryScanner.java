@@ -1,5 +1,6 @@
 package com.autofarm.client.inventory;
 
+import com.autofarm.client.compat.InventoryCompat;
 import com.autofarm.client.compat.FoodCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.scan.CropRegistry;
@@ -72,7 +73,7 @@ public final class InventoryScanner {
         }
         Inventory inventory = player.getInventory();
         int hotbar = Inventory.getSelectionSize();
-        int selected = inventory.selected;
+        int selected = InventoryCompat.selected(inventory);
 
         // 基准：现在手上这把（空手就是速度 1、非正确工具）
         ItemStack held = inventory.getItem(selected);
@@ -111,7 +112,7 @@ public final class InventoryScanner {
         if (best == null) {
             return -1;
         }
-        return best.slot() == player.getInventory().selected ? -1 : best.slot();
+        return best.slot() == InventoryCompat.selected(player.getInventory()) ? -1 : best.slot();
     }
 
     /**
@@ -138,7 +139,7 @@ public final class InventoryScanner {
             return false;
         }
         Inventory inventory = player.getInventory();
-        int selected = inventory.selected;
+        int selected = InventoryCompat.selected(inventory);
         ItemStack held = inventory.getItem(selected);
         if (held.isEmpty() || held.getMaxDamage() <= 0) {
             return false; // 手上不是工具，不掺和
@@ -435,7 +436,7 @@ public final class InventoryScanner {
         if (hotbarIndex < 0 || hotbarIndex >= hotbar) {
             return false;
         }
-        if (player.getInventory().selected == hotbarIndex) {
+        if (InventoryCompat.selected(player.getInventory()) == hotbarIndex) {
             return true; // 本来就在这一格
         }
         AbstractContainerMenu handler = player.containerMenu;
@@ -445,7 +446,7 @@ public final class InventoryScanner {
         // SWAP 的语义是「把被点击的那一格和 button 指定的快捷栏格交换」，并把选中格切过去。
         // 原版按数字键时，「被点击的那一格」就是当前 selectedSlot —— 所以 source 必须取
         // 当前选中格，而不是目标格（取目标格就成了自己和自己交换，手持永远切不过去）。
-        int source = playerSlotId(handler, player.getInventory().selected);
+        int source = playerSlotId(handler, InventoryCompat.selected(player.getInventory()));
         if (source < 0) {
             return false;
         }
@@ -693,7 +694,7 @@ public final class InventoryScanner {
         Inventory inventory = player.getInventory();
         int hotbar = Inventory.getSelectionSize();
 
-        int selected = inventory.selected;
+        int selected = InventoryCompat.selected(inventory);
         if (selected >= 0 && selected < hotbar && isUsableAsFloor(inventory.getItem(selected))) {
             return selected;
         }

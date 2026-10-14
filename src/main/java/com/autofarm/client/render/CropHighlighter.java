@@ -7,7 +7,9 @@ import com.autofarm.client.path.PathStep;
 import com.autofarm.client.task.FarmTaskManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+//? if <1.21.5 {
 import com.mojang.blaze3d.vertex.BufferUploader;
+//?}
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
@@ -16,11 +18,15 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.Minecraft;
+// 着色器相关的类只在 1.21.5 之前用得上（之后整套换成 RenderType 体系了），
+// 而 CoreShaders 本身也只活在 1.21.2 ~ 1.21.4，所以这里是两层嵌套。
+//? if <1.21.5 {
 //? if <1.21.2 {
 import net.minecraft.client.renderer.GameRenderer;
 //?} else {
 /*import net.minecraft.client.renderer.CoreShaders;
 *///?}
+//?}
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
@@ -189,6 +195,7 @@ public final class CropHighlighter {
                                           List<BlockPos> extras, List<BlockPos> drops,
                                           BlockPos current,
                                           List<BlockPos> route, List<PathStep> segment) {
+        //? if <1.21.5 {
         // 1.21.2 把「选哪个着色器」从 Supplier<ShaderInstance> 改成了 ShaderProgram 对象：
         //   GameRenderer::getPositionColorShader  →  CoreShaders.POSITION_COLOR
         //? if <1.21.2 {
@@ -233,6 +240,21 @@ public final class CropHighlighter {
             RenderSystem.enableCull();
             RenderSystem.disableBlend();
         }
+        //?} else {
+        /*// 1.21.5 把 RenderSystem 那一整排状态开关（enableBlend / defaultBlendFunc /
+        // disableCull / depthMask / disableDepthTest …）全删了 —— 渲染状态改成由
+        // RenderType / RenderPipeline 声明式描述：「想怎么画」写在类型里，
+        // 而不是一行行拨开关。
+        //
+        // 于是这里借用原版的 RenderType.debugQuads：它本来就是给调试线框用的、
+        // 既不写深度也不做深度测试，正好就是「穿透一切遮挡」想要的效果。
+        // 顶点接口（VertexConsumer）没变，所以 drawAll 一行都不用动。
+        MultiBufferSource.BufferSource buffers =
+                Minecraft.getInstance().renderBuffers().bufferSource();
+        VertexConsumer vc = buffers.getBuffer(RenderType.debugQuads());
+        drawAll(vc, params, crops, spots, extras, drops, current, route, segment);
+        buffers.endBatch(RenderType.debugQuads());
+        *///?}
     }
 
     /**

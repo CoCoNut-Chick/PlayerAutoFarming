@@ -174,3 +174,51 @@ Loom 要下载客户端 jar + 映射，再**反编译整个 Minecraft**。1.20.1
 - `github.com` 直连不通 → SSH 走 `ssh.github.com:443`（见 `~/.ssh/config`）
 - Maven 源（`maven.fabricmc.net`、`meta.fabricmc.net`、清华镜像）**直连正常**
 - JDK 25 用清华 Adoptium 镜像下的，Oracle 官方源跑到一半会断
+
+---
+
+## 阶段成果（2026-10-14 晚）：15 / 23 个版本构建通过
+
+通过清单：`1.20.1 · 1.20.2 · 1.20.4 · 1.20.5 · 1.20.6 · 1.21 · 1.21.1 · 1.21.2 · 1.21.3 · 1.21.4 · 1.21.5 · 1.21.6 · 1.21.7 · 1.21.8`
+
+### 这一轮新踩到并解决的（按版本断点）
+
+| 断点 | 变化 | 处理 |
+|---|---|---|
+| 1.20.2 | Options#renderDebug 搬到 DebugScreenOverlay | `client.getDebugOverlay().showDebugScreen()` |
+| 1.20.2 | Screen#renderBackground 加坐标；mouseScrolled 加横向量 | 补参数 |
+| 1.20.3 | SystemToastIds（复数）→ SystemToastId，且 TUTORIAL_HINT 被删 | 换 PERIODIC_NOTIFICATION |
+| 1.20.5 | ConnectScreen#startConnecting 加 TransferState | 传 null |
+| 1.21.2 | 一批：ItemNameBlockItem 被并掉；Registry#get → getValue；getMinBuildHeight → getMinY；getToasts → getToastManager；着色器 Supplier → ShaderProgram 对象 | 见各文件注释 |
+| 1.21.5 | RenderSystem 的整套状态开关（enableBlend / depthMask / disableDepthTest / enableCull …）被删除 | 改用 `RenderType.debugQuads` |
+| 1.21.5 | Inventory#selected 字段私有化 | 新增 `compat/InventoryCompat` |
+| 1.21.5 | Level#isDay() 被删 | 按 `getDayTime() % 24000 < 12000` 判断 |
+
+### 两个新的兼容层
+
+- `compat/InventoryCompat.java` —— 快捷栏选中格的跨版本读写（1.21.5 起字段转私有）
+- `compat/FoodCompat.java` —— 食物信息（1.20.5 起改数据组件）
+
+思路相同：**把版本差异关进一个文件**，调用点只写一份。
+
+### 一处彻底摆脱版本依赖的改动
+
+`Direction.fromDelta` 在 1.21.4 被移除。BlockInteractor 里原本用它算「该朝方块的哪一面」，
+改成手写「取变化最大的轴」—— 所有版本共用同一段逻辑，不需要任何条件编译。
+
+## 1.21.9 ~ 1.21.11：已查明，待处理（两处结构性变化）
+
+1. **GUI 输入事件换成记录类**：
+   - `mouseClicked(double,double,int)` → `mouseClicked(MouseButtonEvent, boolean)`
+   - `mouseReleased(double,double,int)` → `mouseReleased(MouseButtonEvent)`
+   - `mouseDragged(...,int,double,double)` → `mouseDragged(MouseButtonEvent,double,double)`
+   - `keyPressed(int,int,int)` → `keyPressed(KeyEvent)`
+   涉及 ScrollPanelScreen / ExtrasScreen / StoragePolicyScreen 等。
+2. **Fabric API 在 1.21.9 没有 WorldRenderEvents**（1.21.10 才重新引入），
+   而 `CropHighlighter` 正是靠它挂上世界渲染流程的。
+   这一版要么做降级（不画描边），要么改走底层 hook —— 需要单独设计。
+
+## 仍未开始
+
+- `26.1 ~ 26.3`：未混淆 + Java 25 + Fabric API 大改名（映射体系在 1.21.11 断代）
+- `1.20.3`：编译已通过，卡在 Security Center 拒绝读取缓存的 `modmenu-9.0.0.jar`

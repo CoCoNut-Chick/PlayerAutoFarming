@@ -1,5 +1,6 @@
 package com.autofarm.client.inventory;
 
+import com.autofarm.client.compat.InventoryCompat;
 import com.autofarm.client.compat.CameraCompat;
 import com.autofarm.client.compat.FoodCompat;
 import com.autofarm.client.config.AutoFarmConfig;
@@ -186,7 +187,7 @@ public final class AutoEater {
         }
 
         // 换到回饱食度最多的那一格：只改快捷栏选中项，不用打开背包
-        player.getInventory().selected = slot;
+        InventoryCompat.select(player.getInventory(), slot);
 
         useKeyBefore = client.options.keyUse.isDown();
         client.options.keyUse.setDown(true);
@@ -248,7 +249,7 @@ public final class AutoEater {
         if (slot < 0) {
             return false;
         }
-        player.getInventory().selected = slot;
+        InventoryCompat.select(player.getInventory(), slot);
         biteTicks = 0;
         return true;
     }

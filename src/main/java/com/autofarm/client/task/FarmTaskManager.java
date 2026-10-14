@@ -2391,7 +2391,14 @@ public final class FarmTaskManager {
         if (client == null || client.level == null) {
             return null;
         }
-        if (config.workDaylightOnly && !client.level.isDay()) {
+        // 1.21.5 移除了 Level#isDay()，这里按「白天时段」自己判断：
+        // 一个完整昼夜是 24000 tick，其中 0~12000 是白天。
+        //? if <1.21.5 {
+        boolean daylight = client.level.isDay();
+        //?} else {
+        /*boolean daylight = client.level.getDayTime() % 24000L < 12000L;
+        *///?}
+        if (config.workDaylightOnly && !daylight) {
             return "autofarm.notice.paused_night";
         }
         if (config.workClearWeatherOnly && client.level.isRaining()) {

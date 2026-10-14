@@ -1,5 +1,6 @@
 package com.autofarm.client.harvest;
 
+import com.autofarm.client.compat.InventoryCompat;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.human.Humanizer;
@@ -686,7 +687,7 @@ public final class CropHarvester {
             notice = "autofarm.notice.no_bone_meal";
             return Stage.DONE;
         }
-        if (player.getInventory().selected != slot) {
+        if (InventoryCompat.selected(player.getInventory()) != slot) {
             if (InventoryScanner.selectHotbarSlot(client, player, slot)) {
                 ticks = 0;
                 nextActionAt = 0;
