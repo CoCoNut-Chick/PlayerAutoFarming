@@ -64,3 +64,25 @@ stonecutter {
 }
 
 rootProject.name = "playerautofarming"
+
+// ---------------------------------------------------------------------------
+// 「把所有注册的版本都构建一遍」的聚合任务
+// ---------------------------------------------------------------------------
+// ⚠️ Stonecutter 0.9 本身【不提供】这个任务 —— 官方模板里的 chiseledBuild 是
+// 模板自己注册的，插件只负责创建各版本的子项目。所以这里补一个。
+//
+// 没有它的话，CI 里写 `./gradlew chiseledBuild` 会直接报
+//   Task 'chiseledBuild' not found in root project 'playerautofarming'
+// ——本项目的 GitHub Actions 从 run #8 起一直是这个原因失败的。
+//
+// 版本列表通过 subprojects 动态取，所以 settings.gradle.kts 里加减版本时
+// 这里不用跟着改。
+gradle.rootProject {
+    tasks.register("chiseledBuild") {
+        group = "build"
+        description = "构建 settings.gradle.kts 里注册的全部 Minecraft 版本"
+        // 这个 action 在根项目创建后才执行，那时所有子项目都已 include 完毕，
+        // 直接把它们的 build 任务列出来即可（加减版本这里不用跟着改）。
+        dependsOn(subprojects.map { "${it.path}:build" })
+    }
+}
