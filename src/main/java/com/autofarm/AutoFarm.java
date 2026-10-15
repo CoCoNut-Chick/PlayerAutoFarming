@@ -1,12 +1,20 @@
 package com.autofarm;
 
+import com.autofarm.client.Edition;
 import net.fabricmc.api.ModInitializer;
 import net.minecraft.resources.ResourceLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class AutoFarm implements ModInitializer {
-	public static final String MOD_ID = "autofarm";
+	/**
+	 * mod id。
+	 *
+	 * <p>完整版是 {@code autofarm}，合规版（Modrinth 上架的删减版）是 {@code farmpilot}。
+	 * 用 {@link Edition#COMPLIANT} 这个<b>编译期常量</b>来选，所以它同时也是常量表达式 ——
+	 * 两个变体的产物里各自只剩自己那个字符串，不存在运行时判断。
+	 */
+	public static final String MOD_ID = Edition.COMPLIANT ? "farmpilot" : "autofarm";
 
 	// This logger is used to write text to the console and the log file.
 	// It is considered best practice to use your mod id as the logger's name.

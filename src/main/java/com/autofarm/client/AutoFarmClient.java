@@ -1,5 +1,6 @@
 package com.autofarm.client;
 
+import com.autofarm.AutoFarm;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.gui.AutoFarmScreen;
 import com.autofarm.client.gui.StatsScreen;
@@ -23,7 +24,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AutoFarmClient implements ClientModInitializer {
 
-    public static final String MOD_ID = "autofarm";
+    public static final String MOD_ID = AutoFarm.MOD_ID;
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     @Override

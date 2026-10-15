@@ -1,5 +1,6 @@
 package com.autofarm.client.gui;
 
+import com.autofarm.client.Edition;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.container.ContainerCompat;
@@ -302,9 +303,15 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         addScrolling(paletteButton);
 
         // 穿透显示：描边无视方块遮挡，隔着墙也能看见成熟作物
-        this.throughWallsButton = toggle("autofarm.option.through_walls",
-                draft.highlightThroughWalls, v -> draft.highlightThroughWalls = v,
-                "autofarm.through_walls.tip");
+        //
+        // 合规版不提供这一项 —— Modrinth 规则第 3 条把「穿视不透明方块」列为红线。
+        // Edition.COMPLIANT 是编译期常量，这一段在合规版里是「不可达代码」，
+        // 会被 javac 直接从字节码里删掉（不只是不显示，是压根不存在）。
+        if (!Edition.COMPLIANT) {
+            this.throughWallsButton = toggle("autofarm.option.through_walls",
+                    draft.highlightThroughWalls, v -> draft.highlightThroughWalls = v,
+                    "autofarm.through_walls.tip");
+        }
 
         // 自由视角（masa 全家桶的「灵魂出窍」）兼容：开着的时候先停手
         this.freecamButton = toggle("autofarm.option.freecam_pause", draft.pauseOnFreecam,
@@ -469,8 +476,9 @@ public class AutoFarmScreen extends ScrollPanelScreen {
         int d = originY + SEC_DISPLAY_Y;
         setRowY(visualizeButton, d + ROW_FIRST);
         setRowY(paletteButton, d + ROW_FIRST);
+        // 合规版没有「穿透显示」那一行，后面的行次整体上移一格，不留空档
         setRowY(throughWallsButton, d + ROW_FIRST + ROW_GAP);
-        setRowY(freecamButton, d + ROW_FIRST + 2 * ROW_GAP);
+        setRowY(freecamButton, d + ROW_FIRST + (Edition.COMPLIANT ? 1 : 2) * ROW_GAP);
 
         int s = originY + SEC_SAFETY_Y;
         setRowY(showHudButton, s + ROW_FIRST);

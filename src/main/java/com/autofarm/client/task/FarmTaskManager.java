@@ -1,5 +1,6 @@
 package com.autofarm.client.task;
 
+import com.autofarm.client.Edition;
 import com.autofarm.client.combat.KillAura;
 import com.autofarm.client.compat.CameraCompat;
 import com.autofarm.client.config.AutoFarmConfig;
@@ -1075,7 +1076,9 @@ public final class FarmTaskManager {
         if (working && config.hitReactionEnabled && hitReactTicks > 0) {
             hitReactTicks--;
             hitReacting = true; // 受击窗口内一律停手（能不能回头再另说）
-            if (!config.autoAttack && hitTarget != null && hitTarget.isAlive()
+            // 合规版只保留「停手」这一半。「转向攻击者」本质上是自动转动视角，
+            // 而平台规则把「自动瞄准 / 辅助瞄准」列为红线，所以这一段整个不参与编译。
+            if (!Edition.COMPLIANT && !config.autoAttack && hitTarget != null && hitTarget.isAlive()
                     && !freecamPaused) {
                 BlockInteractor.aimAt(client.player, hitTarget.getX(), hitTarget.getEyeY(),
                         hitTarget.getZ());

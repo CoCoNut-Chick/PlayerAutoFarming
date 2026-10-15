@@ -1,5 +1,6 @@
 package com.autofarm.client.gui;
 
+import com.autofarm.client.Edition;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.scan.CropRegistry;
 import org.lwjgl.glfw.GLFW;
@@ -46,12 +47,19 @@ import net.minecraft.world.phys.HitResult;
 public class ExtrasScreen extends ScrollPanelScreen {
 
     // ---------------- tab 定义 ----------------
-    private static final int TAB_COMBAT = 0;
-    private static final int TAB_STEALTH = 1;
-    private static final int TAB_AREA = 2;
-    private static final int TAB_SURVIVAL = 3;
-    private static final int TAB_RESOURCE = 4;
-    private static final int TAB_COUNT = 5;
+    // 合规版没有「战斗」这一页 —— Modrinth 规则第 3 条禁止客户端模组具备
+    // 「自动或辅助战斗」，而这一页整页都是为它服务的（开关、距离、暴力程度、
+    // 风险确认），留着它等于在配置面板里明晃晃地宣传这项能力。
+    // 所以整页去掉，后面的编号整体前移一格。
+    // TAB_COMBAT 取 -1：既不会和任何 case 撞号，页面也永远切不到它。
+    // （Edition.COMPLIANT 是编译期常量，这三元式本身就是常量表达式，
+    //   可以直接当 switch 的 case 标签用。）
+    private static final int TAB_COMBAT = Edition.COMPLIANT ? -1 : 0;
+    private static final int TAB_STEALTH = Edition.COMPLIANT ? 0 : 1;
+    private static final int TAB_AREA = Edition.COMPLIANT ? 1 : 2;
+    private static final int TAB_SURVIVAL = Edition.COMPLIANT ? 2 : 3;
+    private static final int TAB_RESOURCE = Edition.COMPLIANT ? 3 : 4;
+    private static final int TAB_COUNT = Edition.COMPLIANT ? 4 : 5;
 
     // ---------------- 内容区布局（相对内容区顶部） ----------------
     /** 分区内第一行相对分区顶部的 y（让开标题那一行） */
@@ -162,7 +170,7 @@ public class ExtrasScreen extends ScrollPanelScreen {
     /** 进来时的快照，「取消」时用它还原附加功能这几项 */
     private final AutoFarmConfig old;
 
-    private int currentTab = TAB_COMBAT;
+    private int currentTab = Edition.COMPLIANT ? TAB_STEALTH : TAB_COMBAT;
     private Button[] tabButtons = new Button[TAB_COUNT];
 
     private Button combatButton;

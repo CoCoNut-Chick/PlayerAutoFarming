@@ -7,7 +7,7 @@
 mod.id = "autofarm"
 mod.name = "PlayerAutoFarming"
 mod.group = "com.autofarm"
-mod.version = "2.4.1"
+mod.version = "2.5.0"
 
 # Fabric Loader 是版本无关的，全体共用一个（向后兼容）
 deps.fabric_loader = "0.19.5"

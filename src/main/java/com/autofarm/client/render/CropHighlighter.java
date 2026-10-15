@@ -1,5 +1,6 @@
 package com.autofarm.client.render;
 
+import com.autofarm.client.Edition;
 import com.autofarm.client.config.AutoFarmConfig;
 import com.autofarm.client.config.ConfigManager;
 import com.autofarm.client.path.PathAction;
@@ -133,7 +134,7 @@ public final class CropHighlighter {
     //?}
 
     /** 这一帧画描边需要的全部参数，打包传给两条提交路径 */
-    private record Params(Matrix4f matrix, Vec3 camera, double tanHalfFov, int framebufferHeight,
+    record Params(Matrix4f matrix, Vec3 camera, double tanHalfFov, int framebufferHeight,
                           double pixels, float red, float green, float blue, float alpha) {
     }
 
@@ -200,7 +201,7 @@ public final class CropHighlighter {
      * <p>1.21.11 把工厂方法搬去了 {@code RenderTypes}（复数那个类）。
      * 三处用它的地方都走这个入口，以后再搬也只改一处。
      */
-    private static RenderType highlightRenderType() {
+    static RenderType highlightRenderType() {
         //? if <1.21.11 {
         return RenderType.debugQuads();
         //?} else {
@@ -257,8 +258,10 @@ public final class CropHighlighter {
                 config.highlightBlue(),
                 config.highlightAlpha01());
 
-        if (config.highlightThroughWalls) {
-            renderThroughWalls(params, crops, spots, extras, drops, current, route, segment);
+        // 「穿透显示」是 Modrinth 明令禁止的能力（规则第 3 条 X-ray），
+        // 合规版把它整个从产物里拿掉了 —— 这里的判断会被 javac 折叠成「永远走普通路径」。
+        if (!Edition.COMPLIANT && config.highlightThroughWalls) {
+            ThroughWallPass.draw(params, crops, spots, extras, drops, current, route, segment);
         } else {
             renderDepthTested(ctx, params, crops, spots, extras, drops, current, route, segment);
         }
@@ -291,87 +294,13 @@ public final class CropHighlighter {
     }
 
     /**
-     * 透视路径：绕开图层系统，自己提交。
-     *
-     * <p>顺序很关键——<b>先关深度测试，紧接着写顶点并立刻画出去</b>，
-     * 中间不留任何可能把状态改回去的环节。
-     *
-     * <p>全程用 try/finally 还原，避免污染后面的天气、粒子、手部渲染。
-     */
-    private static void renderThroughWalls(Params params, List<BlockPos> crops, List<BlockPos> spots,
-                                          List<BlockPos> extras, List<BlockPos> drops,
-                                          BlockPos current,
-                                          List<BlockPos> route, List<PathStep> segment) {
-        //? if <1.21.5 {
-        // 1.21.2 把「选哪个着色器」从 Supplier<ShaderInstance> 改成了 ShaderProgram 对象：
-        //   GameRenderer::getPositionColorShader  →  CoreShaders.POSITION_COLOR
-        //? if <1.21.2 {
-        RenderSystem.setShader(GameRenderer::getPositionColorShader);
-        //?} else {
-        /*RenderSystem.setShader(CoreShaders.POSITION_COLOR);
-        *///?}
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        RenderSystem.disableCull();
-        // 不往深度缓冲里写，否则描边会把它后面的东西错误地挡掉
-        RenderSystem.depthMask(false);
-        // 核心的一行：深度比较永不通过失败 → 描边无条件画在最前面，穿透一切遮挡
-        RenderSystem.disableDepthTest();
-        try {
-            // 1.21 重写了缓冲的取法：
-            //   老：Tesselator.getInstance().getBuilder() 拿一个**全局复用**的缓冲，
-            //       再自己 begin(模式, 格式)；
-            //   新：Tesselator.getInstance().begin(模式, 格式) 直接给一个**新的**缓冲。
-            //      正因为每回都是新的，「上次被谁 fixedColor() 过、颜色被静默忽略」这个
-            //      老坑在新版里自然不存在了，所以下面那句清状态也不需要了。
-            //? if <1.21 {
-            BufferBuilder buffer = Tesselator.getInstance().getBuilder();
-            buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-            // Tessellator 的缓冲是全局复用的，万一之前被谁 fixedColor() 过，
-            // 我们的颜色会被静默忽略（画出来全白）。这一行把状态清掉。
-            buffer.unsetDefaultColor();
-            //?} else {
-            /*BufferBuilder buffer = Tesselator.getInstance()
-                    .begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-            *///?}
-            drawAll(buffer, params, crops, spots, extras, drops, current, route, segment);
-            // BufferBuilder#end 改名为 buildOrThrow（返回的 MeshData 就是原来的 RenderedBuffer）
-            //? if <1.21 {
-            BufferUploader.drawWithShader(buffer.end());
-            //?} else {
-            /*BufferUploader.drawWithShader(buffer.buildOrThrow());
-            *///?}
-        } finally {
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthMask(true);
-            RenderSystem.enableCull();
-            RenderSystem.disableBlend();
-        }
-        //?} else {
-        /*// 1.21.5 把 RenderSystem 那一整排状态开关（enableBlend / defaultBlendFunc /
-        // disableCull / depthMask / disableDepthTest …）全删了 —— 渲染状态改成由
-        // RenderType / RenderPipeline 声明式描述：「想怎么画」写在类型里，
-        // 而不是一行行拨开关。
-        //
-        // 于是这里借用原版的 RenderType.debugQuads：它本来就是给调试线框用的、
-        // 既不写深度也不做深度测试，正好就是「穿透一切遮挡」想要的效果。
-        // 顶点接口（VertexConsumer）没变，所以 drawAll 一行都不用动。
-        MultiBufferSource.BufferSource buffers =
-                Minecraft.getInstance().renderBuffers().bufferSource();
-        VertexConsumer vc = buffers.getBuffer(highlightRenderType());
-        drawAll(vc, params, crops, spots, extras, drops, current, route, segment);
-        buffers.endBatch(highlightRenderType());
-        *///?}
-    }
-
-    /**
      * 把所有成熟作物画成线框。
      *
      * <p>参数写成 {@link VertexConsumer}，所以普通路径（图层缓冲）和
      * 透视路径（{@code BufferBuilder}，它本身就是个 {@code VertexConsumer}）
      * 可以共用这一份代码。
      */
-    private static void drawAll(VertexConsumer vc, Params p, List<BlockPos> crops,
+    static void drawAll(VertexConsumer vc, Params p, List<BlockPos> crops,
                                 List<BlockPos> spots, List<BlockPos> extras, List<BlockPos> drops,
                                 BlockPos current,
                                 List<BlockPos> route, List<PathStep> segment) {

@@ -1,15 +1,16 @@
-# 推一个 tag（形如 v2.4.1）就自动发一个 Release，并把构建好的 jar 挂上去。
+# 推一个 tag（形如 v2.5.0）就自动发一个 Release，并把**每个支持版本**的 jar 都挂上去。
 #
 # 为什么放在 CI 里发，而不是在本机敲命令：
 #   1. 创建 Release 需要 GitHub API 凭据（Token）；本机到 GitHub 只有 443 的 SSH 通，
 #      走 API 还得额外配 Token，交给 runner 最省事；
 #   2. 顺手保证「Release 里的 jar」一定是**这个 tag 的源码**跑出来的，
-#      不会出现「本地构建物和 tag 对不上」这种最坑人的情况。
+#      不会出现「本地构建物和 tag 对不上」这种最坑人的情况；
+#   3. 18 个版本要从零下载并反编译各自的 Minecraft，本机跑一遍很久。
 #
 # 用法：
-#   git tag -a v2.4.1 -m "..." && git push origin v2.4.1
+#   git tag -a v2.5.0 -m "..." && git push origin v2.5.0
 # 之后 Actions 会构建、发 Release；下载页链接形如
-#   https://github.com/<owner>/<repo>/releases/tag/v2.4.1
+#   https://github.com/<owner>/<repo>/releases/tag/v2.5.0
 
 name: release
 
@@ -29,46 +30,83 @@ jobs:
       - name: checkout repository
         uses: actions/checkout@v6
 
+      - name: validate gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
       - name: setup jdk
         uses: actions/setup-java@v5
         with:
-          # 和 build.yml / 本地开发保持一致（见 build.yml 里的说明）
-          java-version: '21'
+          # 必须是 25：Loom 1.18 自己就要求 JVM 25 才能运行。
+          # 各版本实际的编译目标由 build.gradle.kts 按版本自动降到 17 / 21。
+          java-version: '25'
           distribution: 'microsoft'
 
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: build
-        run: ./gradlew build
+      - name: build all versions
+        # chiseledBuild = 把 settings.gradle.kts 里注册的版本全部构建一遍。
+        # 目前注册的是 1.20.1 ~ 1.21.11 这 18 个已打通的版本；
+        # 未完成的 26.x 刻意没有注册，免得把发版流程带崩。
+        run: ./gradlew chiseledBuild
 
-      # 只把「能直接丢进 mods/ 的那个 jar」挑出来：
-      # build/libs 下还有 *-sources.jar（源码包）和旧版本残留，别一起传上去迷惑人。
-      - name: pick the mod jar
-        id: jar
+      - name: collect jars
+        # 只挑「能直接丢进 mods/ 的那个 jar」：
+        #   · libs/ 下还有 *-sources.jar（源码包），别传上去迷惑人；
+        #   · versions/<旧版本号>/ 下是历史归档产物，也不能混进来
+        #     （find 只扫 build/libs 路径，天然隔离）。
         run: |
-          JAR=$(ls build/libs/*.jar | grep -v -- '-sources' | head -n 1)
-          echo "path=$JAR" >> "$GITHUB_OUTPUT"
-          echo "file=$(basename "$JAR")" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          find versions -path '*/build/libs/*.jar' \
+            ! -name '*-sources.jar' ! -name '*-dev.jar' \
+            -exec cp {} dist/ \;
+          echo "── 待上传 ──"
+          ls -1 dist/
+          COUNT=$(ls -1 dist/*.jar 2>/dev/null | wc -l)
+          echo "共 $COUNT 个 jar"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::没有收集到任何 jar，构建可能失败了"
+            exit 1
+          fi
 
       - name: create release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          cat > /tmp/notes.md <<EOF
+          cat > /tmp/notes.md <<'EOF'
           ### 下载 / Download
 
-          把 \`${{ steps.jar.outputs.file }}\` 丢进 \`.minecraft/mods/\` 就行。
-          Drop \`${{ steps.jar.outputs.file }}\` into \`.minecraft/mods/\`.
+          按你的 Minecraft 版本挑对应的 jar —— 文件名里 `+1.21.8` 这种后缀就是它支持的版本。
 
-          **需要 / Requires**：Fabric Loader 0.19.5+ · Fabric API（1.20.1）· Minecraft 1.20.1
+          把选好的那**一个** jar 丢进 `.minecraft/mods/` 就行，
+          别把多个版本的 jar 一起放进去。
 
-          装完进游戏，按键绑定里能找到「开关自动收割」的快捷键（默认 \` 键）。
-          改了什么见仓库里的 \`CHANGELOG.md\`。
+          Pick the jar matching your Minecraft version — the `+1.21.8` suffix in the
+          filename is the version it targets. Drop **one** of them into `.minecraft/mods/`.
+
+          ### 支持的版本 / Supported
+
+          `1.20.1 · 1.20.2 · 1.20.3 · 1.20.4 · 1.20.5 · 1.20.6 · 1.21 · 1.21.1 ·
+          1.21.2 · 1.21.3 · 1.21.4 · 1.21.5 · 1.21.6 · 1.21.7 · 1.21.8 · 1.21.9 ·
+          1.21.10 · 1.21.11`
+
+          **需要 / Requires**：Fabric Loader 0.19.5+ · Fabric API（挑对应你那个 MC 版本的）·
+          Java 17（1.20.4 及以前）/ Java 21（1.20.5 起）
+
+          ### 已知问题 / Known issue
+
+          「穿透显示」在 **1.21.5 及以上不生效**（那一版起 Mojang 把渲染状态改成声明式，
+          能借用的渲染类型带标准深度测试，所以描边仍会被墙挡住）。
+          1.20.1 ~ 1.21.4 正常。详见 `CHANGELOG.md`。
+
+          ### 其它
+
+          装完进游戏，按键绑定里能找到「开关自动收割」的快捷键（默认反引号键）。
+          完整改动见仓库里的 `CHANGELOG.md`。
           EOF
 
-          gh release create "$TAG" "${{ steps.jar.outputs.path }}" \
+          gh release create "$TAG" dist/*.jar \
             --title "PlayerAutoFarming ${TAG#v}" \
             --generate-notes \
             --notes-file /tmp/notes.md

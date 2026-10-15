@@ -1,5 +1,6 @@
 package com.autofarm.client.config;
 
+import com.autofarm.AutoFarm;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
@@ -14,19 +15,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * 配置的读写。文件位置：<游戏目录>/config/autofarm.json
- * 开发环境下即 run/config/autofarm.json
+ * 配置的读写。文件位置：<游戏目录>/config/&lt;mod id&gt;.json
+ * 开发环境下即 run/config/&lt;mod id&gt;.json
+ *
+ * <p>文件名跟着 mod id 走：完整版是 autofarm.json，合规版是 farmpilot.json。
+ * 两个变体各存各的配置，装在同一台机器上也不会互相覆盖。
  */
 public final class ConfigManager {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("autofarm");
+    private static final Logger LOGGER = LoggerFactory.getLogger(AutoFarm.MOD_ID);
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .disableHtmlEscaping()
             .create();
 
     private static final Path FILE =
-            FabricLoader.getInstance().getConfigDir().resolve("autofarm.json");
+            FabricLoader.getInstance().getConfigDir().resolve(AutoFarm.MOD_ID + ".json");
 
     private static AutoFarmConfig config = new AutoFarmConfig();
 

@@ -132,7 +132,7 @@ public final class AutoFarmHud {
     private static void draw(GuiGraphics context, Minecraft client, List<Line> lines) {
         int width = 0;
         for (Line line : lines) {
-            width = Math.max(width, client.font.width(line.text()));
+            width = Math.max(width, client.font.width(line.caption()));
         }
         int height = lines.size() * LINE_HEIGHT;
 
@@ -140,13 +140,24 @@ public final class AutoFarmHud {
 
         int y = Y;
         for (Line line : lines) {
-            context.drawString(client.font, line.text(), X, y, line.color());
+            context.drawString(client.font, line.caption(), X, y, line.color());
             y += LINE_HEIGHT;
         }
     }
 
     /** 一行字 + 它的颜色 */
-    private record Line(Component text, int color) {
+    /**
+     * 一行字 + 它的颜色。
+     *
+     * <p>⚠️ 字段名刻意<b>不叫</b> {@code text} —— 访问器一旦叫 {@code text()}，
+     * 代码里就会出现 {@code line.text()} 这种写法，而 {@code stonecutter.gradle.kts}
+     * 里有一条 26.1+ 的 GUI 改名规则 {@code replace(".drawString(", ".text(")}：
+     * Stonecutter 对<b>不满足条件</b>的版本会把这个替换<b>反过来</b>执行，
+     * 于是 1.20.2~1.21.11 上 {@code .text(} 会被改写成 {@code .drawString(}，
+     * 直接编译不过（现象是「找不到符号 方法 drawString()」）。
+     * 改叫 {@code caption} 就完全避开了这个模式。
+     */
+    private record Line(Component caption, int color) {
     }
 
     /**
