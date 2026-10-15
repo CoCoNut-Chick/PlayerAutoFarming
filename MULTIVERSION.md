@@ -270,3 +270,78 @@ Loom 要下载客户端 jar + 映射，再**反编译整个 Minecraft**。1.20.1
 
 - `26.1 ~ 26.3`：未混淆 + Java 25 + Fabric API 大改名（映射体系在 1.21.11 断代）
 - `1.20.3`：编译已通过，卡在 Security Center 拒绝读取缓存的 `modmenu-9.0.0.jar`
+
+
+---
+
+## 两种构建变体：完整版 / 合规版
+
+一份源码出两种产物，开关在 `gradle.properties` 的 `autofarm.edition`：
+
+```bash
+./gradlew chiseledBuild                                # 完整版（默认）
+./gradlew -Pautofarm.edition=compliant chiseledBuild   # 合规版（Modrinth 上架用）
+```
+
+| | 完整版 | 合规版 |
+|---|---|---|
+| mod id | `autofarm` | `farmpilot` |
+| 显示名 | PlayerAutoFarming | FarmPilot |
+| 版本号 | 2.5.0（跟 `stonecutter.properties.toml`） | 1.0.0（跟 `gradle.properties`） |
+| 资源目录 | `assets/autofarm/` | `assets/farmpilot/`（构建时重定位） |
+| 配置文件 | `config/autofarm.json` | `config/farmpilot.json` |
+| 穿透描边 | 有 | **无** |
+| 自动打怪 | 有 | **无** |
+| 流向 | GitHub Releases / Gitee / 国内社区 | Modrinth / CurseForge |
+
+### 为什么合规版必须「真删」而不是「关掉」
+
+Modrinth 的《Content Rules》第 3 条把「X-ray 或穿视不透明方块的能力」与
+「自动或辅助 PvP 战斗 / 自动瞄准」列为硬红线，而且**判定依据是 jar 里有没有这个功能，
+不以「默认关闭」免责**。所以合规版靠三件事把能力从产物里去掉：
+
+1. **源文件整个排除 + 空实现顶上**（`build.gradle.kts` 里 `if (compliant)` 那段）
+   - `client/combat/KillAura.java` → 换成 `src/compliant/java` 下的空实现
+   - `client/render/ThroughWallPass.java` → 同上
+   - 效果：`KillAura.class` 从 6.2 KB 降到 775 B，攻击代码根本不进 jar
+2. **`Edition.COMPLIANT` 编译期常量**（`src/main/java` 与 `src/compliant/java` 各一份）
+   - `if (!Edition.COMPLIANT) { ...建穿透开关... }` → javac 认定不可达，**从字节码里删掉**
+3. **受击反制只保留「停手」**，去掉「转向攻击者」（那是 aim assist）
+
+### 加替补源码目录时的一个坑
+
+`src/compliant/java` **不能**用 `sourceSets.main.java.srcDir(...)` 挂 ——
+Stonecutter 会在脚本求值之后再配置一遍源集目录（等于整体重新赋值），
+`srcDir` 加的会被覆盖掉。现象很有迷惑性：**排除生效了、替补却没进去**，
+满屏「找不到符号 KillAura / Edition」。
+正确做法是挂到编译任务上：
+
+```kotlin
+tasks.named<JavaCompile>("compileJava") { source(compliantSrc) }
+```
+
+注意只能挂 `compileJava`。用 `tasks.withType<JavaCompile>()` 会连 `compileTestJava`
+一起加上，Gradle 会以为「有测试源却一个测试都没发现」而让 `test` 任务失败。
+
+## ⚠️ Stonecutter `replacements` 会「反向」执行
+
+`stonecutter.gradle.kts` 里的替换规则，对**不满足条件**的版本会**反过来**应用。
+例如这条 26.1+ 的 GUI 改名：
+
+```kotlin
+string(current.parsed >= "26.1") { replace(".drawString(", ".text(") }
+```
+
+在 1.20.2 ~ 1.21.11 上会执行 `.text(` → `.drawString(`。
+于是源码里任何 `.text(` 都会被改写 —— 包括**与 GUI 毫无关系的**记录访问器
+`line.text()`，直接编译不过（报「找不到符号 方法 drawString()」）。
+
+**结论：源码里避免出现会被这些模式命中的标识符。** 目前已踩过的：
+
+| 规则 | 反向时误伤 | 处理 |
+|---|---|---|
+| `.drawString(` ↔ `.text(` | `Line` 记录的 `text()` 访问器 | 改名 `caption()` |
+| `.drawCenteredString(` ↔ `.centeredText(` | —— | 暂无 |
+| `ResourceLocation` ↔ `Identifier` | 与 `identifier` 变量不冲突（大小写敏感） | 暂无 |
+
+新增替换规则时，务必先 `grep` 一下反向模式在源码里的出现次数。
